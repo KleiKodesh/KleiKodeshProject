@@ -150,6 +150,10 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerTabMove.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="AppViewerTabs.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>

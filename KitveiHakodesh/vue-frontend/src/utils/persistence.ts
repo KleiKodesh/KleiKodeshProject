@@ -248,6 +248,26 @@ export async function dbSet<T>(dbName: string, key: string, value: T): Promise<v
   })
 }
 
+/**
+ * Read-modify-write of one key inside ONE readwrite transaction. IndexedDB runs
+ * overlapping readwrite transactions on a store one after another, across every page of
+ * the origin - so two desktop windows updating the same record cannot lose each other's
+ * change, as a get followed by a separate put can.
+ */
+export async function dbUpdate<T>(dbName: string, key: string, change: (value: T | null) => T): Promise<void> {
+  if (_sealed.has(dbName)) return
+  const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
+  return new Promise((resolve, reject) => {
+    const get = store.get(key)
+    get.onsuccess = () => {
+      const put = store.put(change((get.result as T | undefined) ?? null), key)
+      put.onsuccess = () => resolve()
+      put.onerror = () => reject(put.error)
+    }
+    get.onerror = () => reject(get.error)
+  })
+}
+
 export async function dbDelete(dbName: string, key: string): Promise<void> {
   const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
@@ -317,6 +337,27 @@ export async function dbListEntries<T>(dbName: string): Promise<Array<[string, T
   })
 }
 
+/** Every entry whose key starts with `prefix`, as [key, value] pairs (a key range, not a full scan). */
+export async function dbListEntriesWithPrefix<T>(dbName: string, prefix: string): Promise<Array<[string, T]>> {
+  const idb = await openDb(dbName)
+  // '￿' sorts after every character a key can hold, so this range is exactly the prefix.
+  const range = IDBKeyRange.bound(prefix, prefix + '￿')
+  return new Promise((resolve, reject) => {
+    const acc: Array<[string, T]> = []
+    const req = idb.transaction(STORE).objectStore(STORE).openCursor(range)
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (!cursor) {
+        resolve(acc)
+        return
+      }
+      acc.push([cursor.key as string, cursor.value as T])
+      cursor.continue()
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
 /**
  * Close this driver's handle and delete the database.
  *
@@ -350,6 +391,9 @@ export function idbSet<T>(key: string, value: T): Promise<void> {
 export function idbDelete(key: string): Promise<void> {
   return dbDelete('app-search-cache', key)
 }
+export function idbUpdate<T>(key: string, change: (value: T | null) => T): Promise<void> {
+  return dbUpdate('app-search-cache', key, change)
+}
 export function idbDeleteByPrefix(prefix: string): Promise<void> {
   return dbDeleteByPrefix('app-search-cache', prefix)
 }
@@ -379,4 +423,7 @@ export function idbTabsDelete(key: string): Promise<void> {
 }
 export function idbTabsDeleteByPrefix(prefix: string): Promise<void> {
   return dbDeleteByPrefix('app-tabs', prefix)
+}
+export function idbTabsEntriesWithPrefix<T>(prefix: string): Promise<Array<[string, T]>> {
+  return dbListEntriesWithPrefix<T>('app-tabs', prefix)
 }

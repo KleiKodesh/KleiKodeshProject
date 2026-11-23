@@ -15,12 +15,8 @@ import { useBookViewStore } from '@/stores/bookViewStore'
  */
 export function usePdfPrintShortcut(getIframe: () => HTMLIFrameElement | null) {
   const bookViewStore = useBookViewStore()
-  const paneId = inject<1 | 2>('paneId', 1)
 
   useEventListener('keydown', (event: KeyboardEvent) => {
-    // Only respond when split view is off, or this pane is the focused one —
-    // with a PDF open in each pane, one Ctrl+P must not print both.
-    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
     // Alt is excluded because Ctrl+Alt+P is PDF.js's presentation-mode shortcut.
     if (!event.ctrlKey || event.altKey || event.code !== 'KeyP') return
     event.preventDefault()

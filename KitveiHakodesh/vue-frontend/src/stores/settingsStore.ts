@@ -79,9 +79,7 @@ const KEYS = {
   // rail is its own state and its own stored value. Pane 1 keeps the original key so an
   // existing preference carries over.
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
-  SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
   SETTINGS_HB_EDITION_IN_SIDE_PANEL: 'app.hbEditionInSidePanel',
-  SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2: 'app.hbEditionInSidePanel.pane2',
   SETTINGS_HB_EDITION_SIDE: 'app.hbEditionSide',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
@@ -98,8 +96,6 @@ const KEYS = {
   SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
   SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
   SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
-  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
-  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
 
   // Per-feature preferences
   SETTINGS_BOOKS_VIEW: 'books.view',
@@ -265,8 +261,6 @@ const DEFAULTS = {
   // Only a placeholder: both init() and reset() derive this from
   // defaultAutoSyncCommentary rather than reading this value.
   autoSelectTopLine: false,
-  splitViewEnabled: false,
-  splitViewFraction: 0.5,
   // The always-on icon rail beside the page (AppNavSidebar). On by default in the standalone
   // desktop app, which has the width for it and no other chrome competing down that side; off in
   // the VSTO task pane (too narrow to give 44px away) and in the dev browser, which mirrors
@@ -401,33 +395,27 @@ export const useSettingsStore = defineStore('settings', () => {
   const toolbarVisible = ref(DEFAULTS.toolbarVisible)
   const toolbarPosition = ref<ToolbarPosition>(DEFAULTS.toolbarPosition)
   const autoSelectTopLine = ref(DEFAULTS.autoSelectTopLine)
-  const splitViewEnabled = ref(DEFAULTS.splitViewEnabled)
-  const splitViewFraction = ref(DEFAULTS.splitViewFraction)
-  // Per-pane rail visibility. Each pane owns its own: toggling one never moves the other,
-  // and each persists separately, like every other per-pane value.
-  const navSidebarVisibleByPane = ref<Record<1 | 2, boolean>>({
-    1: DEFAULTS.navSidebarVisible,
-    2: DEFAULTS.navSidebarVisible,
-  })
+  // The nav rail's visibility.
+  const navSidebarVisible = ref(DEFAULTS.navSidebarVisible)
 
-  function getNavSidebarVisible(paneId: 1 | 2 = 1): boolean {
-    return navSidebarVisibleByPane.value[paneId]
+  function getNavSidebarVisible(): boolean {
+    return navSidebarVisible.value
   }
 
-  function setNavSidebarVisible(paneId: 1 | 2, value: boolean): void {
-    navSidebarVisibleByPane.value[paneId] = value
+  function setNavSidebarVisible(value: boolean): void {
+    navSidebarVisible.value = value
   }
-  // Per-pane: does picking a HebrewBooks edition in the book view show it in a side
-  // panel (the one hbEditionSide names) (true) or open it in a new tab (false). Only honoured where the side panel can
-  // host it - see useHebrewBooksEditionSidePanelAvailable.
-  const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: false, 2: false })
+  // Does picking a HebrewBooks edition in the book view show it in a side panel (the one
+  // hbEditionSide names) (true) or open it in a new tab (false). Only honoured where the
+  // side panel can host it - see useHebrewBooksEditionSidePanelAvailable.
+  const hbEditionInSidePanel = ref(false)
 
-  function getHbEditionInSidePanel(paneId: 1 | 2 = 1): boolean {
-    return hbEditionInSidePanelByPane.value[paneId]
+  function getHbEditionInSidePanel(): boolean {
+    return hbEditionInSidePanel.value
   }
 
-  function setHbEditionInSidePanel(paneId: 1 | 2, value: boolean): void {
-    hbEditionInSidePanelByPane.value[paneId] = value
+  function setHbEditionInSidePanel(value: boolean): void {
+    hbEditionInSidePanel.value = value
   }
   const hbEditionSide = ref<HbEditionSide>(DEFAULTS.hbEditionSide)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
@@ -632,20 +620,12 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
     loadSetting(KEYS.SETTINGS_TOOLBAR_POSITION, toolbarPosition)
-    loadSetting(KEYS.SETTINGS_SPLIT_VIEW, splitViewEnabled)
-    loadSetting(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, splitViewFraction)
     // No stored value means "follow the commentary default" rather than the bare
     // `false` — that fallback was bookViewStore.init()'s and has to survive the move.
     const storedAutoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
     autoSelectTopLine.value = storedAutoSelect ?? defaultAutoSyncCommentary.value
-    const navSidebar1 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR)
-    if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
-    const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
-    if (navSidebar2 != null) navSidebarVisibleByPane.value[2] = navSidebar2
-    const hbEditionInSidePanel1 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL)
-    if (hbEditionInSidePanel1 != null) hbEditionInSidePanelByPane.value[1] = hbEditionInSidePanel1
-    const hbEditionInSidePanel2 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2)
-    if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
+    loadSetting(KEYS.SETTINGS_NAV_SIDEBAR, navSidebarVisible)
+    loadSetting(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL, hbEditionInSidePanel)
     loadSetting(KEYS.SETTINGS_HB_EDITION_SIDE, hbEditionSide)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
@@ -726,25 +706,8 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
   persistSetting(toolbarPosition, KEYS.SETTINGS_TOOLBAR_POSITION)
   persistSetting(autoSelectTopLine, KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
-  persistSetting(splitViewEnabled, KEYS.SETTINGS_SPLIT_VIEW)
-  persistSetting(splitViewFraction, KEYS.SETTINGS_SPLIT_VIEW_FRACTION)
-  // Watched deeply because the two panes share one object; each writes its own key.
-  watch(
-    () => navSidebarVisibleByPane.value[1],
-    (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR, value),
-  )
-  watch(
-    () => navSidebarVisibleByPane.value[2],
-    (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR_PANE2, value),
-  )
-  watch(
-    () => hbEditionInSidePanelByPane.value[1],
-    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL, value),
-  )
-  watch(
-    () => hbEditionInSidePanelByPane.value[2],
-    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2, value),
-  )
+  persistSetting(navSidebarVisible, KEYS.SETTINGS_NAV_SIDEBAR)
+  persistSetting(hbEditionInSidePanel, KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL)
   persistSetting(hbEditionSide, KEYS.SETTINGS_HB_EDITION_SIDE)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
@@ -912,13 +875,8 @@ export const useSettingsStore = defineStore('settings', () => {
     // rather than the bare default, so the state right after a reset matches the state
     // after the reload that follows it. Assigned after defaultAutoSyncCommentary above.
     autoSelectTopLine.value = defaultAutoSyncCommentary.value
-    splitViewEnabled.value = DEFAULTS.splitViewEnabled
-    splitViewFraction.value = DEFAULTS.splitViewFraction
-    navSidebarVisibleByPane.value = {
-      1: DEFAULTS.navSidebarVisible,
-      2: DEFAULTS.navSidebarVisible,
-    }
-    hbEditionInSidePanelByPane.value = { 1: false, 2: false }
+    navSidebarVisible.value = DEFAULTS.navSidebarVisible
+    hbEditionInSidePanel.value = false
     hbEditionSide.value = DEFAULTS.hbEditionSide
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
@@ -948,7 +906,7 @@ export const useSettingsStore = defineStore('settings', () => {
     appZoom, dictionaryZoom, dictionarySourceFilter, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     dateBarPinned,
-    toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
+    toolbarVisible, toolbarPosition, autoSelectTopLine,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyStripNikkud, copyStripTeamim, copyStripModernPunctuation, copyCleanFlags,
@@ -962,7 +920,7 @@ export const useSettingsStore = defineStore('settings', () => {
     linesLayout,
     titleBarHiddenButtons,
     scrollbarsHidden,
-    navSidebarVisibleByPane,
+    navSidebarVisible,
     getNavSidebarVisible,
     setNavSidebarVisible,
     getHbEditionInSidePanel,

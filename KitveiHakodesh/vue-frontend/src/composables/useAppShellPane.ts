@@ -10,36 +10,27 @@ import type { Tab, TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
 
 /**
- * Provides pane-aware tab operations for AppTitleBar and AppPageView.
- *
- * Pane 1 — the primary pane. Uses the main tabStore tab list and activeTabId.
- * Pane 2 — the secondary pane in split view. Uses pane2Tabs and pane2ActiveTabId.
- *
- * All tab mutations (open, close, switch, update) route to the correct pane.
- * Components in the shell use this composable instead of calling tabStore directly.
+ * The tab operations AppTitleBar, AppPageView and the pages inside the shell use, so they
+ * do not call tabStore directly.
  */
-export function useAppShellPane(paneId: 1 | 2) {
+export function useAppShellPane() {
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
 
-  const tabs = computed<Tab[]>(() =>
-    paneId === 1 ? tabStore.pane1Tabs : tabStore.pane2Tabs,
-  )
+  const tabs = computed<Tab[]>(() => tabStore.tabs)
 
-  const activeTabId = computed<string>(() =>
-    paneId === 1 ? tabStore.activeTabId : tabStore.pane2ActiveTabId,
-  )
+  const activeTabId = computed<string>(() => tabStore.activeTabId)
 
   /**
    * The same tabs as `tabs`, ordered most-recently-active first. For list UIs
    * (the address-bar dropdown) — the real tab order is unchanged.
    */
-  const mruTabs = computed<Tab[]>(() => tabStore.mruTabsForPane(paneId))
+  const mruTabs = computed<Tab[]>(() => tabStore.mruTabs())
 
-  const activeTab = computed<Tab>(() => tabStore.activeTabForPane(paneId))
+  const activeTab = computed<Tab>(() => tabStore.activeTab)
 
   function switchTab(id: string) {
-    tabStore.switchPaneTab(id, paneId)
+    tabStore.switchTab(id)
   }
 
   // ── Back / Forward within the pane's active tab ───────────────────────────
@@ -82,19 +73,11 @@ export function useAppShellPane(paneId: 1 | 2) {
   }
 
   function closeTab(id: string) {
-    if (paneId === 1) tabStore.closeTab(id)
-    else tabStore.closePane2Tab(id)
+    tabStore.closeTab(id)
   }
 
   function closeAllTabs() {
-    if (paneId === 1) {
-      tabStore.closeAllTabs()
-    } else {
-      // Close all pane-2 tabs one by one
-      for (const tab of [...tabStore.pane2Tabs]) {
-        tabStore.closePane2Tab(tab.id)
-      }
-    }
+    tabStore.closeAllTabs()
   }
 
   /**
@@ -115,13 +98,11 @@ export function useAppShellPane(paneId: 1 | 2) {
   }
 
   function openTab(partial: Omit<Tab, 'id'>) {
-    if (paneId === 1) return tabStore.openTab(partial)
-    else return tabStore.openPane2Tab(partial)
+    return tabStore.openTab(partial)
   }
 
   function updateActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
-    if (paneId === 1) tabStore.updateActiveTab(patch)
-    else tabStore.updatePane2ActiveTab(patch)
+    tabStore.updateActiveTab(patch)
   }
 
   /**
@@ -156,12 +137,11 @@ export function useAppShellPane(paneId: 1 | 2) {
   // Each gesture opens its own home tab in this pane — see openNewHomeTab in tabStore
   // for why home is deliberately not unique.
   function openNewHomeTab() {
-    if (paneId === 1) tabStore.openNewHomeTab()
-    else tabStore.openPane2Tab({ title: t('stores.tabTitle.home'), route: '/' })
+    tabStore.openNewHomeTab()
   }
 
   function navigateToDestination(route: TabRoute, openInNewTab = false) {
-    tabStore.navigateToDestination(route, paneId, openInNewTab)
+    tabStore.navigateToDestination(route, openInNewTab)
   }
 
   const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
@@ -191,15 +171,7 @@ export function useAppShellPane(paneId: 1 | 2) {
   }
 
   function togglePdfViewerTitleBar() {
-    const tab = tabs.value.find((t) => t.id === activeTabId.value)
-    if (!tab) return
-    if (paneId === 1) {
-      tabStore.togglePdfViewerTitleBar()
-    } else {
-      tabStore.updateTab(tab.id, {
-        pdfViewerTitleBarVisible: tab.pdfViewerTitleBarVisible !== false ? false : true,
-      })
-    }
+    tabStore.togglePdfViewerTitleBar()
   }
 
   return {

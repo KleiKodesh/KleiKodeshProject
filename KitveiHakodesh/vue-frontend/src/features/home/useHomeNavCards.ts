@@ -33,12 +33,11 @@ function navDestination(key: DocumentIconKey, label: string) {
  */
 export function useHomeNavCards(navigate: (label: string) => unknown) {
   const settingsStore = useSettingsStore()
-  const paneId = inject<1 | 2>('paneId', 1)
   // The download card's subtitle becomes the live status once a download has anything to say.
   const libraryDownload = useSeforimLibraryDownload()
 
   return computed<HomeSuggestionCard[]>(() => {
-    if (settingsStore.getNavSidebarVisible(paneId)) return []
+    if (settingsStore.getNavSidebarVisible()) return []
     const dbMissing = !dbReady.value
     const destinations: { label: string; text: string; description: string; unreachable?: boolean; icon: Component; color: string }[] = [
       dbMissing

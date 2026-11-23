@@ -89,10 +89,9 @@ async function onTap(label: string) {
 }
 
 // This menu hangs off one pane's title bar, so it opens that pane's rail only.
-const paneId = inject<1 | 2>('paneId', 1)
 
 function onShowNavSidebar() {
-  settingsStore.setNavSidebarVisible(paneId, true)
+  settingsStore.setNavSidebarVisible(true)
   emit('close')
 }
 

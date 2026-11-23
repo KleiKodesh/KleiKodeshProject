@@ -41,7 +41,7 @@ export function usePaneNavigation(): PaneNavigation {
   if (injected) return injected
 
   // Fallback: construct pane 1 navigation directly
-  const pane = useAppShellPane(1)
+  const pane = useAppShellPane()
   return {
     updateActiveTab: pane.updateActiveTab,
     openTab: pane.openTab,

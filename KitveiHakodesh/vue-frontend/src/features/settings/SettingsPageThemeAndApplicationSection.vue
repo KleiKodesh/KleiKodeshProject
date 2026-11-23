@@ -33,7 +33,6 @@ const TITLE_BAR_BUTTONS = computed(() => [
   { id: 'hamburger',      label: t('settings.titleBarButton.menu') },
   { id: 'theme-toggle',   label: t('settings.titleBarButton.theme') },
   { id: 'toolbar-toggle', label: t('settings.titleBarButton.bookToolbar') },
-  { id: 'split-view',     label: t('settings.titleBarButton.splitView') },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: t('settings.titleBarButton.home') },
   { id: 'workspaces',     label: t('settings.titleBarButton.workspaces') },

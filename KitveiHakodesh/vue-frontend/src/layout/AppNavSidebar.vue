@@ -4,16 +4,12 @@ import { computed, inject, ref, watch } from 'vue'
 import {
   IconChevronDoubleRight20Regular,
   IconMoreHorizontal24Regular,
-  IconSplitVertical20Regular,
-  IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { APP_NAV_UPDATE_KEY, useAppNavUpdateItem } from './appNavUpdateItem'
 import AppNavSidebarOverflowMenu from './AppNavSidebarOverflowMenu.vue'
 import { useAppNavSidebarOverflow } from './useAppNavSidebarOverflow'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { useSplitViewAvailable } from './useSplitViewAvailable'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useI18n } from 'vue-i18n'
 
@@ -28,22 +24,9 @@ const { t } = useI18n()
 // One rail per pane, like the title bar beside it: navigateInNewTab goes through
 // usePaneNavigation, so each rail opens its destination in its own pane's tabs.
 const { navigateInNewTab } = useAppNavigation()
-const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 
-// The split-view toggle moves in here while the rail is up - the title bar drops it, the
-// way it drops the hamburger - so a window control never sits in two places at once. It
-// still answers to the same visibility setting as when it lives in the title bar.
-const isSplitViewAvailable = useSplitViewAvailable()
-const isSplitViewButtonVisible = computed(
-  () => isSplitViewAvailable.value && !settingsStore.titleBarHiddenButtons.includes('split-view'),
-)
-const splitViewTitle = computed(() =>
-  `${bookViewStore.splitViewEnabled ? t('layout.closeSplitView') : t('layout.openSplitView')} (Ctrl+|)`,
-)
-
 // Which pane this rail belongs to - it closes its own rail, not both panes'.
-const paneId = inject<1 | 2>('paneId', 1)
 
 // Home and workspaces are both deliberately NOT on the rail: they live in the title bar,
 // side by side, and only there. The hamburger and the split-view toggle move in here
@@ -70,7 +53,7 @@ const { item: updateItem, install: installUpdate } = useAppNavUpdateItem()
 const isUpdateButtonVisible = computed(() => updateItem.value !== null)
 
 const { hasNavOverflow, railButtonVisible, visibleNavItems, overflowedRailKeys } =
-  useAppNavSidebarOverflow(navPanelEl, isSplitViewButtonVisible, isUpdateButtonVisible)
+  useAppNavSidebarOverflow(navPanelEl, isUpdateButtonVisible)
 
 const isUpdateCollapsed = computed(
   () => isUpdateButtonVisible.value && !railButtonVisible(APP_NAV_UPDATE_KEY),
@@ -84,7 +67,6 @@ const overflowButtonEl = ref<HTMLElement | null>(null)
 // keyed by its label, which IS the routing key.
 function onOverflowRowSelect(key: string) {
   if (key === APP_NAV_UPDATE_KEY) void installUpdate()
-  else if (key === 'split-view') bookViewStore.toggleSplitView()
   else navigateInNewTab(key)
 }
 
@@ -131,16 +113,6 @@ ${item.description}`"
         <component :is="updateItem.icon" />
       </button>
       <button
-        v-if="railButtonVisible('split-view')"
-        class="nav-btn nav-btn-sm"
-        tabindex="-1"
-        :title="splitViewTitle"
-        @click="bookViewStore.toggleSplitView()"
-      >
-        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
-        <IconSplitVertical20Regular v-else />
-      </button>
-      <button
         v-if="railButtonVisible(APP_NAV_SETTINGS_ITEM.label)"
         class="nav-btn"
         tabindex="-1"
@@ -175,7 +147,7 @@ ${updateItem.text}` : t('layout.moreItems')"
         class="nav-btn nav-btn-sm"
         tabindex="-1"
         :title="t('layout.hideSidebar')"
-        @click="settingsStore.setNavSidebarVisible(paneId, false)"
+        @click="settingsStore.setNavSidebarVisible(false)"
       >
         <IconChevronDoubleRight20Regular />
       </button>

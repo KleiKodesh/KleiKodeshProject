@@ -37,7 +37,6 @@ const NAV_PANEL_VERTICAL_CHROME = 2 * 6
  */
 export function useAppNavSidebarOverflow(
   navPanelEl: Ref<HTMLElement | null>,
-  isSplitViewButtonVisible: ComputedRef<boolean>,
   isUpdateButtonVisible: ComputedRef<boolean>,
 ) {
   // Measured as the BORDER box, then the panel's own chrome is taken off, rather than
@@ -70,7 +69,6 @@ export function useAppNavSidebarOverflow(
   const railButtonKeys = computed<string[]>(() => [
     ...APP_NAV_ITEMS.value.map((item) => item.label),
     ...(isUpdateButtonVisible.value ? [APP_NAV_UPDATE_KEY] : []),
-    ...(isSplitViewButtonVisible.value ? ['split-view'] : []),
     APP_NAV_SETTINGS_ITEM.label,
   ])
 

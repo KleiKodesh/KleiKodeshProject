@@ -376,16 +376,15 @@ function toggleToc(toggleButton?: HTMLElement | null) {
 // The book view's app-level keys, routed to this pane's page (useAppTitleBarShortcuts):
 // Ctrl+K table of contents, Ctrl+J notes pane, Ctrl+F search, Ctrl+B toolbar (the same
 // per-pane toolbar setting the book view uses).
-const paneId = inject<1 | 2>('paneId', 1)
 const bookViewStore = useBookViewStore()
-const toolbarVisible = computed(() => bookViewStore.getToolbarVisible(paneId))
+const toolbarVisible = computed(() => bookViewStore.getToolbarVisible())
 /** Which edge the toolbar is docked to: the book view's app-wide setting (dragging either toolbar moves both). */
 const toolbarPosition = computed(() => bookViewStore.toolbarPosition)
-useFastDocViewCommands(paneId, {
+useFastDocViewCommands({
   toggleToc: () => toggleToc(),
   toggleNotes: () => { if (hasNotes.value) notesVisible.value = !notesVisible.value },
   openSearch: () => openSearch(),
-  toggleToolbar: () => bookViewStore.toggleToolbar(paneId),
+  toggleToolbar: () => bookViewStore.toggleToolbar(),
 })
 
 // Previous / next section (toolbar chevrons, Ctrl+Arrow): the book view's
@@ -418,8 +417,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
   const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
   if (!isZoomIn && !isZoomOut && !isReset) return
-  // as the book view's: only split view off or this pane focused, and only for this pane's active tab
-  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+  // as the book view's: only for the active tab
   if (paneNavigation.activeTab.id !== tabId) return
   const focused = document.activeElement
   event.preventDefault()
@@ -429,7 +427,6 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 // Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
 useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
-  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
   if (paneNavigation.activeTab.id !== tabId) return
   event.preventDefault()
   settingsStore.toggleCleanText()

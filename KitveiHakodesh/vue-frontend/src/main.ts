@@ -21,6 +21,7 @@ import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
 import { installBrowserPersistenceFlush, installHostPersistenceFlush } from './webview-host/persistenceFlush'
 import { whenStartupContentDrawn } from './webview-host/serviceIdle'
+import { installTabMoveHost, markLocalFileRestoreReady, unpackArrivingTab } from './webview-host/tabMove'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -48,6 +49,9 @@ useSettingsStore().init()
 useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
+
+// A window opened for a tab torn off another window starts with that tab (tabMove.ts).
+if (hasHostBridge) unpackArrivingTab()
 
 // Mirror the tab store to the native chrome tab strip (no-op in dev / VSTO).
 initTabMirror()
@@ -108,6 +112,7 @@ useHostSearchStore()
 // Restore persisted local file tabs after mount so the UI paints immediately: only the
 // active tab per pane now, the rest when first shown (see localFileTabLazyRestore).
 restoreLocalFileTabsLazily()
+markLocalFileRestoreReady()
 
 // Signal C# that the Vue app has fully mounted and all event listeners are registered.
 // C# uses this to dispatch any pending file path from an "Open With" launch — this
@@ -116,6 +121,8 @@ if (hasHostBridge) {
   // The host closes its window without firing pagehide/beforeunload; this is how it
   // asks for every pending persistence write first (AppViewer.FlushPersistenceAsync).
   installHostPersistenceFlush(() => useWorkspaceStore().discardWindowData())
+  // Tabs dragged between the desktop app's windows travel through these (tabMove.ts).
+  installTabMoveHost()
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
   // The desktop host keeps its last-session snapshot up until this: hiding it on
   // 'appReady' would show the restored view empty while its content is still loading.

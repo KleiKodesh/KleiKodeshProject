@@ -36,8 +36,7 @@ export function useKeepScreenOn() {
   const isFullscreen = computed(() => (height.value, isWindowFullscreen()))
 
   const isReading = computed(() => {
-    if (READING_ROUTES.has(tabStore.activeTabForPane(1).route)) return true
-    return bookViewStore.splitViewEnabled && READING_ROUTES.has(tabStore.activeTabForPane(2).route)
+    return READING_ROUTES.has(tabStore.activeTab.route)
   })
 
   // Idle limit. The last-activity time is a plain variable on purpose: it is written on

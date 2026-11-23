@@ -30,8 +30,7 @@ const pdfOcrStore = usePdfOcrStore()
 const pageTracking = usePdfViewPageTracking()
 // The PDF canvas is grey like the chrome, so beside the nav rail it needs a line to separate them.
 const settingsStore = useSettingsStore()
-const paneId = inject<1 | 2>('paneId', 1)
-const isNavSidebarVisible = computed(() => settingsStore.getNavSidebarVisible(paneId))
+const isNavSidebarVisible = computed(() => settingsStore.getNavSidebarVisible())
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)

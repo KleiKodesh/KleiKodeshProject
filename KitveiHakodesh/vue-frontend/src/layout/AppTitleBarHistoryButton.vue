@@ -22,11 +22,10 @@ const { t } = useI18n()
  * the Alt+ArrowRight / Alt+ArrowLeft shortcuts in `useAppTitleBarShortcuts`.
  */
 const props = defineProps<{
-  paneId: 1 | 2
   direction: 'back' | 'forward'
 }>()
 
-const pane = useAppShellPane(props.paneId)
+const pane = useAppShellPane()
 const isBack = computed(() => props.direction === 'back')
 
 const isEnabled = computed(() => (isBack.value ? pane.canGoBack.value : pane.canGoForward.value))

@@ -13,7 +13,6 @@ import { loadWebsites, websiteForUrl, websitesRef } from './websitesList'
  * the tab is switched away (siteFrames.ts). Only an address on the websites list is ever loaded.
  */
 const paneNavigation = usePaneNavigation()
-const paneId = inject<1 | 2>('paneId', 1)
 const tabId = paneNavigation.activeTabId
 const owner = Symbol('web-view-page')
 const listLoaded = ref(false)
@@ -24,7 +23,7 @@ const allowed = computed(() => !!webUrl.value && !!websiteForUrl(webUrl.value, w
 const frame = computed(() => siteFrames.get(tabId))
 
 watch([allowed, webUrl, listLoaded], () => {
-  if (listLoaded.value && allowed.value) claimSiteFrame(tabId, owner, webUrl.value, paneId)
+  if (listLoaded.value && allowed.value) claimSiteFrame(tabId, owner, webUrl.value)
 }, { immediate: true })
 onBeforeUnmount(() => releaseSiteFrame(tabId, owner))
 </script>

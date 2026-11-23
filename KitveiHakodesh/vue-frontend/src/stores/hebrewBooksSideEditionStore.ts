@@ -18,9 +18,9 @@ export const useHebrewBooksSideEditionStore = defineStore('hebrewBooksSideEditio
    */
   const pickedEditionIdByTabBook = ref<Record<string, number>>({})
   /** Bumped on every pick so the book view opens its left panel even for a repeat pick. */
-  const pickSignal = ref<{ paneId: 1 | 2; count: number }>({ paneId: 1, count: 0 })
+  const pickSignal = ref<{ count: number }>({ count: 0 })
   /** The edition on screen in the left side panel right now; null = none shown. */
-  const shownEditionIdByPane = ref<Record<1 | 2, number | null>>({ 1: null, 2: null })
+  const shownEditionId = ref<number | null>(null)
 
   function getPickedEditionId(tabId: string, bookId: number | undefined): number | null {
     return pickedEditionIdByTabBook.value[`${tabId}:${bookId}`] ?? null
@@ -31,9 +31,9 @@ export const useHebrewBooksSideEditionStore = defineStore('hebrewBooksSideEditio
   }
 
   /** The reader's pick from the editions dropdown - also opens the left column. */
-  function pickEdition(paneId: 1 | 2, tabId: string, bookId: number | undefined, editionId: number) {
+  function pickEdition(tabId: string, bookId: number | undefined, editionId: number) {
     setPickedEditionId(tabId, bookId, editionId)
-    pickSignal.value = { paneId, count: pickSignal.value.count + 1 }
+    pickSignal.value = { count: pickSignal.value.count + 1 }
   }
 
   /** A saved pick coming back from session restore - opens nothing by itself. */
@@ -41,22 +41,22 @@ export const useHebrewBooksSideEditionStore = defineStore('hebrewBooksSideEditio
     setPickedEditionId(tabId, bookId, editionId)
   }
 
-  function getShownEditionId(paneId: 1 | 2): number | null {
-    return shownEditionIdByPane.value[paneId]
+  function getShownEditionId(): number | null {
+    return shownEditionId.value
   }
 
-  function isEditionShown(paneId: 1 | 2): boolean {
-    return shownEditionIdByPane.value[paneId] != null
+  function isEditionShown(): boolean {
+    return shownEditionId.value != null
   }
 
-  function setShownEditionId(paneId: 1 | 2, editionId: number | null) {
-    shownEditionIdByPane.value[paneId] = editionId
+  function setShownEditionId(editionId: number | null) {
+    shownEditionId.value = editionId
   }
 
   return {
     pickedEditionIdByTabBook,
     pickSignal,
-    shownEditionIdByPane,
+    shownEditionId,
     getPickedEditionId,
     pickEdition,
     restorePickedEdition,

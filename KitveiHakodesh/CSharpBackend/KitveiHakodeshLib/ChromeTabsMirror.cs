@@ -43,9 +43,18 @@ namespace KitveiHakodeshLib
         // icon vocabulary; needed to re-stamp every tab when the set is resent on a DPI
         // change.
         private readonly Dictionary<string, string> _iconKeyByTabId = new Dictionary<string, string>();
-
         // Last snapshot applied from Vue — what SaveSession writes for the next launch.
         private TabsStateChangedEventArgs _lastState;
+
+        // ── Tabs moving between windows (HostMovesTabsBetweenWindows) ──
+        // Labels on this strip for a tab another window's page still owns: dropped here and
+        // waiting for this page to take the tab over. Snapshots leave them alone.
+        private readonly HashSet<FluentTab> _arrivingLabels = new HashSet<FluentTab>();
+        // This page's tabs on their way to another window: their labels are gone from this
+        // strip, and a snapshot must not bring them back while the move runs.
+        private readonly HashSet<string> _departingTabIds = new HashSet<string>();
+        // Departing tabs whose move succeeded: released once a snapshot no longer lists them.
+        private readonly HashSet<string> _departedTabIds = new HashSet<string>();
 
         public ChromeTabsMirror(FluentChromeTabsForm form, AppViewer viewer)
         {
@@ -62,6 +71,7 @@ namespace KitveiHakodeshLib
             ApplyPersistedTheme();
 
             _form.SelectedTabChanged += OnSelectedTabChanged;
+            _form.TabPressed += OnTabPressed;
             _form.TabClosing += OnTabClosing;
             _form.NewTabRequested += OnNewTabRequested;
             _form.SplitRatioChanged += OnSplitRatioChanged;
@@ -73,16 +83,122 @@ namespace KitveiHakodeshLib
             _viewer.ChromeTabListToggleRequested += OnChromeTabListToggleRequested;
         }
 
+        // ── Tabs moving between windows ─────────────────────────────────────────────
+        //
+        // The strip drags a label across windows; the tab itself moves page to page (the
+        // host's tab-move coordinator). These keep each strip from fighting that move with
+        // snapshots of a page that has not caught up yet.
+
+        /// <summary>
+        /// Lets the strip drag tabs off into new windows and onto other windows, with the host
+        /// moving the tabs (FluentChromeTabsForm.TabTornOff / TabDroppedFromOtherWindow).
+        /// </summary>
+        public void EnableTabMovesBetweenWindows()
+        {
+            _form.AllowTabDetach = true;
+            _form.HostMovesTabsBetweenWindows = true;
+        }
+
+        /// <summary>How many tabs this window's page has (both panes), from its last snapshot.</summary>
+        public int PageTabCount => _lastState?.Tabs.Count ?? 0;
+
+        /// <summary>The title the page gave a tab, or null.</summary>
+        public string TitleOf(string tabId) => _lastState?.Tabs.FirstOrDefault(t => t.Id == tabId)?.Title;
+
+        /// <summary>A label dropped here for a tab this page is about to take over: kept as it is until settled.</summary>
+        public void HoldArrivingLabel(FluentTab label)
+        {
+            if (label != null) _arrivingLabels.Add(label);
+        }
+
+        /// <summary>
+        /// The move of an arriving label's tab is over: with <paramref name="newTabId"/> the label
+        /// now stands for that tab of this page (keeping the place it was dropped at); with null
+        /// the move failed and the label goes.
+        /// </summary>
+        public void SettleArrivingLabel(FluentTab label, string newTabId)
+        {
+            if (label == null || !_arrivingLabels.Remove(label) || _form.IsDisposed) return;
+            _syncing = true;
+            try
+            {
+                if (newTabId == null)
+                {
+                    if (label.Owner == _form) _form.CloseTab(label);
+                }
+                else
+                {
+                    // A snapshot may have listed the new tab already, appended at the end.
+                    foreach (var duplicate in _form.Tabs.Where(t => t != label && t.Tag as string == newTabId).ToList())
+                        _form.CloseTab(duplicate);
+                    _iconKeyByTabId.Remove(newTabId);
+                    label.Tag = newTabId;
+                }
+            }
+            finally { _syncing = false; }
+            Resync();
+        }
+
+        /// <summary>A tab of this page is moving to another window: its label must not come back meanwhile.</summary>
+        public void HoldDepartingTab(string tabId)
+        {
+            if (tabId != null) _departingTabIds.Add(tabId);
+        }
+
+        /// <summary>
+        /// The tab now lives in another window and this page is closing its copy: its label
+        /// stays away until a snapshot without it arrives (a snapshot already on its way still
+        /// lists it).
+        /// </summary>
+        public void TabDeparted(string tabId)
+        {
+            if (tabId != null && _departingTabIds.Contains(tabId)) _departedTabIds.Add(tabId);
+        }
+
+        /// <summary>The move is over: a tab that stayed (failed move) gets its label back.</summary>
+        public void ReleaseDepartingTab(string tabId)
+        {
+            if (tabId != null && _departingTabIds.Remove(tabId)) Resync();
+        }
+
+        /// <summary>Applies the last snapshot again (after the strip changed outside a snapshot).</summary>
+        public void Resync()
+        {
+            if (_lastState != null && !_form.IsDisposed) Reconcile(_lastState);
+        }
+
+        // Labels of tabs this page does not own: held arrivals, and a label another window's
+        // drag is carrying over this strip right now.
+        private bool IsForeignLabel(FluentTab tab)
+            => _arrivingLabels.Contains(tab)
+               || (tab == _form.DraggedTab && _form.DraggedTabOrigin != null && _form.DraggedTabOrigin != _form);
+
+        // Tabs of this page whose label is elsewhere: moving to another window, or carried by
+        // a drag over another window's strip.
+        private bool IsAwayTab(string tabId)
+            => _departingTabIds.Contains(tabId) || (_form.TabAwayInDrag?.Tag as string) == tabId;
+
         // ── Strip gestures → Vue ────────────────────────────────────────────────────
 
+        // A selection made without a press (the tab-list dropdown, the keyboard).
         private void OnSelectedTabChanged(object sender, FluentTabEventArgs e)
         {
             if (_syncing) return;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabActivated(tabId);
-            // Clicking a strip tab moved OS focus to the native strip — hand it back to the
-            // web content so wheel/keyboard gestures keep working without a click in the page.
             _viewer.FocusWebContent();
+        }
+
+        // Every press on a tab reaches the page, also on the tab the strip already shows as
+        // selected: the page is the source of truth, and a strip that fell out of step with
+        // it would otherwise swallow the click (SelectedTabChanged does not fire for it).
+        private void OnTabPressed(object sender, FluentTabEventArgs e)
+        {
+            if (_syncing) return;
+            if (e.Tab?.Tag is string tabId)
+                _viewer.NotifyChromeTabActivated(tabId);
+            // No FocusWebContent here: the press may be the start of a drag, which needs
+            // the strip to keep the mouse. A changed selection hands focus back above.
         }
 
         private void OnTabClosing(object sender, FluentTabClosingEventArgs e)
@@ -228,23 +344,30 @@ namespace KitveiHakodeshLib
 
                 var wanted = new HashSet<string>(e.Tabs.Select(t => t.Id));
 
+                // A tab that has left for another window is held until the page drops it.
+                foreach (var gone in _departedTabIds.Where(id => !wanted.Contains(id)).ToList())
+                {
+                    _departedTabIds.Remove(gone);
+                    _departingTabIds.Remove(gone);
+                }
+
                 // Remove strip tabs that no longer exist in the Vue store.
-                foreach (var tab in _form.Tabs.Where(t => !(t.Tag is string id && wanted.Contains(id))).ToList())
+                foreach (var tab in _form.Tabs.Where(t => !IsForeignLabel(t) && !(t.Tag is string id && wanted.Contains(id) && !_departingTabIds.Contains(id))).ToList())
                     _form.CloseTab(tab);
 
                 foreach (var staleId in _iconKeyByTabId.Keys.Where(k => !wanted.Contains(k)).ToList())
                     _iconKeyByTabId.Remove(staleId);
-
                 // Index the surviving strip tabs by Vue tab id.
                 var byId = new Dictionary<string, FluentTab>();
                 foreach (var tab in _form.Tabs)
-                    if (tab.Tag is string id && !byId.ContainsKey(id))
+                    if (!IsForeignLabel(tab) && tab.Tag is string id && !byId.ContainsKey(id))
                         byId[id] = tab;
 
                 // Add new tabs (appended in snapshot order); refresh titles, regions,
                 // and each region's own active-tab highlight.
                 foreach (var info in e.Tabs)
                 {
+                    if (!byId.ContainsKey(info.Id) && IsAwayTab(info.Id)) continue;
                     if (!byId.TryGetValue(info.Id, out var tab))
                     {
                         tab = _form.AddTab(info.Title);

@@ -45,6 +45,24 @@ namespace KitveiHakodeshDesktopApp
         /// </summary>
         internal MainForm OpenedFrom { get; set; }
 
+        /// <summary>
+        /// Where a window opened for a torn-off tab appears: under the cursor, so the drag
+        /// carries on with it. Wins over <see cref="OpenedFrom"/> and the saved size.
+        /// </summary>
+        internal Rectangle? PlaceAt { get; set; }
+
+        /// <summary>
+        /// For a window opened for a torn-off tab: completes with that tab's id in this page
+        /// once the page has it, or null when it never arrived (AppViewer.StartWithMovedTab).
+        /// </summary>
+        internal Task<string> ArrivingTab { get; set; }
+
+        /// <summary>This window's page (tabs move between windows through it, Program.TabMoves).</summary>
+        internal AppViewer Viewer => _viewer;
+
+        /// <summary>This window's strip glue (holds labels steady while a tab moves).</summary>
+        internal ChromeTabsMirror TabsMirror => _tabsMirror;
+
         // The first window keeps the single-window settings names, so an existing
         // install opens where it was.
         private string FormSettingsName => "KitveiHakodeshMain" + (WindowId.Length == 0 ? "" : "-" + WindowId);
@@ -116,6 +134,13 @@ namespace KitveiHakodeshDesktopApp
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            if (PlaceAt.HasValue)
+            {
+                StartPosition = FormStartPosition.Manual;
+                Bounds = PlaceAt.Value;
+                _lastNormalBounds = Bounds;
+                return;
+            }
             if (OpenedFrom != null && !OpenedFrom.IsDisposed)
             {
                 Rectangle from = OpenedFrom.WindowState == FormWindowState.Normal ? OpenedFrom.Bounds : OpenedFrom._lastNormalBounds;
@@ -153,6 +178,22 @@ namespace KitveiHakodeshDesktopApp
         {
             if (WindowState == FormWindowState.Normal)
                 _lastNormalBounds = Bounds;
+        }
+
+        // A move or an edge resize by the user: Program places windows side by side on a
+        // drop and keeps a pair's shared edge shared (Program.SideBySide).
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_SIZING = 0x0214, WM_MOVING = 0x0216, WM_EXITSIZEMOVE = 0x0232;
+            if (m.Msg == WM_SIZING)
+            {
+                var proposed = (Program.RECT)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(Program.RECT));
+                Program.OnWindowSizing(this, m.WParam.ToInt32(), ref proposed);
+                System.Runtime.InteropServices.Marshal.StructureToPtr(proposed, m.LParam, false);
+            }
+            base.WndProc(ref m);
+            if (m.Msg == WM_MOVING) Program.OnWindowMoving(this);
+            else if (m.Msg == WM_EXITSIZEMOVE) Program.OnWindowMoveEnded(this);
         }
 
         private static Icon CreateWindowIcon()

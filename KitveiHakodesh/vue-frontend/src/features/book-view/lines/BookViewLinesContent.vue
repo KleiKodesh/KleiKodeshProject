@@ -292,12 +292,11 @@ const {
 )
 
 // Focus on open is onScrollerOpened's (the scroller's `opened`), with the split-view guard.
-const paneId = inject<1 | 2>('paneId', 1)
 const { onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
   useBookViewLinesScroll(
   scroller,
   props,
-  { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId, paneId },
+  { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
   (event, firstVisible, firstFull, isUserScroll) =>
     emit(event, firstVisible, firstFull, isUserScroll),
 )

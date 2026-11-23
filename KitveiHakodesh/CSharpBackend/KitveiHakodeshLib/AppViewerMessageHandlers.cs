@@ -135,6 +135,7 @@ namespace KitveiHakodeshLib
                         // The restored view has fetched and painted: the snapshot splash can go.
                         case "contentReady": _HideSplash(); break;
                         case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;
+                        case "tabMoveResult": HandleTabMoveResult(root); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
                         case "recycleHbLocalFile": _hb.HandleRecycleHbLocalFile(root, id); break;
@@ -367,6 +368,7 @@ namespace KitveiHakodeshLib
                 _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_startupEventsScriptId);
                 _startupEventsScriptId = null;
             }
+            RemoveArrivingTabScript();
             if (_pendingFilePaths.Count > 0)
             {
                 string[] paths = _pendingFilePaths.ToArray();

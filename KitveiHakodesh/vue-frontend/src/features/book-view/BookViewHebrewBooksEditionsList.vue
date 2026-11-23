@@ -39,12 +39,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{ picked: []; 'add-hebrew-book': [] }>()
 
-const paneId = inject<1 | 2>('paneId', 1)
 const paneNavigation = usePaneNavigation()
 const sideEditionStore = useHebrewBooksSideEditionStore()
 const userEditionsStore = useUserEditionsStore()
-const { isSideBySideAvailable, isToggleOn, side } = useHebrewBooksSideEditionMode(paneId)
-const editionOpen = useBookEditionOpen(paneId)
+const { isSideBySideAvailable, isToggleOn, side } = useHebrewBooksSideEditionMode()
+const editionOpen = useBookEditionOpen()
 const isOnline = useOnline()
 
 const bookId = computed(() => paneNavigation.activeTab.bookId ?? 0)
@@ -58,7 +57,7 @@ onMounted(() => {
 })
 
 function isShownSideBySide(edition: HebrewBooksEdition): boolean {
-  return sideEditionStore.getShownEditionId(paneId) === edition.id
+  return sideEditionStore.getShownEditionId() === edition.id
 }
 
 /** Author, place, year and page count - whichever of them the catalogue has. */

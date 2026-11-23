@@ -28,7 +28,6 @@ export interface SiteFrame {
   name: string
   /** CSS anchor the layer positions the iframe on (set on WebViewPage's placeholder). */
   anchor: string
-  paneId: 1 | 2
   /** The address the iframe was loaded with; changing it reloads the frame. */
   startUrl: string
   /** Where the reader is now (follows navigation inside the site; hosted only). */
@@ -59,18 +58,17 @@ function isProtected(frame: SiteFrame): boolean {
 }
 
 /** Shows the tab's site: creates (or reloads) its iframe and puts it over the placeholder. */
-export function claimSiteFrame(tabId: string, owner: symbol, url: string, paneId: 1 | 2): SiteFrame {
+export function claimSiteFrame(tabId: string, owner: symbol, url: string): SiteFrame {
   let frame = siteFrames.get(tabId)
   if (!frame) {
     frame = {
-      tabId, name: `site-${tabId}`, anchor: `--site-${tabId}`, paneId, startUrl: url, currentUrl: url,
+      tabId, name: `site-${tabId}`, anchor: `--site-${tabId}`, startUrl: url, currentUrl: url,
       live: true, shown: true, owner, hiddenAt: 0, loading: true, typed: false, reloadNonce: 0,
     }
     siteFrames.set(tabId, frame)
     return siteFrames.get(tabId)!
   }
   frame.owner = owner
-  frame.paneId = paneId
   frame.shown = true
   if (leavePrompt.value?.tabId === tabId) leavePrompt.value = null
   if (!frame.live) {

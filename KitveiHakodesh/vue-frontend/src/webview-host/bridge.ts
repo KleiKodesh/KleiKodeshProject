@@ -1026,7 +1026,6 @@ export interface MirroredTab {
   title: string
   /** Full breadcrumb ("title · toc path") for the native tab-list dropdown; equals title when no path. */
   listTitle: string
-  pane: 1 | 2
   /** Which favicon to draw — a key into the set sent by notifyTabIcons. */
   iconKey: string
 }
@@ -1034,19 +1033,7 @@ export interface MirroredTab {
 /** Full snapshot of the Vue tab store for the native chrome tab strip. */
 export interface TabsSnapshot {
   tabs: MirroredTab[]
-  /** Pane 1's active tab id. */
   activeTabId: string
-  /** Pane 2's active tab id; '' when split view is off. */
-  pane2ActiveTabId: string
-  /** Whether split view is open — splits the native strip into two regions. */
-  splitView: boolean
-  /** Which pane has focus (1 when split view is off). */
-  focusedPane: 1 | 2
-  /** Pane 2's share of the window width (splitViewFraction) — drag baseline / fallback. */
-  splitFraction: number
-  /** Rendered split divider's device-pixel bounds from the viewport left, for exact alignment; -1/0 when unmeasured. */
-  splitDividerLeftPx: number
-  splitDividerWidthPx: number
 }
 
 /**

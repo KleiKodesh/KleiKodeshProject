@@ -24,7 +24,7 @@ const size = widgetWindowSize(props.win.id)
 // and write its title. Inside a widget they get a private stand-in tab, so they behave
 // as the active page and never touch the user's real tabs. Anything that opens a real
 // document (a book link in the dictionary) still goes to pane 1.
-const pane = useAppShellPane(1)
+const pane = useAppShellPane()
 const widgetTab = reactive<Tab>({ id: `widget:${props.win.id}`, title: item.value.text, route: item.value.route })
 const navigation: PaneNavigation = {
   updateActiveTab: (patch) => { Object.assign(widgetTab, patch, { route: item.value.route }) },

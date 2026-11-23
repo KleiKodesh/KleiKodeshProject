@@ -48,12 +48,9 @@ type Pane = ReturnType<typeof useAppShellPane>
  * a binding here changes.
  */
 export function useAppTitleBarShortcuts(options: {
-  paneId: 1 | 2
   pane: Pane
-  /** Ctrl+H toggles this. Shared per-pane ref from `useUiChromeVisibility`. */
+  /** Ctrl+H toggles this. Shared ref from `useUiChromeVisibility`. */
   titleBarVisible: Ref<boolean>
-  /** Ctrl+\ is ignored unless split view actually fits on screen. */
-  isSplitViewAvailable: ComputedRef<boolean>
   /** Ctrl+E. Owned by the component because the
    *  address bar's visibility drives its template. */
   toggleAddressBar: () => void
@@ -62,7 +59,7 @@ export function useAppTitleBarShortcuts(options: {
   /** F8. Owned by the component, which holds the picker's open state. */
   toggleWorkspaces: () => void
 }) {
-  const { paneId, pane, titleBarVisible, isSplitViewAvailable } = options
+  const { pane, titleBarVisible } = options
   const bookViewStore = useBookViewStore()
   const settingsStore = useSettingsStore()
   const themeStore = useThemeStore()
@@ -72,9 +69,6 @@ export function useAppTitleBarShortcuts(options: {
   const activeTab = computed(() => pane.activeTab.value)
   const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
   const isFastDocViewActive = computed(() => activeTab.value?.route === '/fast-doc-view')
-  const isThisPaneFocused = computed(
-    () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === paneId,
-  )
 
   /** Quick-nav destinations for Ctrl+1..Ctrl+9, in order. */
   const QUICK_NAV_LABELS = [
@@ -97,7 +91,7 @@ export function useAppTitleBarShortcuts(options: {
   //    (AppViewerSiteShortcuts.cs); in dev the dev proxy's injected forwarder posts 'iframeKeydown'.
   //    Hosted, an 'iframeKeydown' from a website frame is refused: no app script runs there, so
   //    it could only be the site itself faking app shortcuts.
-  if (paneId === 1) {
+  {
     const replay = (d: { code: string; key?: string; repeat?: boolean; ctrlKey?: boolean; shiftKey?: boolean; metaKey?: boolean; altKey?: boolean }) =>
       window.dispatchEvent(
         new KeyboardEvent('keydown', {
@@ -208,8 +202,8 @@ export function useAppTitleBarShortcuts(options: {
         else pane.closeAllPages()
         return true
       case 'KeyB':
-        if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToolbar')
+        if (isBookViewActive.value) bookViewStore.toggleToolbar()
+        else if (isFastDocViewActive.value) sendFastDocViewCommand('toggleToolbar')
         else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
         return true
       case 'KeyJ':
@@ -217,15 +211,15 @@ export function useAppTitleBarShortcuts(options: {
         // one, Ctrl+Alt+J the left-side one.
         if (isBookViewActive.value) {
           const slot = e.altKey ? 'side-left' : e.shiftKey ? 'side' : 'bottom'
-          bookViewStore.toggleCommentaryPanel(paneId, slot)
+          bookViewStore.toggleCommentaryPanel(slot)
         } else if (isFastDocViewActive.value && !e.altKey && !e.shiftKey) {
           // The notes pane sits where the book view's bottom commentary does: Ctrl+J.
-          sendFastDocViewCommand(paneId, 'toggleNotes')
+          sendFastDocViewCommand('toggleNotes')
         }
         return true
       case 'KeyK':
-        if (isBookViewActive.value) bookViewStore.toggleTocPanel(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
+        if (isBookViewActive.value) bookViewStore.toggleTocPanel()
+        else if (isFastDocViewActive.value) sendFastDocViewCommand('toggleToc')
         return true
       case 'KeyU':
         // Ctrl+U — UserSpace in a new tab, same as Ctrl+6 (also keeps
@@ -240,8 +234,8 @@ export function useAppTitleBarShortcuts(options: {
       case 'KeyF':
         // Let a focused search input keep its own Ctrl+F.
         if (document.activeElement?.closest('[data-ctrlf-enabled]')) return false
-        if (isBookViewActive.value) bookViewStore.openSearch(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'openSearch')
+        if (isBookViewActive.value) bookViewStore.openSearch()
+        else if (isFastDocViewActive.value) sendFastDocViewCommand('openSearch')
         return true
       case 'KeyN':
         // Swallow the browser's new-window; new tab is Ctrl+T.
@@ -276,7 +270,7 @@ export function useAppTitleBarShortcuts(options: {
         // menu. Pane-scoped because each pane owns its own rail, like every other
         // per-pane chrome toggle.
         if (e.shiftKey) {
-          settingsStore.setNavSidebarVisible(paneId, !settingsStore.getNavSidebarVisible(paneId))
+          settingsStore.setNavSidebarVisible(!settingsStore.getNavSidebarVisible())
           return true
         }
         options.toggleNavDropdown()
@@ -326,10 +320,6 @@ export function useAppTitleBarShortcuts(options: {
       return true
     }
     if (!e.ctrlKey) return false
-    if (e.code === 'Backslash') {
-      if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
-      return true
-    }
     if (e.shiftKey && e.code === 'KeyF') {
       toggleFullscreen()
       return true
@@ -345,11 +335,11 @@ export function useAppTitleBarShortcuts(options: {
   useEventListener(
     'keydown',
     (e: KeyboardEvent) => {
-      if (isThisPaneFocused.value && handlePaneScoped(e)) {
+      if (handlePaneScoped(e)) {
         e.preventDefault()
         return
       }
-      if (paneId === 1 && handleAppWide(e)) e.preventDefault()
+      if (handleAppWide(e)) e.preventDefault()
     },
     { capture: true },
   )

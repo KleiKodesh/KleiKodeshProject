@@ -53,6 +53,13 @@ namespace KitveiHakodeshLib
             if (!isSnapshot) _timer.Start();
         }
 
+        /// <summary>Snapshot mode: the picture to show, once it is ready (blank until then).</summary>
+        public void SetSnapshot(Image snapshot)
+        {
+            _logo = snapshot;
+            Invalidate();
+        }
+
         public void FadeOut()
         {
             // Instant hide — remove from parent immediately instead of fading out.

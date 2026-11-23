@@ -64,7 +64,7 @@ function toggleOpen() {
 
 const paneNavigation = usePaneNavigation()
 const userEditionsStore = useUserEditionsStore()
-const editionOpen = useBookEditionOpen(inject<1 | 2>('paneId', 1))
+const editionOpen = useBookEditionOpen()
 const isAddDialogOpen = ref(false)
 
 function openAddDialog() {

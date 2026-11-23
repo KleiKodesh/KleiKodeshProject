@@ -64,8 +64,6 @@
   "clearHistory": "נקה את כל ההיסטוריה ({key})",
   "searchTabTitle": "חיפוש: {query}",
   "searchContent": "חיפוש תוכן במאגר (Enter)",
-  "closeSplitView": "סגור תצוגה מפוצלת",
-  "openSplitView": "פתח תצוגה מפוצלת",
   "moreItems": "פריטים נוספים",
   "hideSidebar": "הסתר סרגל צד (Ctrl+Shift+M)",
   "showSidebar": "הצג סרגל צד (Ctrl+Shift+M)",

@@ -3,6 +3,7 @@ import {
   idbTabsSet,
   idbTabsDelete,
   idbTabsDeleteByPrefix,
+  idbTabsEntriesWithPrefix,
 } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
 import { useSearchCacheStore } from './searchCacheStore'
@@ -169,6 +170,62 @@ export function clearBookViewState(tabId: string, bookId: number): Promise<void>
   const wsId = workspaceId()
   bookStateCache.delete(bookCacheKey(wsId, tabId, bookId))
   return idbTabsDelete(KEYS.book(wsId, tabId, bookId))
+}
+
+// ── Moving a tab to another window ────────────────────────────────────────────
+
+/** Everything this slice keeps for one tab: what a restart would read back for it. */
+export interface TabStateRecords {
+  tabState: TabState | null
+  bookStates: { bookId: number; state: BookState }[]
+}
+
+/**
+ * Reads every record this slice holds for a tab. The in-memory caches win over the
+ * database: they are written synchronously on each save, while the put that follows
+ * may still be in flight when a move asks.
+ */
+export async function readAllStateForTab(tabId: string): Promise<TabStateRecords> {
+  const wsId = workspaceId()
+  const [tabState, bookEntries] = await Promise.all([
+    idbTabsGet<TabState>(KEYS.tab(wsId, tabId)),
+    idbTabsEntriesWithPrefix<BookState>(KEYS.tabPrefix(wsId, tabId)),
+  ])
+  const books = new Map<number, BookState>()
+  const prefix = KEYS.tabPrefix(wsId, tabId)
+  for (const [key, state] of bookEntries) {
+    const bookId = Number(key.slice(prefix.length))
+    if (Number.isFinite(bookId) && state) books.set(bookId, state)
+  }
+  const cachePrefix = bookCacheKeyPrefixForTab(wsId, tabId)
+  for (const [key, state] of bookStateCache) {
+    if (!key.startsWith(cachePrefix) || !state) continue
+    const bookId = Number(key.slice(cachePrefix.length))
+    if (Number.isFinite(bookId)) books.set(bookId, state)
+  }
+  return {
+    tabState: tabStateCache.get(KEYS.tab(wsId, tabId)) ?? tabState,
+    bookStates: [...books].map(([bookId, state]) => ({ bookId, state })),
+  }
+}
+
+/**
+ * Writes a moved tab's records under THIS window's storage id. The caches are seeded
+ * synchronously, so the tab's view finds its place the moment it mounts; the returned
+ * promise settles when the database has them too.
+ */
+export function writeAllStateForTab(tabId: string, records: TabStateRecords): Promise<void> {
+  const wsId = workspaceId()
+  const writes: Promise<void>[] = []
+  if (records.tabState) {
+    tabStateCache.set(KEYS.tab(wsId, tabId), records.tabState)
+    writes.push(idbTabsSet(KEYS.tab(wsId, tabId), records.tabState))
+  }
+  for (const { bookId, state } of records.bookStates) {
+    bookStateCache.set(bookCacheKey(wsId, tabId, bookId), state)
+    writes.push(idbTabsSet(KEYS.book(wsId, tabId, bookId), state))
+  }
+  return Promise.all(writes).then(() => {})
 }
 
 // ── Teardown ──────────────────────────────────────────────────────────────────

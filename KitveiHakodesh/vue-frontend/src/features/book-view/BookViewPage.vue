@@ -61,7 +61,6 @@ const bookViewStore = useBookViewStore()
 const booksDataStore = useBooksDataStore()
 // Shown when a publisher-restricted book's export is attempted (Core's book protection).
 const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
-const paneId = inject<1 | 2>('paneId', 1)
 
 // Track the shell's own width instead of the viewport width so that in split
 // view each pane responds to its own size, not the full window size.
@@ -497,11 +496,11 @@ watch([sideCommentaryOpen, sideLeftCommentaryOpen], ([rightOpen, leftOpen]) => {
   }
 })
 
-watch(() => bookViewStore.openSearchSignal, (signal) => { if (signal.paneId === paneId) openContentSearch() })
+watch(() => bookViewStore.openSearchSignal, (signal) => { openContentSearch() })
 watch(() => bookViewStore.toggleCommentaryPanelSignal, (signal) => {
-  if (signal.paneId === paneId) toggleCommentaryPanel(signal.slot)
+  toggleCommentaryPanel(signal.slot)
 })
-watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId === paneId) toggleTocPanel() })
+watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { toggleTocPanel() })
 
 // ── HebrewBooks edition side by side ─────────────────────────────────────────
 // With the editions toggle on (and room for it - see useHebrewBooksSideEditionMode), the
@@ -510,7 +509,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
 // opens that column.
 const paneNavigation = usePaneNavigation()
 const sideEditionStore = useHebrewBooksSideEditionStore()
-const { opensSideBySide: editionOpensSideBySide, slot: editionSlot } = useHebrewBooksSideEditionMode(paneId)
+const { opensSideBySide: editionOpensSideBySide, slot: editionSlot } = useHebrewBooksSideEditionMode()
 
 // The reader's own HebrewBooks items can show side by side too; their own PDFs cannot
 // (the side panel is a HebrewBooks scan).
@@ -552,7 +551,7 @@ function sideColumnFraction(slot: SideSlot): number {
 
 watch(
   () => (sideEditionShown.value ? sideEdition.value!.id : null),
-  (shownId) => sideEditionStore.setShownEditionId(paneId, shownId),
+  (shownId) => sideEditionStore.setShownEditionId(shownId),
   { immediate: true },
 )
 // Dragging the edition's divider moves the bottom filter button sideways too (see the
@@ -575,7 +574,7 @@ function sideEditionPersistState(): SideEditionPersistState {
 }
 
 watch(() => sideEditionStore.pickSignal, (signal) => {
-  if (signal.paneId !== paneId || !isWideScreen.value) return
+  if (!isWideScreen.value) return
   // The edition takes that side column, so a commentary detached from it comes back first.
   panels[editionSlot.value].detachment.attach()
   panels[editionSlot.value].visible.value = true
@@ -590,7 +589,7 @@ watch(editionSlot, (newSlot, oldSlot) => {
   panels[newSlot].visible.value = true
 })
 onBeforeUnmount(() => {
-  sideEditionStore.setShownEditionId(paneId, null)
+  sideEditionStore.setShownEditionId(null)
 })
 
 // The edition's column is not commentary while an edition is shown, so the search bar must
@@ -927,7 +926,7 @@ function getSideEditionOutlineTarget(): string | undefined {
     <DetachedWindow
       v-for="slot in detachedSlots"
       :key="slot"
-      :name="`commentary-${paneId}-${slot}`"
+      :name="`commentary-1-${slot}`"
       :title="detachedWindowTitle"
       @closed="panels[slot].detachment.attach()"
       @blocked="onDetachBlocked(slot)"

@@ -19,8 +19,7 @@ import { useTabStore } from '@/stores/tabStore'
  * app-wide block of `useAppTitleBarShortcuts`.
  */
 
-const pane1TitleBarVisible = ref(true)
-const pane2TitleBarVisible = ref(true)
+const titleBarVisible = ref(true)
 
 /**
  * The hidden-scrollbars DOM effect, pure CSS tinting: `scrollbars-hidden` on
@@ -119,13 +118,10 @@ export function toggleScrollbarsHidden() {
   settingsStore.scrollbarsHidden = !settingsStore.scrollbarsHidden
 }
 
-export function useUiChromeVisibility(paneId: 1 | 2 = 1) {
+export function useUiChromeVisibility() {
   ensureScrollbarsHiddenEffect()
   const { scrollbarsHidden } = storeToRefs(useSettingsStore())
-  return {
-    titleBarVisible: paneId === 1 ? pane1TitleBarVisible : pane2TitleBarVisible,
-    scrollbarsHidden,
-  }
+  return { titleBarVisible, scrollbarsHidden }
 }
 
 // ── Iframe propagation ───────────────────────────────────────────────────────
@@ -224,42 +220,27 @@ export function useIframeScrollbarsHidden(getIframe: () => HTMLIFrameElement | n
  * fights them: if anything is still visible, F9 hides everything; only when
  * everything is already hidden does it bring everything back.
  *
- * Derivation only looks at panes that are on screen (pane 2 counts only in
- * split view), but applying sets both panes so a pane opened later matches.
  * Toolbar visibility goes through the store's own toggle, keeping its
  * persistence semantics identical to pressing Ctrl+B.
  */
 export function toggleReadingMode() {
   const settingsStore = useSettingsStore()
   const bookViewStore = useBookViewStore()
-  const titleBarByPane = { 1: pane1TitleBarVisible, 2: pane2TitleBarVisible } as const
-  const panesOnScreen: readonly (1 | 2)[] = bookViewStore.splitViewEnabled ? [1, 2] : [1]
-
   const tabStore = useTabStore()
-  const activePdfTabOnScreen = (paneId: 1 | 2) => {
-    const id = paneId === 1 ? tabStore.activeTabId : tabStore.pane2ActiveTabId
-    const tab = (paneId === 1 ? tabStore.pane1Tabs : tabStore.pane2Tabs).find((t) => t.id === id)
-    return tab?.route === '/pdf-view' ? tab : undefined
-  }
+  const activePdfTab = tabStore.activeTab.route === '/pdf-view' ? tabStore.activeTab : undefined
 
   const everythingHidden =
     settingsStore.scrollbarsHidden &&
-    panesOnScreen.every(
-      (paneId) =>
-        !titleBarByPane[paneId].value &&
-        !bookViewStore.getToolbarVisible(paneId) &&
-        (activePdfTabOnScreen(paneId) === undefined ||
-          activePdfTabOnScreen(paneId)!.pdfViewerTitleBarVisible === false),
-    )
+    !titleBarVisible.value &&
+    !bookViewStore.getToolbarVisible() &&
+    (activePdfTab === undefined || activePdfTab.pdfViewerTitleBarVisible === false)
   const hideAll = !everythingHidden
 
   if (settingsStore.scrollbarsHidden !== hideAll) toggleScrollbarsHidden()
-  for (const paneId of [1, 2] as const) {
-    titleBarByPane[paneId].value = !hideAll
-    if (bookViewStore.getToolbarVisible(paneId) === hideAll) bookViewStore.toggleToolbar(paneId)
-  }
+  titleBarVisible.value = !hideAll
+  if (bookViewStore.getToolbarVisible() === hideAll) bookViewStore.toggleToolbar()
   // PDF.js toolbar (Ctrl+B in a PDF tab) — per tab, so every PDF tab follows.
-  for (const tab of [...tabStore.pane1Tabs, ...tabStore.pane2Tabs]) {
+  for (const tab of tabStore.tabs) {
     if (tab.route === '/pdf-view') tabStore.updateTab(tab.id, { pdfViewerTitleBarVisible: !hideAll })
   }
 }

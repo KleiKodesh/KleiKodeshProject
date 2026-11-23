@@ -2,15 +2,10 @@
 import { computed, defineAsyncComponent } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 
-const props = defineProps<{ paneId?: 1 | 2 }>()
 const tabStore = useTabStore()
 
-const activeTab = computed(() =>
-  props.paneId === 2 ? tabStore.activeTabForPane(2) : tabStore.activeTab,
-)
-const activeTabId = computed(() =>
-  props.paneId === 2 ? tabStore.pane2ActiveTabId : tabStore.activeTabId,
-)
+const activeTab = computed(() => tabStore.activeTab)
+const activeTabId = computed(() => tabStore.activeTabId)
 const route = computed(() => activeTab.value.route)
 
 // Remount key for pages that read their target once at setup (they don't watch

@@ -11,8 +11,6 @@ import {
   IconOptions24Filled,
   IconConvertToText24Regular,
   IconChevronDoubleDown16Regular,
-  IconSplitVertical20Regular,
-  IconSplitVertical20Filled,
   // IconColor24Regular,
   // IconColor24Filled,
 } from '@iconify-prerendered/vue-fluent'
@@ -29,7 +27,6 @@ import { IconWrench20Regular } from '@iconify-prerendered/vue-fluent'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
-import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -42,9 +39,8 @@ import { useAppNavUpdateItem } from './appNavUpdateItem'
 const { t } = useI18n()
 const { item: updateItem } = useAppNavUpdateItem()
 
-const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
-const pane = useAppShellPane(props.paneId)
+const pane = useAppShellPane()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
@@ -66,9 +62,8 @@ const workspacesOpen = ref(false)
 const workspacesButtonEl = ref<HTMLElement | null>(null)
 const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
 
-const { titleBarVisible } = useUiChromeVisibility(props.paneId)
+const { titleBarVisible } = useUiChromeVisibility()
 
-const isSplitViewAvailable = useSplitViewAvailable()
 
 // ── TOC breadcrumb ────────────────────────────────────────────────────────────
 
@@ -119,7 +114,7 @@ const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(active
 // OCR works on any PDF.js viewer on screen: a PDF tab, or a HebrewBooks edition shown side
 // by side in the book view's left panel.
 const isOcrAvailable = computed(() =>
-  activeTab.value?.route === '/pdf-view' || hebrewBooksSideEditionStore.isEditionShown(props.paneId),
+  activeTab.value?.route === '/pdf-view' || hebrewBooksSideEditionStore.isEditionShown(),
 )
 
 // A click always enters search mode; the address-bar dropdown lists recent
@@ -135,7 +130,7 @@ const barTitle = computed(() => {
 
 const toolbarTitle = computed(() => {
   const baseTitle = isBookViewActive.value
-    ? bookViewStore.getToolbarVisible(props.paneId) ? t('layout.hideToolbar') : t('layout.showToolbar')
+    ? bookViewStore.getToolbarVisible() ? t('layout.hideToolbar') : t('layout.showToolbar')
     : activeTab.value?.pdfViewerTitleBarVisible !== false ? t('layout.hidePdfTitleBar') : t('layout.showPdfTitleBar')
   return `${baseTitle} (Ctrl+B)`
 })
@@ -170,7 +165,7 @@ function onTitleBarClick() {
 // the menu to offer. Both ways in are closed off: the button below is not rendered, and
 // Ctrl+M does nothing.
 function toggleNavDropdown() {
-  if (settingsStore.getNavSidebarVisible(props.paneId)) return
+  if (settingsStore.getNavSidebarVisible()) return
   navDropdownOpen.value = !navDropdownOpen.value
 }
 
@@ -286,10 +281,8 @@ function toggleAddressBar() {
 }
 
 useAppTitleBarShortcuts({
-  paneId: props.paneId,
   pane,
   titleBarVisible,
-  isSplitViewAvailable,
   toggleAddressBar,
   toggleNavDropdown,
   // Inert while the button is not on screen - hidden by the titleBarHiddenButtons
@@ -315,7 +308,7 @@ useAppTitleBarShortcuts({
              hamburger wears a dot in the update's colour, and the menu's first row after the
              divider is the one it points at. -->
         <button
-          v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.getNavSidebarVisible(props.paneId)"
+          v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.getNavSidebarVisible()"
           ref="navBtnRef"
           class="bar-btn"
           :class="{ 'bar-btn--dot': updateItem }"
@@ -337,13 +330,11 @@ ${updateItem.text}` : t('layout.menu')"
            persisted hidden-buttons setting, so renaming them is a migration. -->
       <AppTitleBarHistoryButton
         v-if="isTitleBarButtonVisible('prev-tab')"
-        :pane-id="props.paneId"
         direction="back"
         key="history-back"
       />
       <AppTitleBarHistoryButton
         v-if="isTitleBarButtonVisible('next-tab') && pane.canGoForward.value"
-        :pane-id="props.paneId"
         direction="forward"
         key="history-forward"
       />
@@ -353,7 +344,6 @@ ${updateItem.text}` : t('layout.menu')"
     <!-- Search mode — the title turns into an editable address-bar search. -->
     <AddressBar
       v-if="searchMode"
-      :pane-id="props.paneId"
       class="bar-search"
       @close="searchMode = false"
     />
@@ -417,16 +407,6 @@ ${updateItem.text}` : t('layout.menu')"
       >
         <component :is="workspacesIcon.icon24" />
       </button>
-      <button
-        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.getNavSidebarVisible(props.paneId)"
-        class="bar-btn"
-        tabindex="-1"
-        :title="`${bookViewStore.splitViewEnabled ? t('layout.closeSplitView') : t('layout.openSplitView')} (Ctrl+|)`"
-        @click.stop="bookViewStore.toggleSplitView()"
-      >
-        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
-        <IconSplitVertical20Regular v-else />
-      </button>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" tabindex="-1" />
       <!-- <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
@@ -443,9 +423,9 @@ ${updateItem.text}` : t('layout.menu')"
         class="bar-btn"
         tabindex="-1"
         :title="toolbarTitle"
-        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar(props.paneId) : pane.togglePdfViewerTitleBar()"
+        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar() : pane.togglePdfViewerTitleBar()"
       >
-        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.getToolbarVisible(props.paneId) : activeTab?.pdfViewerTitleBarVisible !== false" />
+        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.getToolbarVisible() : activeTab?.pdfViewerTitleBarVisible !== false" />
         <IconOptions24Regular v-else />
       </button>
       <button

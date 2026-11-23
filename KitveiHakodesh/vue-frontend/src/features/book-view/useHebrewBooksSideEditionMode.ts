@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 import { useSettingsStore, type HbEditionSide } from '@/stores/settingsStore'
 import type { CommentarySlot } from './bookViewTypes'
-import { useSplitViewAvailable } from '@/layout/useSplitViewAvailable'
+import { useSideBySideRoom } from '@/layout/useSplitViewAvailable'
 
 /**
  * Whether a HebrewBooks edition picked in this pane's book view opens side by side (in the
@@ -12,13 +12,13 @@ import { useSplitViewAvailable } from '@/layout/useSplitViewAvailable'
  * a wide window - so it shares that rule. Where it is not available the toggle is hidden and
  * every pick opens a new tab, whatever the persisted toggle says.
  */
-export function useHebrewBooksSideEditionMode(paneId: 1 | 2) {
+export function useHebrewBooksSideEditionMode() {
   const settingsStore = useSettingsStore()
-  const isSideBySideAvailable = useSplitViewAvailable()
+  const isSideBySideAvailable = useSideBySideRoom()
 
   const isToggleOn = computed({
-    get: () => settingsStore.getHbEditionInSidePanel(paneId),
-    set: (value: boolean) => settingsStore.setHbEditionInSidePanel(paneId, value),
+    get: () => settingsStore.getHbEditionInSidePanel(),
+    set: (value: boolean) => settingsStore.setHbEditionInSidePanel(value),
   })
 
   const opensSideBySide = computed(() => isSideBySideAvailable.value && isToggleOn.value)

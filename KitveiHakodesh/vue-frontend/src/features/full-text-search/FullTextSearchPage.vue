@@ -26,7 +26,6 @@ import FullTextSearchLayout from './FullTextSearchLayout.vue'
 const paneNavigation = usePaneNavigation()
 // For the page's own keyboard shortcuts: which pane this is, and whether it is the
 // focused one while split view is open (see the window handler below).
-const paneId = inject<1 | 2>('paneId', 1)
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
@@ -362,7 +361,6 @@ useEventListener(
   'keydown',
   (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
-    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
     if (!isSearchActive.value) return
     if (focusedElementOwnsTheseKeys(document.activeElement)) return
     // Space activates a focused button just as Enter does.
@@ -504,7 +502,7 @@ onBeforeUnmount(() => {
   // If the tab no longer exists in the store, it was closed — clear its cache entry
   // since the results are no longer needed for session restore or tab switching.
   // If the tab still exists, the user just switched away — keep the cache for restore.
-  const tabStillExists = tabStore.pane1Tabs.concat(tabStore.pane2Tabs).some((t) => t.id === tabId)
+  const tabStillExists = tabStore.tabs.some((t) => t.id === tabId)
   if (!tabStillExists && executedQuery.value) {
     clearCachedResults(executedQuery.value)
     lsDelete(scrollMirrorKey) // tab closed — drop its scroll mirror too

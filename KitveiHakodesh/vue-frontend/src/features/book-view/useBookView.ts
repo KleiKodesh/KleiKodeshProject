@@ -101,7 +101,6 @@ export function useBookView(
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
-  const paneId = inject<1 | 2>('paneId', 1)
   const { toolbarPosition } = storeToRefs(bookViewStore)
 
   // ── Tab state captured at mount (stable for component lifetime) ──────────
@@ -801,7 +800,7 @@ export function useBookView(
   return {
     // store state
     toolbarPosition,
-    toolbarVisible: computed(() => bookViewStore.getToolbarVisible(paneId)),
+    toolbarVisible: computed(() => bookViewStore.getToolbarVisible()),
     // tab data
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightOffset, searchHighlightTerms,
     openNoteIndex,

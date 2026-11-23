@@ -13,7 +13,6 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useResizeObserver, useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserSpaceStore } from '@/stores/userSpaceStore'
-import { SPLIT_VIEW_MIN_WIDTH } from '@/layout/useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { storeToRefs } from 'pinia'
@@ -48,69 +47,6 @@ const { setupDone, termsAccepted, showClock } = storeToRefs(settingsStore)
 // The default UserSpace folders (Torat Emet books, when installed) are added once at app start, off the render path.
 const userSpaceStore = useUserSpaceStore()
 onMounted(() => { void userSpaceStore.claimDefaultFolders() })
-
-// ── Split view availability ───────────────────────────────────────────────────
-// Split view requires enough horizontal space for two usable panes. The threshold is
-// shared with the surfaces that offer the toggle (layout/useSplitViewAvailable); what
-// differs here is that this measures the app element, not the window, because this is
-// what auto-disables an open split when the element shrinks.
-
-const containerRef = ref<HTMLElement | null>(null)
-const appWidth = ref(window.innerWidth)
-useResizeObserver(containerRef, ([entry]) => {
-  appWidth.value = entry!.contentRect.width
-})
-const isSplitViewAvailable = computed(() => !isVsto && appWidth.value >= SPLIT_VIEW_MIN_WIDTH)
-
-// Auto-disable split view when the window shrinks below the minimum width.
-watch(isSplitViewAvailable, (available) => {
-  if (!available && bookViewStore.splitViewEnabled) bookViewStore.disableSplitView()
-})
-
-// Restoring with split view on: pane 2 must have a tab, and pane 1's restored
-// activeTabId must not point at a pane-2 tab (possible when the active tab at
-// exit was a non-persisted singleton and the persist fallback picked a pane-2
-// tab) — that would render the same tab in both panes. Runs synchronously at
-// setup, before either AppShell first renders.
-if (bookViewStore.splitViewEnabled) {
-  tabStore.reclaimPane1ActiveForSplit()
-  tabStore.ensurePane2HasTab()
-}
-
-// When split view is (re-)enabled, pane 2 takes its orphaned tabs back: pane 1 must
-// stop displaying an adopted orphan, and pane 2 must have at least one tab.
-watch(() => bookViewStore.splitViewEnabled, (enabled) => {
-  if (enabled) {
-    tabStore.reclaimPane1ActiveForSplit()
-    tabStore.ensurePane2HasTab()
-  }
-})
-
-// ── Horizontal resize handle ──────────────────────────────────────────────────
-let isDragging = false
-let dragStartX = 0
-let dragStartFraction = 0
-
-function onDividerPointerDown(event: PointerEvent) {
-  isDragging = true
-  dragStartX = event.clientX
-  dragStartFraction = bookViewStore.splitViewFraction
-  ;(event.target as HTMLElement).setPointerCapture(event.pointerId)
-}
-
-function onPointerMove(event: PointerEvent) {
-  if (!isDragging) return
-  const containerWidth = containerRef.value?.getBoundingClientRect().width ?? window.innerWidth
-  // In RTL, fraction controls pane 2 (physical left side). Dragging right
-  // grows pane 2, so fraction increases with positive clientX delta.
-  const delta = event.clientX - dragStartX
-  const newFraction = Math.min(0.85, Math.max(0.15, dragStartFraction + delta / containerWidth))
-  bookViewStore.setSplitViewFraction(newFraction)
-}
-
-function onPointerUp() {
-  isDragging = false
-}
 
 // ── Unsaved PDF edits guards ─────────────────────────────────────────────────
 
@@ -178,32 +114,10 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
 </script>
 
 <template>
-  <!-- The pinned date bar is the WINDOW's status bar: one strip under both panes in split
-       view, so it lives here and not in AppShell. -->
+  <!-- The pinned date bar is the WINDOW's status bar, so it lives here and not in AppShell. -->
   <div class="app-frame">
-    <div
-      ref="containerRef"
-      class="app-layout"
-      :class="{ 'split-active': bookViewStore.splitViewEnabled }"
-      :style="bookViewStore.splitViewEnabled
-        ? { gridTemplateColumns: `1fr 1px ${bookViewStore.splitViewFraction * 100}%` }
-        : undefined"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-    >
-      <!-- Pane 1 — always present -->
-      <AppShell :pane-id="1" />
-
-      <!-- Resize divider — only in split view -->
-      <div
-        v-if="bookViewStore.splitViewEnabled"
-        class="sash sash-v"
-        data-split-divider
-        @pointerdown="onDividerPointerDown"
-      />
-
-      <!-- Pane 2 — only in split view -->
-      <AppShell v-if="bookViewStore.splitViewEnabled" :pane-id="2" />
+    <div class="app-layout">
+      <AppShell />
     </div>
     <!-- Website iframes: after the panes (their CSS anchors must come first), never moved. -->
     <SiteFrameLayer />

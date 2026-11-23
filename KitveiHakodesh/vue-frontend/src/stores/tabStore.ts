@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, toRaw } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
 import { useCoalescedWrite } from '@/composables/useCoalescedWrite'
 import { capturePositionsForTab } from '@/webview-host/persistenceFlush'
@@ -43,6 +43,7 @@ import {
   disposeLocalFileHost,
   navigatesDestinationsInPlace,
   hasNativeChromeTabs,
+  isVstoEnvironment,
 } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
@@ -76,8 +77,6 @@ export interface Tab {
   id: string
   title: string
   route: TabRoute
-  /** Which split pane this tab belongs to. Defaults to 1 when absent. */
-  pane?: 1 | 2
   // Local file state (PDF, HTML, Word)
   localFileVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
   localFileName?: string
@@ -254,7 +253,6 @@ const WATCHED_FIELDS = [
   'id',
   'title',
   'route',
-  'pane',
   'localFileName',
   'localFilePath',
   'localFileHbBookId',
@@ -312,11 +310,9 @@ function assertWatched(saved: Tab): void {
 export const useTabStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([DEFAULT_TAB])
   const activeTabId = ref('1')
-  // Active tab for the secondary (right) pane in split view. Empty string means no pane 2 tab exists yet.
-  const pane2ActiveTabId = ref('')
   let nextId = 1
 
-  // Access order (MRU) — see the mruTabsForPane section below. Declared up here
+  // Access order (MRU) — see the mruTabs section below. Declared up here
   // because init() restores it alongside the tab list.
   const accessOrder = ref(new Map<string, number>())
   let accessTick = 0
@@ -360,7 +356,12 @@ export const useTabStore = defineStore('tabs', () => {
           ? saved.tabs
           : saved.tabs.filter((t) => t.id === saved.activeTabId).slice(0, 1)
 
-      tabs.value = restored.length > 0 ? restored : saved.tabs.slice(0, 1)
+      // `pane` was the in-app split view's field. Split view is gone (windows side by side
+      // replaced it), so those tabs simply come back as ordinary tabs.
+      tabs.value = (restored.length > 0 ? restored : saved.tabs.slice(0, 1)).map((t) => {
+        const { pane: _oldPane, ...tab } = t as Tab & { pane?: unknown }
+        return tab
+      })
       // Normally the saved active tab; only when it was dropped above (or was already
       // missing from the list) does the survivor take over.
       activeTabId.value = tabs.value.some((t) => t.id === saved.activeTabId)
@@ -449,9 +450,7 @@ export const useTabStore = defineStore('tabs', () => {
       }),
       activeTabId: persistable.some((t) => t.id === activeTabId.value)
         ? activeTabId.value
-        // Fallback must prefer a pane-1 tab: restoring a pane-2 id as pane 1's
-        // active tab makes both panes render the same tab on next startup.
-        : (persistable.find((t) => t.pane !== 2)?.id ?? persistable[0]?.id ?? activeTabId.value),
+        : (persistable[0]?.id ?? activeTabId.value),
       nextId,
       // Only for tabs actually being saved — a stamp for a stripped singleton would
       // be dead weight that init() discards anyway.
@@ -799,7 +798,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   function markAccessed(id: string) {
     accessOrder.value.set(id, ++accessTick)
-    // Reassign so the ref's own dependents (mruTabsForPane) re-evaluate — Map
+    // Reassign so the ref's own dependents (mruTabs) re-evaluate — Map
     // mutation alone isn't tracked by Vue's reactivity for a plain ref.
     accessOrder.value = new Map(accessOrder.value)
     // Deliberately does NOT touch recents: switching to an already-open tab is not
@@ -807,14 +806,10 @@ export const useTabStore = defineStore('tabs', () => {
     // every time the user changed tabs.
   }
 
-  /**
-   * A pane's visible tabs ordered most-recently-active first. Unvisited tabs keep
-   * their relative strip order behind the visited ones.
-   */
-  function mruTabsForPane(pane: 1 | 2): Tab[] {
-    const paneTabs = pane === 1 ? pane1Tabs.value : pane2Tabs.value
+  /** The tabs ordered most-recently-active first. Unvisited tabs keep their strip order behind the visited ones. */
+  function mruTabs(): Tab[] {
     const order = accessOrder.value
-    return paneTabs
+    return tabs.value
       .map((t, i) => ({ t, i }))
       .sort((a, b) => {
         const sa = order.get(a.t.id)
@@ -833,175 +828,6 @@ export const useTabStore = defineStore('tabs', () => {
   // list is even read. The restored active tab already carries the highest saved
   // stamp, so it starts on top without a re-stamp.
   watch(activeTabId, (id) => id && markAccessed(id))
-  watch(pane2ActiveTabId, (id) => id && markAccessed(id))
-
-  // Orphan adoption: while split view is CLOSED, pane 1 displays and navigates the
-  // pane-2 tabs too (they keep their pane: 2 identity so they return to pane 2 the
-  // moment split view reopens). useBookViewStore() is called lazily inside the
-  // computed bodies — never at store setup — to keep the module cycle harmless.
-
-  /**
-   * Pane 1's visible tabs: its own tabs, plus pane-2 "orphans" adopted while
-   * split view is off.
-   */
-  const pane1Tabs = computed(() => {
-    if (!useBookViewStore().splitViewEnabled) return tabs.value
-    return tabs.value.filter((t) => !t.pane || t.pane === 1)
-  })
-
-  /** Pane 2's visible tabs — empty while split view is off (pane 1 adopts them). */
-  const pane2Tabs = computed(() => {
-    if (!useBookViewStore().splitViewEnabled) return []
-    return tabs.value.filter((t) => t.pane === 2)
-  })
-
-  /** Active tab for the given pane number. */
-  function activeTabForPane(pane: 1 | 2): Tab {
-    if (pane === 1) return activeTab.value
-    const id = pane2ActiveTabId.value
-    // Never fall back to pane 1's active tab — return the first pane-2 tab, or a
-    // stable placeholder. The placeholder prevents mirroring when pane 2 is just
-    // being initialized (ensurePane2HasTab hasn't run yet on this render cycle).
-    return (
-      tabs.value.find((t) => t.id === id && t.pane === 2) ??
-      pane2Tabs.value[0] ??
-      { id: '', title: t('stores.tabTitle.home'), route: '/', pane: 2 as const }
-    )
-  }
-
-  /**
-   * Open a new tab in pane 2, making it the active pane-2 tab.
-   *
-   * Mirrors openTab's single-tab rule: where there is no native strip (the dev browser
-   * still offers split view) pane 2 navigates its one tab in place rather than stacking
-   * up tabs it paints no list for. Pane 2's FIRST tab is still created here — that is
-   * ensurePane2HasTab opening the pane, not the reader opening a second document.
-   */
-  function openPane2Tab(partial: Omit<Tab, 'id' | 'pane'>): Tab {
-    if ((!hasNativeChromeTabs || isWindowFullscreen()) && pane2Tabs.value.length > 0) {
-      updatePane2ActiveTab({ ...partial, navNonce: nextNavNonce() })
-      return activeTabForPane(2)
-    }
-
-    const tab: Tab = { id: String(++nextId), pane: 2, ...partial }
-    tabs.value.push(tab)
-    pane2ActiveTabId.value = tab.id
-    if (TRACKABLE_ROUTES.has(tab.route)) {
-      trackTabNavigation(tab)
-    }
-    return tab
-  }
-
-  /** Switch the active tab within a specific pane. */
-  function switchPaneTab(id: string, pane: 1 | 2) {
-    if (pane === 1) {
-      switchTab(id)
-    } else {
-      if (tabs.value.some((t) => t.id === id && t.pane === 2)) {
-        pane2ActiveTabId.value = id
-      }
-    }
-  }
-
-  /** Close a pane-2 tab. Falls back to another pane-2 tab or opens a home tab in pane 2. */
-  function closePane2Tab(id: string) {
-    const idx = tabs.value.findIndex((t) => t.id === id && t.pane === 2)
-    if (idx === -1) return
-    const tab = tabs.value[idx]!
-    if (guardPdfClose([tab], () => closePane2Tab(id))) return
-    releasePdfCloseState(id)
-    if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-    disposeClosedTab(id)
-    tabs.value.splice(idx, 1)
-    // Update pane2ActiveTabId if the closed tab was active
-    if (pane2ActiveTabId.value === id) {
-      const remaining = tabs.value.filter((t) => t.pane === 2)
-      if (remaining.length > 0) {
-        pane2ActiveTabId.value = remaining[0]!.id
-      } else {
-        // Pane 2 must never be left with no tab — mirror the pane-1 closeTab guarantee.
-        // Without this, pane2ActiveTabId stays '' and any subsequent navigateToDestination
-        // call hits the `if (!id) return` guard in updatePane2ActiveTab and silently does nothing.
-        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
-        tabs.value.push(home)
-        pane2ActiveTabId.value = home.id
-      }
-    }
-  }
-
-  /**
-   * Called when split view re-opens: pane 2 takes its orphaned tabs back, so pane 1
-   * must stop displaying one if the user was reading it. The orphan becomes pane 2's
-   * active tab (it stays front-of-mind, just in its own shell again).
-   */
-  function reclaimPane1ActiveForSplit() {
-    const active = tabs.value.find((t) => t.id === activeTabId.value)
-    if (!active || active.pane !== 2) return
-    pane2ActiveTabId.value = active.id
-    const own = tabs.value.filter((t) => !t.pane || t.pane === 1)
-    if (own.length > 0) {
-      activeTabId.value = own[0]!.id
-    } else {
-      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-      tabs.value.push(home)
-      activeTabId.value = home.id
-    }
-  }
-
-  /**
-   * Move a tab between split panes — driven by a cross-region drag in the native chrome
-   * tab strip. The tab becomes the active tab of its destination pane; the source pane's
-   * active pointer is reassigned if it pointed at the moved tab, and pane 2 is never left
-   * empty (a home tab is spawned, mirroring the closePane2Tab guarantee).
-   */
-  function moveTabToPane(id: string, targetPane: 1 | 2) {
-    const tab = tabs.value.find((t) => t.id === id)
-    if (!tab) return
-    const fromPane: 1 | 2 = tab.pane === 2 ? 2 : 1
-    if (fromPane === targetPane) return
-
-    tab.pane = targetPane
-
-    if (targetPane === 2) {
-      // Left pane 1 — hand it another active tab if this was the one on screen.
-      if (activeTabId.value === id) {
-        const own = tabs.value.filter((t) => !t.pane || t.pane === 1)
-        if (own.length > 0) {
-          activeTabId.value = own[0]!.id
-        } else {
-          const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-          tabs.value.push(home)
-          activeTabId.value = home.id
-        }
-      }
-      pane2ActiveTabId.value = id
-    } else {
-      // Moved into pane 1 — becomes its active tab.
-      activeTabId.value = id
-      // Pane 2 must never be left empty while split view is open.
-      const remaining = tabs.value.filter((t) => t.pane === 2)
-      if (remaining.length === 0) {
-        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
-        tabs.value.push(home)
-        pane2ActiveTabId.value = home.id
-      } else if (pane2ActiveTabId.value === id) {
-        pane2ActiveTabId.value = remaining[0]!.id
-      }
-    }
-  }
-
-  /** Ensure pane 2 has at least one tab; returns the active pane-2 tab id. */
-  function ensurePane2HasTab(): string {
-    const existing = tabs.value.filter((t) => t.pane === 2)
-    if (existing.length > 0) {
-      if (!pane2ActiveTabId.value || !existing.some((t) => t.id === pane2ActiveTabId.value)) {
-        pane2ActiveTabId.value = existing[0]!.id
-      }
-      return pane2ActiveTabId.value
-    }
-    const tab = openPane2Tab({ title: t('stores.tabTitle.home'), route: '/' })
-    return tab.id
-  }
 
   // ── Recently opened tracking ──────────────────────────────────────────────
 
@@ -1139,20 +965,11 @@ export const useTabStore = defineStore('tabs', () => {
     // the two most-recent tabs instead of advancing through the list.
     const tab = tabs.value.find((t) => t.id === id)
     if (!tab) return
-    // While split view is open, pane 1 must never activate a pane-2 tab — both
-    // panes would render the same tab object. Route the switch to pane 2 instead.
-    if (tab.pane === 2 && useBookViewStore().splitViewEnabled) {
-      pane2ActiveTabId.value = id
-      return
-    }
     activeTabId.value = id
   }
 
   function closeAllTabs() {
-    // While split view is off, pane 1 also owns the pane-2 orphans it adopted —
-    // "close all" closes everything the user sees, orphans included.
-    const splitOn = useBookViewStore().splitViewEnabled
-    const closing = splitOn ? tabs.value.filter((t) => !t.pane || t.pane === 1) : [...tabs.value]
+    const closing = [...tabs.value]
     if (guardPdfClose(closing, () => closeAllTabs())) return
     for (const tab of closing) {
       releasePdfCloseState(tab.id)
@@ -1160,8 +977,7 @@ export const useTabStore = defineStore('tabs', () => {
       disposeClosedTab(tab.id)
     }
     const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-    // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
-    tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
+    tabs.value = [home]
     activeTabId.value = home.id
     // Deferred for the same reason as the drop in disposeClosedTab: the closing
     // views have not unmounted yet, and a final savePos() may still need to read
@@ -1223,12 +1039,6 @@ export const useTabStore = defineStore('tabs', () => {
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx === -1) return
     const tab = tabs.value[idx]!
-    // A pane-2 tab while split view is open must close through the pane-2 path,
-    // which keeps pane2ActiveTabId valid and pane 2 never empty.
-    if (tab.pane === 2 && useBookViewStore().splitViewEnabled) {
-      closePane2Tab(id)
-      return
-    }
     if (guardPdfClose([tab], () => closeTab(id))) return
     releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
@@ -1236,10 +1046,10 @@ export const useTabStore = defineStore('tabs', () => {
     // The next active tab must be the closed tab's neighbor among the tabs pane 1
     // can display — picking by index from the mixed array could land on a pane-2
     // tab, making both panes render the same tab.
-    const visIdx = pane1Tabs.value.findIndex((t) => t.id === id)
+    const visIdx = tabs.value.findIndex((t) => t.id === id)
     tabs.value.splice(idx, 1)
     if (activeTabId.value === id) {
-      const visible = pane1Tabs.value
+      const visible = tabs.value
       if (visible.length > 0) {
         activeTabId.value = visible[Math.min(Math.max(visIdx, 0), visible.length - 1)]!.id
       } else {
@@ -1359,12 +1169,50 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab) Object.assign(tab, patch)
   }
 
-  /** Navigate the active pane-2 tab in place (equivalent of updateActiveTab for pane 2). */
-  function updatePane2ActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
-    const id = pane2ActiveTabId.value
-    if (!id) return
-    const tab = tabs.value.find((t) => t.id === id && t.pane === 2)
-    if (tab) applyTabPatch(tab, patch)
+  // ── Moving a tab to another desktop window (webview-host/tabMove.ts) ─────────
+  // A moved tab arrives exactly like a tab restored after a restart: the entry it
+  // carries is what persistTabs would write for it, and nothing transient travels.
+
+  /** The tab's entry as persistTabs writes it, or null when there is no such tab. */
+  function persistedEntryOf(id: string): Tab | null {
+    const tab = tabs.value.find((t) => t.id === id)
+    return tab ? withoutTransientFields(toRaw(tab)) : null
+  }
+
+  /**
+   * Opens a tab that came from another window: a new id here, pane 1 (a split-view
+   * tab lands in pane 1), placed at `pane1Index` among pane 1's tabs, and active.
+   * `seedState` writes its per-tab state under the new id before the tab is listed, so
+   * the view finds its place on mount and the history seed below reads it. Back/Forward does not
+   * travel; the stack starts where the tab is, as after a restart.
+   */
+  function adoptMovedTab(entry: Tab, pane1Index: number, seedState: (newTabId: string) => void): Tab {
+    // Settings holds app-wide state, so one per pane: a moved one becomes the one here.
+    if (SINGLE_TAB_ROUTES.includes(entry.route)) {
+      const existing = tabs.value.find((t) => t.route === entry.route)
+      if (existing) {
+        switchTab(existing.id)
+        markAccessed(existing.id)
+        return existing
+      }
+    }
+    // A moved tab arrives on its own, never as part of a pair (and drops the old model's `pane`).
+    const { pane: _oldPane, ...moved } = withoutTransientFields(entry) as Tab & { pane?: unknown }
+    const tab: Tab = { ...moved, id: String(++nextId) }
+    seedState(tab.id)
+    const visible = tabs.value
+    const before = pane1Index >= 0 && pane1Index < visible.length ? visible[pane1Index] : undefined
+    const at = before ? tabs.value.indexOf(before) : tabs.value.length
+    tabs.value.splice(at < 0 ? tabs.value.length : at, 0, tab)
+    activeTabId.value = tab.id
+    markAccessed(tab.id)
+    if (isHistoryWorthy(tab)) pushLocation(tab.id, locationFromTab(tab, nextRecentStamp(), capturePosition(tab)))
+    return tabs.value.find((t) => t.id === tab.id) ?? tab
+  }
+
+  /** True when the tab's PDF has edits that would be lost: such a tab does not move. */
+  function hasUnsavedEdits(id: string): boolean {
+    return useBookViewStore().hasUnsavedPdfChanges(id)
   }
 
   // Home is not unique: every "new tab" gesture gets its own home tab, exactly as a
@@ -1399,7 +1247,7 @@ export const useTabStore = defineStore('tabs', () => {
   // exactly the routes that are app-wide state — do not grow it for tidiness.
   const SINGLE_TAB_ROUTES: TabRoute[] = ['/settings']
 
-  function navigateToDestination(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
+  function navigateToDestination(route: TabRoute, openInNewTab = false) {
     const patch = { route, title: DESTINATION_TITLES[route] ?? route }
 
     // A tab shows one thing at a time, so a destination is inherently unique WITHIN
@@ -1407,26 +1255,23 @@ export const useTabStore = defineStore('tabs', () => {
     // two tabs may each hold their own מילון, exactly as a browser lets you open
     // two dictionary tabs.
     if (SINGLE_TAB_ROUTES.includes(route)) {
-      const paneTabs = pane === 1 ? pane1Tabs.value : pane2Tabs.value
-      const existing = paneTabs.find((t) => t.route === route)
+      const existing = tabs.value.find((t) => t.route === route)
       // Already the active tab: switching would be a no-op, but falling through
       // would open a second copy, so stop here either way.
       if (existing) {
-        switchPaneTab(existing.id, pane)
+        switchTab(existing.id)
         return
       }
     }
 
     // Replacing an empty home tab is never worth a new tab — there is nothing to lose.
-    const onHome = activeTabForPane(pane).route === '/'
+    const onHome = activeTab.value.route === '/'
 
     if (openInNewTab && !onHome && !navigatesDestinationsInPlace) {
-      if (pane === 1) openTab(patch)
-      else openPane2Tab(patch)
+      openTab(patch)
       return
     }
-    if (pane === 1) updateActiveTab(patch)
-    else updatePane2ActiveTab(patch)
+    updateActiveTab(patch)
   }
 
   // ── PDF viewer title bar visibility ───────────────────────────────────────
@@ -1442,18 +1287,7 @@ export const useTabStore = defineStore('tabs', () => {
     tabs,
     activeTabId,
     activeTab,
-    pane1Tabs,
-    pane2Tabs,
-    mruTabsForPane,
-    pane2ActiveTabId,
-    activeTabForPane,
-    openPane2Tab,
-    switchPaneTab,
-    closePane2Tab,
-    ensurePane2HasTab,
-    reclaimPane1ActiveForSplit,
-    moveTabToPane,
-    updatePane2ActiveTab,
+    mruTabs,
     init,
     nextNavNonce,
     openTab,
@@ -1484,5 +1318,8 @@ export const useTabStore = defineStore('tabs', () => {
     isOpenTab,
     clearBookViewState,
     togglePdfViewerTitleBar,
+    persistedEntryOf,
+    adoptMovedTab,
+    hasUnsavedEdits,
   }
 })

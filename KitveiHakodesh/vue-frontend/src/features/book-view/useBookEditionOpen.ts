@@ -25,15 +25,15 @@ export function userItemAsEdition(item: UserEdition): HebrewBooksEdition {
  * call time). A HebrewBooks edition follows the side-panel toggle; a PDF on this computer
  * always opens in a new tab. A PDF whose bookmarks do not match opens at its start.
  */
-export function useBookEditionOpen(paneId: 1 | 2) {
+export function useBookEditionOpen() {
   const paneNavigation = usePaneNavigation()
   const { openEdition } = useHebrewBooks()
   const sideEditionStore = useHebrewBooksSideEditionStore()
   const localFileStore = useLocalFileStore()
-  const { opensSideBySide } = useHebrewBooksSideEditionMode(paneId)
+  const { opensSideBySide } = useHebrewBooksSideEditionMode()
 
   function openHebrewBooksEdition(edition: HebrewBooksEdition) {
-    if (opensSideBySide.value) sideEditionStore.pickEdition(paneId, paneNavigation.activeTab.id, paneNavigation.activeTab.bookId, edition.id)
+    if (opensSideBySide.value) sideEditionStore.pickEdition(paneNavigation.activeTab.id, paneNavigation.activeTab.bookId, edition.id)
     else openEdition(edition, 'newTab', paneNavigation.activeTab.tocPath)
   }
 

@@ -57,7 +57,6 @@ const frameOf = (el: Element | null): SiteFrame | undefined =>
 // ── Focus: the host takes the app's shortcut keys while a site has focus; the frame's pane becomes
 //    the focused one (a click inside the frame never reaches the app document). ──
 function onFrameFocus(frame: SiteFrame) {
-  bookViewStore.setFocusedPane(frame.paneId)
   refreshSiteFrameFocus()
 }
 const onFrameBlur = () => setTimeout(refreshSiteFrameFocus)
@@ -112,8 +111,7 @@ onWebviewEvent((msg) => {
     if (!frame) return
     const site = websiteForUrl(msg.url)
     const tab = { route: '/web-view' as const, title: site ? websiteName(site) : displayHost(msg.url), webUrl: msg.url }
-    if (frame.paneId === 2) tabStore.openPane2Tab(tab)
-    else tabStore.openTab(tab)
+    tabStore.openTab(tab)
   }
 })
 

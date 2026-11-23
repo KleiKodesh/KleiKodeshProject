@@ -24,6 +24,10 @@ vi.mock('./recentLocations', () => ({
   deleteRecentLocations: async (id: string) => { removed.recents.push(id) },
 }))
 
+// Each "window" re-imports the store from cold (vi.resetModules), which alone can take
+// seconds when the whole suite runs at once.
+vi.setConfig({ testTimeout: 30_000 })
+
 const LS = 'kitvei-hakodesh.'
 
 // windowScope reads the host-injected id once, at import - so each window is a fresh import.

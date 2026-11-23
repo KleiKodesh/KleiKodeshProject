@@ -51,10 +51,9 @@ import { addressBarPath, locationPath, fileFromAddress, parseBookAddress, isDisk
 
 const { t } = useI18n()
 
-const props = defineProps<{ paneId: 1 | 2 }>()
 const emit = defineEmits<{ close: [] }>()
 
-const pane = useAppShellPane(props.paneId)
+const pane = useAppShellPane()
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()

@@ -64,8 +64,6 @@
   "clearHistory": "Clear all history ({key})",
   "searchTabTitle": "Search: {query}",
   "searchContent": "Search library text (Enter)",
-  "closeSplitView": "Close split view",
-  "openSplitView": "Open split view",
   "moreItems": "More items",
   "hideSidebar": "Hide sidebar (Ctrl+Shift+M)",
   "showSidebar": "Show sidebar (Ctrl+Shift+M)",

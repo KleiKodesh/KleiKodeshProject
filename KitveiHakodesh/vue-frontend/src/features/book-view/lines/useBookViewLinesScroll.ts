@@ -81,7 +81,6 @@ export interface BookViewLinesScrollStoreRefs {
   tabId: string
   bookId: number
   /** Which split-view pane these lines are in: a background pane never takes focus on open. */
-  paneId: 1 | 2
 }
 
 /** Matches the `.flash-open` animation in BookViewLinesContent.vue. */
@@ -100,7 +99,7 @@ export function useBookViewLinesScroll(
     isUserScroll: boolean,
   ) => void,
 ) {
-  const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId, paneId } = storeRefs
+  const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId } = storeRefs
 
   // ── Scroll capture ──────────────────────────────────────────────────────────
 
@@ -179,13 +178,12 @@ export function useBookViewLinesScroll(
     // window's scroll, until that scroll has ended.
     isAwaitingFirstWindow = false
     const element = scroller()?.scrollerElement
-    // Never from a background pane in split view, nor from an input the reader is
-    // typing in (an open search bar); otherwise the keys drive the reader at once.
-    const isBackgroundPane = bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId
+    // Never from an input the reader is typing in (an open search bar); otherwise the
+    // keys drive the reader at once.
     const active = document.activeElement as HTMLElement | null
     const isTypingElsewhere = !!active && !element?.contains(active) &&
       (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
-    const takeFocus = !!element && !isBackgroundPane && !isTypingElsewhere
+    const takeFocus = !!element && !isTypingElsewhere
     if (takeFocus) element?.focus({ preventScroll: true })
     // Focus says which element the keys reach; it does not say where in the text they
     // start from. Caret browsing (F7) moves the DOCUMENT's caret, and without one in

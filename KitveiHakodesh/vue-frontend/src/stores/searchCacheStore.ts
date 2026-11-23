@@ -30,7 +30,7 @@
  * chain, so writes stay ordered and nothing is awaited per frame.
  */
 import { defineStore } from 'pinia'
-import { idbGet, idbSet, idbDelete, idbDeleteByPrefix } from '@/utils/persistence'
+import { idbGet, idbSet, idbDelete, idbDeleteByPrefix, idbUpdate } from '@/utils/persistence'
 import type { FullTextSearchResult } from '@/features/full-text-search/fullTextSearchTypes'
 
 export interface SearchCacheEntry {
@@ -268,12 +268,17 @@ function serial<T>(work: () => Promise<T>): Promise<T> {
   return run
 }
 
+// One transaction for the read and the write: every desktop window pins into this one
+// record, and a separate get + put let a window's write bring back a pin another window
+// had just released (a tab moved between windows kept its old owner's pin forever).
 function updatePins(change: (pins: Record<string, string>) => void): Promise<void> {
-  return serial(async () => {
-    const pins = (await idbGet<Record<string, string>>(PINS_KEY)) ?? {}
-    change(pins)
-    await idbSet(PINS_KEY, pins)
-  })
+  return serial(() =>
+    idbUpdate<Record<string, string>>(PINS_KEY, (stored) => {
+      const pins = stored ?? {}
+      change(pins)
+      return pins
+    }),
+  )
 }
 
 /** Keys that must not be evicted: every open tab's entry, and the one being written. */
@@ -443,6 +448,12 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     await enforceByteBudget()
   }
 
+  /** The entry the tab `owner` shows, if it pins one (a tab moving to another window takes it along). */
+  async function pinnedKey(owner: string): Promise<string | null> {
+    const pins = await idbGet<Record<string, string>>(PINS_KEY)
+    return pins?.[owner] ?? null
+  }
+
   /** A workspace was deleted: release every pin its tabs held (owners `<prefix>...`). */
   async function unpinAllWithPrefix(prefix: string): Promise<void> {
     await updatePins((pins) => {
@@ -488,5 +499,5 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     return unique
   }
 
-  return { get, init, resume, appendBatch, flush, markComplete, clear, remove, getRecentQueries, pin, unpin, unpinAllWithPrefix }
+  return { get, init, resume, appendBatch, flush, markComplete, clear, remove, getRecentQueries, pin, unpin, unpinAllWithPrefix, pinnedKey }
 })

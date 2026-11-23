@@ -74,7 +74,7 @@ function mountScroll(
       scroll = useBookViewLinesScroll(
         () => scroller,
         props,
-        { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID, paneId: 1 },
+        { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
         () => undefined,
       )
       return () => null

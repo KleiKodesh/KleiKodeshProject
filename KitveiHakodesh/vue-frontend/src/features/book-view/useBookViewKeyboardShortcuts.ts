@@ -43,11 +43,8 @@ export function useBookViewKeyboardShortcuts(
 
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
-  const paneId = inject<1 | 2>('paneId', 1)
 
   useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-    // Only respond when split view is off, or this pane is the focused one.
-    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
     // Only respond when the active tab in this pane is a book view.
     if (paneNavigation.activeTab.route !== '/book-view') return
     const ctrl = event.ctrlKey || event.metaKey

@@ -3,12 +3,7 @@ import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import {
-  IconSplitVertical20Filled,
-  IconSplitVertical20Regular,
-} from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { APP_NAV_UPDATE_KEY, useAppNavUpdateItem } from './appNavUpdateItem'
 import { useI18n } from 'vue-i18n'
@@ -72,23 +67,12 @@ interface OverflowRow {
   disabled?: boolean
 }
 
-const bookViewStore = useBookViewStore()
 const { item: updateItem } = useAppNavUpdateItem()
 
 const rows = computed<OverflowRow[]>(() => props.collapsedKeys.map(overflowRow))
 
-// The same face the rail's buttons wear - the split-view row is the one that changes
-// with state, so its label and icon read the store here just as the rail button's do.
+// The same face the rail's buttons wear.
 function overflowRow(key: string): OverflowRow {
-  if (key === 'split-view') {
-    const enabled = bookViewStore.splitViewEnabled
-    return {
-      key,
-      label: enabled ? t('layout.closeSplitView') : t('layout.openSplitView'),
-      shortcut: 'Ctrl+|',
-      icon: enabled ? IconSplitVertical20Filled : IconSplitVertical20Regular,
-    }
-  }
   if (key === APP_NAV_UPDATE_KEY && updateItem.value) {
     const u = updateItem.value
     return { key, label: u.text, icon: u.icon, color: u.color, title: u.title, disabled: u.disabled }

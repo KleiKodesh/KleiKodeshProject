@@ -28,26 +28,13 @@ function stripFileExtension(fileName: string): string {
 export const useLocalFileStore = defineStore('localFile', () => {
   const tabStore = useTabStore()
 
-  // ── Pane-aware navigation for C# push events ──────────────────────────────
-  // File-open push events must land in the pane that initiated the pick, not
-  // always pane 1. When split view is off there is only pane 1; when it's on we
-  // target the focused pane (the one the user opened the file from).
-  function targetPaneId(): 1 | 2 {
-    const bookViewStore = useBookViewStore()
-    return bookViewStore.splitViewEnabled ? bookViewStore.focusedPaneId : 1
+  // ── Navigation for C# push events ─────────────────────────────────────────
+  /** Open a new tab; returns its id. */
+  function openInTargetPane(fields: Omit<Tab, 'id'>): string {
+    return tabStore.openTab(fields).id
   }
-  /** Open a new tab in the target pane; returns its id. */
-  function openInTargetPane(fields: Omit<Tab, 'id' | 'pane'>): string {
-    return targetPaneId() === 2
-      ? tabStore.openPane2Tab(fields).id
-      : tabStore.openTab(fields).id
-  }
-  /** Navigate the target pane's active tab in place; returns its id. */
+  /** Navigate the active tab in place; returns its id. */
   function updateActiveInTargetPane(fields: Partial<Omit<Tab, 'id'>>): string {
-    if (targetPaneId() === 2) {
-      tabStore.updatePane2ActiveTab(fields)
-      return tabStore.pane2ActiveTabId
-    }
     tabStore.updateActiveTab(fields)
     return tabStore.activeTabId
   }
@@ -60,13 +47,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
    * the current tab is home" rule navigateToDestination uses.
    */
   function targetPaneHasOnlyHomeTab(): boolean {
-    const pane = targetPaneId()
-    const paneTabs = pane === 2 ? tabStore.pane2Tabs : tabStore.pane1Tabs
+    const paneTabs = tabStore.tabs
     if (paneTabs.length !== 1 || paneTabs[0]!.route !== '/') return false
-    // In-place navigation patches the pane's ACTIVE tab — only claim the home tab
+    // In-place navigation patches the ACTIVE tab — only claim the home tab
     // when that is what it will hit, otherwise the file would land on nothing.
-    const activeId = pane === 2 ? tabStore.pane2ActiveTabId : tabStore.activeTabId
-    return paneTabs[0]!.id === activeId
+    return paneTabs[0]!.id === tabStore.activeTabId
   }
 
   /**

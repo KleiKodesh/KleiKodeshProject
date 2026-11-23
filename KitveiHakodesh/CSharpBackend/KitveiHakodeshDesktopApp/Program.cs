@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace KitveiHakodeshDesktopApp
 {
-    internal static class Program
+    internal static partial class Program
     {
         // Stable identifiers — never change these; they are the per-user IPC channel.
         // PipeName says "OpenFile" for historical reasons: it now carries any open
@@ -16,6 +16,19 @@ namespace KitveiHakodeshDesktopApp
         // between an installed instance and a newly launched one mid-upgrade.
         private const string MutexName = "KitveiHakodesh-SingleInstance-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
         private const string PipeName  = "KitveiHakodesh-OpenFile-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
+
+        // The name actually used for one of the channels above. Debug builds only: with
+        // KH_DEBUG_INSTANCE set, a debug copy runs as its own single instance beside the
+        // user's installed app (which owns the plain names), so it can be tested while that
+        // one stays open. BCL only, like the rest of Main.
+        private static string Channel(string name)
+        {
+#if DEBUG
+            string instance = Environment.GetEnvironmentVariable("KH_DEBUG_INSTANCE");
+            if (!string.IsNullOrEmpty(instance)) return name + "-debug-" + instance;
+#endif
+            return name;
+        }
 
         // Sent by a launch with nothing to open: the running app opens a new empty window
         // (VS Code's window.openWithoutArgumentsInNewWindow). Never a file or a link, so a
@@ -53,7 +66,7 @@ namespace KitveiHakodeshDesktopApp
             }
 
             bool createdNew;
-            using (var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew))
+            using (var mutex = new Mutex(initiallyOwned: true, Channel(MutexName), out createdNew))
             {
                 if (createdNew)
                 {
@@ -72,7 +85,8 @@ namespace KitveiHakodeshDesktopApp
                     bool newWindow = request == NewWindowRequest;
                     // A relative path must resolve against OUR working directory, not the
                     // running instance's. Links pass through untouched.
-                    if (!newWindow && !string.IsNullOrEmpty(request) && request.IndexOf("://", StringComparison.Ordinal) < 0)
+                    if (!newWindow && !string.IsNullOrEmpty(request) && request.IndexOf("://", StringComparison.Ordinal) < 0
+                        && !request.StartsWith("--", StringComparison.Ordinal))
                         try { request = Path.GetFullPath(request); } catch { }
                     if (!string.IsNullOrEmpty(request))
                     {
@@ -171,6 +185,10 @@ namespace KitveiHakodeshDesktopApp
             // window stops being a target the moment it starts.
             form.FormClosing += (s, e) => OnWindowClosing(form);
             form.FormClosed += (s, e) => OnWindowClosed(form);
+            // Tabs drag between windows and off into new ones; the pages move them (TabMoves).
+            form.TabsMirror.EnableTabMovesBetweenWindows();
+            form.TabDroppedFromOtherWindow += (s, e) => OnTabDroppedFromOtherWindow(form, e);
+            form.TabTornOff += (s, e) => OnTabTornOff(form, e);
             OpenWindows.Add(form);
             return form;
         }
@@ -178,7 +196,11 @@ namespace KitveiHakodeshDesktopApp
         // A new window beside the one it was opened from: empty for a launch with nothing to
         // open, or holding a forwarded request that found no window to go to. Its id is the
         // lowest number no open window has, so ids stay short however often windows come and go.
-        private static void OpenNewWindow(MainForm openedFrom, string initialRequest = null)
+        // A torn-off tab's window passes `placeAt` (under the cursor) and the packed tab its
+        // page starts with (`movedTab`, still being packed; see TabMoves).
+        private static MainForm OpenNewWindow(MainForm openedFrom, string initialRequest = null,
+            System.Drawing.Rectangle? placeAt = null, System.Threading.Tasks.Task<string> movedTab = null,
+            System.Threading.Tasks.Task<System.Drawing.Image> movedTabPicture = null)
         {
             var used = new System.Collections.Generic.HashSet<string>();
             foreach (MainForm open in OpenWindows) used.Add(open.WindowId);
@@ -188,10 +210,16 @@ namespace KitveiHakodeshDesktopApp
 
             MainForm form = CreateWindow(id, initialRequest);
             form.OpenedFrom = openedFrom;
+            form.PlaceAt = placeAt;
+            // Before Show: the viewer reads it just before it loads the page.
+            if (movedTab != null) form.ArrivingTab = form.Viewer.StartWithMovedTab(movedTab);
+            // The window shows the dragged tab's picture until its own page has drawn it.
+            if (movedTabPicture != null) form.Viewer.ShowMovedTabPictureUntilDrawn(movedTabPicture);
             form.Show();
             form.Activate();
             SetForegroundWindow(form.Handle);
             SaveOpenWindowIds();
+            return form;
         }
 
         private static bool AnotherWindowStays(MainForm form)
@@ -211,6 +239,15 @@ namespace KitveiHakodeshDesktopApp
                 || e.CloseReason == CloseReason.ApplicationExitCall)
                 return false;
             if (!AnotherWindowStays(form)) return false;
+            // Its last tab moved to another window (or its torn-off tab never arrived): gone
+            // for good now - the tab was handed over before this close began.
+            if (WindowsEmptiedByMove.Contains(form))
+            {
+                form.Hide();
+                WindowsClosingForGood.Add(form);
+                SaveOpenWindowIds();
+                return true;
+            }
             // Gone from the screen at once; the decision waits for the grace period.
             form.Hide();
             await System.Threading.Tasks.Task.Delay(CloseAllGraceMs);
@@ -238,8 +275,10 @@ namespace KitveiHakodeshDesktopApp
         private static void OnWindowClosed(MainForm form)
         {
             OpenWindows.Remove(form);
+            ForgetSideBySide(form);
             ClosingWindows.Remove(form);
             WindowsClosingForGood.Remove(form);
+            WindowsEmptiedByMove.Remove(form);
             lock (EarlyRequestsLock)
             {
                 if (_activeWindow == form)
@@ -333,7 +372,7 @@ namespace KitveiHakodeshDesktopApp
                 {
                     try
                     {
-                        using (var server = new NamedPipeServerStream(PipeName, PipeDirection.In, maxNumberOfServerInstances: 1))
+                        using (var server = new NamedPipeServerStream(Channel(PipeName), PipeDirection.In, maxNumberOfServerInstances: 1))
                         {
                             server.WaitForConnection();
                             using (var reader = new StreamReader(server))
@@ -407,6 +446,9 @@ namespace KitveiHakodeshDesktopApp
                 OpenNewWindow(window);
                 return;
             }
+#if DEBUG
+            if (DebugTabMoves.TryRun(request)) return;
+#endif
             // Every window is closing: the request gets a window of its own rather than a
             // tab in one that is about to go.
             if (ClosingWindows.Contains(window))
@@ -448,7 +490,7 @@ namespace KitveiHakodeshDesktopApp
         {
             public OpenRequestReceiver()
             {
-                CreateHandle(new CreateParams { Caption = ReceiverCaption, Parent = HWND_MESSAGE });
+                CreateHandle(new CreateParams { Caption = Channel(ReceiverCaption), Parent = HWND_MESSAGE });
             }
 
             protected override void WndProc(ref Message m)
@@ -475,7 +517,7 @@ namespace KitveiHakodeshDesktopApp
             for (int i = 0; i < 20 && target == IntPtr.Zero; i++)
             {
                 if (i > 0) Thread.Sleep(100);
-                target = FindWindowEx(HWND_MESSAGE, IntPtr.Zero, null, ReceiverCaption);
+                target = FindWindowEx(HWND_MESSAGE, IntPtr.Zero, null, Channel(ReceiverCaption));
             }
             if (target == IntPtr.Zero) return false;
 
@@ -515,7 +557,7 @@ namespace KitveiHakodeshDesktopApp
         {
             try
             {
-                using (var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out))
+                using (var client = new NamedPipeClientStream(".", Channel(PipeName), PipeDirection.Out))
                 {
                     // Generous: a multi-file Explorer open queues one launch per file on
                     // this single-instance pipe, behind a first instance still starting.

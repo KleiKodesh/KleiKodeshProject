@@ -10,28 +10,15 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { PANE_NAVIGATION_KEY } from '@/composables/usePaneNavigation'
 import { watchFullTextSearchIndexStatus } from '@/features/full-text-search/useFullTextSearchIndexingStatus'
 
-const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
-// Ensure pane 2 always has at least one tab before any child component renders.
-// This must run synchronously at setup time so AppPageView reads a valid pane-2
-// tab on its first render, not the placeholder fallback.
-if (props.paneId === 2) {
-  useTabStore().ensurePane2HasTab()
-}
-
-const pane = useAppShellPane(props.paneId)
+const pane = useAppShellPane()
 // App-wide: a failed full-text-search index build must toast even with its page closed.
 // Idempotent, so the second pane's shell does not open a second stream.
 watchFullTextSearchIndexStatus()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 
-function onPaneFocus() {
-  bookViewStore.setFocusedPane(props.paneId as 1 | 2)
-}
 
-/** Every component inside this shell injects 'paneId' to know which pane it lives in. */
-provide('paneId', props.paneId)
 
 /** Every component inside this shell can inject PANE_NAVIGATION_KEY to get
  *  pane-scoped tab operations without importing useTabStore directly. */
@@ -49,17 +36,17 @@ provide(PANE_NAVIGATION_KEY, {
 </script>
 
 <template>
-  <div class="app-shell" @pointerdown.capture="onPaneFocus">
+  <div class="app-shell">
     <!-- The nav menu as an always-on panel docked to this pane's edge: it owns the edge
          for the pane's full height, and everything belonging to the document - title bar
          included, since that is where the tab's title, breadcrumb and per-tab controls
          live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
          rail splits with it. -->
-    <AppNavSidebar v-if="settingsStore.getNavSidebarVisible(props.paneId)" />
+    <AppNavSidebar v-if="settingsStore.getNavSidebarVisible()" />
     <div class="app-shell-main">
-      <AppTitleBar :pane-id="props.paneId" />
+      <AppTitleBar />
       <main class="app-shell-content">
-        <AppPageView :pane-id="props.paneId" />
+        <AppPageView />
       </main>
     </div>
   </div>

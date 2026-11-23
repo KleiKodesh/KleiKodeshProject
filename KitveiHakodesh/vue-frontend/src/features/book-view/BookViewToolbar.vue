@@ -217,11 +217,10 @@ const bottomCommentaryTitle = computed(() =>
 )
 
 // While a side column shows a scanned edition instead of commentary, its button says so.
-const toolbarPaneId = inject<1 | 2>('paneId', 1)
 const sideEditionStore = useHebrewBooksSideEditionStore()
-const { slot: editionSlot } = useHebrewBooksSideEditionMode(toolbarPaneId)
+const { slot: editionSlot } = useHebrewBooksSideEditionMode()
 function showsEdition(slot: 'side' | 'side-left'): boolean {
-  return sideEditionStore.isEditionShown(toolbarPaneId) && editionSlot.value === slot
+  return sideEditionStore.isEditionShown() && editionSlot.value === slot
 }
 
 const sideCommentaryTitle = computed(() =>
