@@ -39,7 +39,15 @@
     "minchaGedola30": "Mincha gedola (30 min or half hour, the later)",
     "tzeitGeonimVisible": "Nightfall Geonim 3.7 deg (visible horizon)",
     "tzeit7083": "Nightfall 7.08 deg (3 medium stars)",
-    "tzeitVisible": "Nightfall 8.5 deg (visible horizon)"
+    "tzeitVisible": "Nightfall 8.5 deg (visible horizon)",
+    "candles40": "Candle lighting (40 min)",
+    "candles30": "Candle lighting (30 min)",
+    "candles22": "Candle lighting (22 min)",
+    "candles20": "Candle lighting (20 min)",
+    "candles18": "Candle lighting (18 min)",
+    "tzeitRt72": "Nightfall Rabbeinu Tam (72 min)",
+    "tzeitRt72Zmanis": "Nightfall Rabbeinu Tam (72 seasonal min)",
+    "tzeitRt16": "Nightfall Rabbeinu Tam 16.1 deg"
   },
   "learning": {
     "dafYomi": "Daf Yomi",
