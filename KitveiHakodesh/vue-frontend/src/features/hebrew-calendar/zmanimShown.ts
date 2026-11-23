@@ -12,7 +12,7 @@ const KEY = 'zmanim.shown'
 export const DEFAULT_SHOWN: readonly string[] = [
   'chatzotNight', 'alot', 'alot90', 'misheyakir10p2', 'sunrise', 'sunriseElevated',
   'sofShmaMga19', 'sofShmaGra', 'sofTfillaMga19', 'sofTfillaGra', 'chatzot', 'minchaGedola30',
-  'minchaKetana', 'plag', 'sunsetElevated', 'sunset', 'tzeit18', 'tzeitRt72',
+  'minchaKetana', 'plag', 'sunsetElevated', 'sunset', 'tzeit18Sun', 'tzeitRt72',
 ]
 
 /** Candle-lighting lines belong to Fridays and the eve of Yom Tov only. */
