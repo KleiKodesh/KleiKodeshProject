@@ -5,7 +5,8 @@ import { flags } from '@hebcal/core/dist/esm/event'
 import { isShownEvent } from './isShownModernHoliday'
 import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
-import { ZMAN_NAMES } from 'kleikodesh-zmanim'
+import { ZMAN_NAMES, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
+import { chosenCommunity, primaryGroupsFor } from './zmanimCommunity'
 import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
 import { specialDayRows } from './specialDayZmanim'
 import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
@@ -25,6 +26,11 @@ const HEBCAL_LOCATION: Record<number, string> = {
   [JERUSALEM_ID]: 'Jerusalem', 45: 'Tel Aviv', 52: 'Haifa', 60: 'Beer Sheva', 97: 'Eilat', 100: 'Tiberias',
   105: 'New York', 109: 'London', 154: 'Montreal',
 }
+
+/** End of Shabbat / Yom Tov when the preset names no line: the default list's tzeit line. */
+const DEFAULT_TZEIT_SHABBAT: ZmanName = 'tzeit18Sun'
+
+type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 
 const NO_ZMANIM = Object.fromEntries(ZMAN_NAMES.map((name) => [name, null])) as CalendarZmanim
 
@@ -61,7 +67,8 @@ function rangeLabel(aMonth: string, aYear: string, bMonth: string, bYear: string
 
 // ── Build week ────────────────────────────────────────────────────────────────
 
-function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek {
+// hebcal only says WHICH days have candle lighting / havdalah; the times come from our library.
+function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: PrimaryGroups | null): CalendarWeek {
   const saturday = new Date(sunday)
   saturday.setDate(sunday.getDate() + 6)
 
@@ -70,8 +77,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek
     start: new HDate(sunday),
     end: new HDate(saturday),
     sedrot: true,
-    candlelighting: true,
-    havdalahMins: 50,
+    candlelighting: true, // only for the day flags; times are ours
     location: loc,
     il: loc.getIsrael(),
     omer: true,
@@ -95,6 +101,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek
     date.setHours(0, 0, 0, 0)
     const hd = new HDate(date)
     const dayEvents = byDate.get(date.toISOString().slice(0, 10)) ?? []
+    const zmanim = city ? dayPrintedZmanim(city, date) : NO_ZMANIM
 
     const holidays: string[] = []
     let parasha: string | null = null
@@ -114,9 +121,9 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek
       if (f & flags.PARSHA_HASHAVUA) {
         parasha = strip(e.render('he')).replace(/^פרשת\s+/, '')
       } else if (f & flags.LIGHT_CANDLES) {
-        candleLighting = (e as any).eventTimeStr ?? null
+        candleLighting = primary?.candles ? zmanim[primary.candles] ?? null : null
       } else if (f & flags.YOM_TOV_ENDS || f & flags.LIGHT_CANDLES_TZEIS) {
-        havdalah = (e as any).eventTimeStr ?? null
+        havdalah = primary ? zmanim[primary.tzeitShabbat ?? DEFAULT_TZEIT_SHABBAT] ?? null : null
       } else if (f & flags.OMER_COUNT) {
         omer = strip(e.render('he'))
       } else if (f & flags.CHANUKAH_CANDLES) {
@@ -162,7 +169,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek
       fastStart,
       fastEnd,
       learning: getDailyLearning(hd),
-      zmanim: city ? dayPrintedZmanim(city, date) : NO_ZMANIM,
+      zmanim,
       specialZmanim: city ? specialDayRows(city, date) : [],
     })
   }
@@ -198,7 +205,17 @@ export function useWeeklyView(city: { value: Place | null }) {
     return s
   })
 
-  const week = computed<CalendarWeek>(() => buildWeek(currentSunday.value, city.value, today0))
+  // The preset's lines for this place (null until loaded: no candle/havdalah times yet).
+  const primary = ref<PrimaryGroups | null>(null)
+  let generation = 0
+  watch([chosenCommunity, () => city.value?.id ?? JERUSALEM_ID], async ([chosen, placeId]) => {
+    const mine = ++generation
+    let groups: PrimaryGroups = {}
+    try { groups = await primaryGroupsFor(chosen, placeId) } catch { /* no preset: defaults below */ }
+    if (mine === generation) primary.value = groups
+  }, { immediate: true })
+
+  const week = computed<CalendarWeek>(() => buildWeek(currentSunday.value, city.value, today0, primary.value))
 
   watch(
     () => city.value,
