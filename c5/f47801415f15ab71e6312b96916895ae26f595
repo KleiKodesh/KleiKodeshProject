@@ -1,0 +1,10 @@
+User-facing: new - Open file: search inside a document with Ctrl+F, starting from where you are reading
+User-facing-he: חיפוש בתוך מסמך עם Ctrl+F, החל מהמקום שבו אתם קוראים
+User-facing: improved - Open file: the table of contents and the notes pane look and work like the ones in the book view
+User-facing-he: תוכן העניינים וחלונית ההערות נראים ועובדים כמו בתצוגת ספר
+User-facing: new - Book view: sending a book to Word can be cancelled from the same button
+User-facing-he: אפשר לבטל שליחת ספר לוורד מאותו כפתור
+User-facing: fixed - Book view: sending a very large book to Word no longer crashes Word - it opens the book in Word as a file
+User-facing-he: שליחת ספר גדול מאוד לוורד כבר לא מקריסה את וורד - הספר נפתח בוורד כקובץ
+User-facing: improved - Open file: cancelling a conversion to PDF also works in the installed app
+User-facing-he: ביטול המרה ל-PDF עובד גם בתוכנה המותקנת
