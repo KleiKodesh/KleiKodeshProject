@@ -46,7 +46,7 @@ jobs:
             for b in $(gh api "repos/$f/branches" --paginate --jq '.[].name' 2>/dev/null || true); do
               names=$( { gh api "repos/$f/contents/$DIR?ref=$b" --jq '.[].name' 2>/dev/null || true
                          gh api "repos/$f/contents/$DIR/kosherZmanim/calculators?ref=$b" --jq '.[].name' 2>/dev/null || true; } )
-              if grep -qiE '^(a luach|cityClimates|horizonRefraction|atmosphere|spaCalculator|spaTables|solarPosition|climateRefraction)' <<<"$names"; then
+              if grep -qiE '^(x|cityClimates|horizonRefraction|atmosphere|spaCalculator|spaTables|solarPosition|climateRefraction)' <<<"$names"; then
                 echo "STILL HAS FILES: $f ($b)"; bad+=("${f%%/*}"); break
               fi
             done
