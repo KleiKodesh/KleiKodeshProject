@@ -146,15 +146,6 @@ export const curatedGroups = [
     title: 'Code we ported',
     entries: [
       {
-        name: 'an earlier zmanim library zmanim',
-        use: 'Zmanim calculations (ported to TypeScript)',
-        copyright: 'Copyright (C) Eliyahu  (an earlier zmanim library); an earlier zmanim library by kdroidFilter',
-        license: 'LGPL-2.1',
-        url: '',
-        files: [L + 'LGPL-2.1.txt'],
-        source: 'The ported source (NOAA calculator only) is in the kleikodesh-zmanim.js library (https://github.com/KleiKodesh/kleikodesh-zmanim.js).',
-      },
-      {
         name: 'otzaria_search_engine',
         use: 'Hebrew word splitting and divine-name rules of the search',
         copyright: 'Copyright (c) 2026 otzaria',

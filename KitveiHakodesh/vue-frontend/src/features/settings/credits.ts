@@ -45,7 +45,6 @@ export const CREDIT_GROUPS: CreditGroup[] = [
   {
     id: 'ported',
     items: [
-      { id: 'an earlier zmanim library', name: 'an earlier zmanim library', license: 'LGPL-2.1', url: '' },
       { id: 'otzariaSearch', name: 'otzaria_search_engine', license: 'MIT', url: 'https://github.com/Otzaria/otzaria_search_engine' },
       { id: 'midotjs', name: 'Midotjs', license: 'ISC', url: 'https://github.com/AmarShaked/Midotjs' },
       { id: 'uchardet', name: 'uchardet, ICU charset detector', license: 'MPL-1.1, Unicode-3.0', url: 'https://github.com/KleiKodesh/FastDocView' },
