@@ -57,6 +57,9 @@ pub struct Request {
     pub clean: bool,
     /// Word add-in options chosen in the installer; None = leave as they are.
     pub addin_settings: Option<addin_settings::AddinSettings>,
+    /// Kitvei Hakodesh was installed and is now unticked: also delete its files and indexes
+    /// (the user's choice). Otherwise they stay on disk, unused.
+    pub delete_kitvei_files: bool,
 }
 
 pub trait Reporter: Send {
@@ -118,6 +121,10 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     let before = state::installed(layout);
     let core = wanted.iter().any(|p| p.needs_core_files());
     let core_before = before.iter().any(|p| p.needs_core_files());
+    // Without Kitvei Hakodesh the add-in is installed alone: no service, no library files,
+    // so nothing ever builds indexes. The add-in updates itself.
+    let kitvei = wanted.contains(&Product::KitveiApp);
+    let kitvei_before = before.contains(&Product::KitveiApp);
     let repair = request.action == Action::Repair;
 
     reporter.step(Text::new("בודק רכיבים נדרשים", "Checking requirements"));
@@ -131,7 +138,7 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     }
 
     reporter.step(Text::new("מעתיק קבצים", "Copying files"));
-    let selection = Selection { core, tutor: wanted.contains(&Product::TypingTutor) };
+    let selection = Selection { core, kitvei, tutor: wanted.contains(&Product::TypingTutor) };
     copy_files(layout, payload, selection, reporter)?;
     reporter.progress(0.75);
 
@@ -150,10 +157,16 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     }
     reporter.progress(0.85);
 
-    if core {
+    if core && kitvei {
         reporter.step(Text::new("מתקין את שירות כתבי הקודש", "Installing the Kitvei Hakodesh service"));
         if !service::ensure_registered(layout, repair) {
             crate::log::line("service registration declined or failed; the apps will start it themselves");
+        }
+    } else if core && kitvei_before {
+        reporter.step(Text::new("מסיר את כתבי הקודש", "Removing Kitvei Hakodesh"));
+        service::remove(layout);
+        if request.delete_kitvei_files {
+            payload::delete_kitvei_files(&layout.install_dir);
         }
     }
 
@@ -260,7 +273,8 @@ fn close_apps(layout: &Layout, candidates: &[RunningApp], reporter: &dyn Reporte
 }
 
 fn copy_files(layout: &Layout, payload: Option<&Payload>, selection: Selection, reporter: &dyn Reporter) -> Result<(), Failure> {
-    let missing_core = selection.core && !layout.file(crate::layout::VSTO_MANIFEST).exists();
+    let missing_core = selection.core
+        && (!layout.file(crate::layout::VSTO_MANIFEST).exists() || (selection.kitvei && !layout.service_exe().exists()));
     let missing_tutor = selection.tutor && !tutor::is_installed(layout);
     let Some(payload) = payload else {
         // The setup copy kept in the install folder carries no files: fine for changing

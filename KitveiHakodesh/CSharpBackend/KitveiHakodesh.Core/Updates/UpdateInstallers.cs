@@ -66,6 +66,32 @@ namespace KitveiHakodesh.Core.Updates
             return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>"KleiKodeshSetup-v8.7.3.exe" -> "v8.7.3" (an older "-x64" / "-x86" suffix is cut too).</summary>
+        public static string TagOf(string installerFile)
+        {
+            string tag = System.IO.Path.GetFileNameWithoutExtension(installerFile).Substring("KleiKodeshSetup-".Length);
+            int variantDash = tag.IndexOf('-');
+            return variantDash > 0 ? tag.Substring(0, variantDash) : tag;
+        }
+
+        /// <summary>
+        /// The one lock both updaters (the service's and the Word add-in's) hold for a whole
+        /// check-and-download pass: a file opened exclusively in the updates folder, so it works
+        /// across processes and users (the service runs as SYSTEM). Null when the other one
+        /// holds it - skip this pass; its download lands in the same folder. Dispose to release.
+        /// </summary>
+        public static FileStream? TryTakeDownloadLock(string downloadFolder)
+        {
+            try
+            {
+                Directory.CreateDirectory(downloadFolder);
+                return new FileStream(System.IO.Path.Combine(downloadFolder, "download.lock"),
+                    FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
         private static int ComponentCount(Version version) =>
             version.Revision >= 0 ? 4 : version.Build >= 0 ? 3 : 2;
     }

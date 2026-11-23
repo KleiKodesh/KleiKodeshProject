@@ -273,3 +273,22 @@ export component LinkText inherits Text {
         clicked => { root.clicked(); }
     }
 }
+
+// Shown while an installed Kitvei Hakodesh is unticked: what removing it means, and whether
+// to delete its files and search indexes too.
+export component KitveiRemovalNotice inherits VerticalLayout {
+    spacing: 6px;
+    Text {
+        text: Lang.t("כתבי הקודש יוסר: הספרייה, החיפוש בה והכפתור שלה בוורד לא יהיו זמינים. אפשר להחזיר אותו רק דרך תוכנת ההתקנה.",
+                     "Kitvei Hakodesh will be removed: the library, its search and its button in Word will be gone. Only this installer can bring it back.");
+        color: Theme.danger;
+        font-size: 12.5px;
+        horizontal-alignment: Lang.start;
+        wrap: word-wrap;
+    }
+    CheckRow {
+        text: Lang.t("מחק גם את הקבצים ואת אינדקסי החיפוש שלו (מפנה עד כ־1 GB)", "Also delete its files and search indexes (frees up to about 1 GB)");
+        checked: Installer.delete-kitvei-files;
+        toggled => { Installer.delete-kitvei-files = !Installer.delete-kitvei-files; }
+    }
+}

@@ -123,7 +123,8 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
 
     let word_installed = registry::hklm_exists(r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Winword.exe");
     let fresh = ctx.installed.is_empty();
-    // The landing page (install or update) offers every program ticked; Modify shows what is installed.
+    // A fresh install offers every program ticked. An update and Modify tick what is installed:
+    // a product the user left out (Kitvei Hakodesh, say) never comes back by itself.
     let landing = !(!fresh && (ctx.start_in_manage || ctx.payload.is_none()));
     let products: Products = Rc::new(VecModel::from(
         ALL.iter()
@@ -131,7 +132,7 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
                 let available = p != Product::WordAddin || word_installed;
                 crate::ProductRow {
                     id: p.id().into(),
-                    selected: available && (landing || ctx.installed.contains(&p)),
+                    selected: available && (fresh || ctx.installed.contains(&p)),
                     installed: ctx.installed.contains(&p),
                     available,
                     ..Default::default()
@@ -304,6 +305,7 @@ fn start_engine(
         options: Options { desktop_shortcut: st.get_desktop_shortcut(), open_with: st.get_file_associations(), english },
         clean: action == Action::Apply && st.get_clean_install(),
         addin_settings: Some(addin_settings),
+        delete_kitvei_files: st.get_delete_kitvei_files(),
     };
     let from_manage = st.get_page() == Page::Manage;
     st.set_confirm_uninstall(false);
@@ -433,6 +435,7 @@ fn refresh(ui: &AppWindow, products: &Products) {
     st.set_summary(summary.into());
     st.set_any_selected(!chosen.is_empty());
     st.set_kitvei_selected(chosen.iter().any(|p| p.id == Product::KitveiApp.id()));
+    st.set_kitvei_installed(products.iter().any(|p| p.id == Product::KitveiApp.id() && p.installed));
     st.set_apps_selected(chosen.iter().any(|p| p.id != Product::WordAddin.id()));
     st.set_addin_selected(chosen.iter().any(|p| p.id == Product::WordAddin.id()));
     st.set_has_changes(products.iter().any(|p| p.selected != p.installed));

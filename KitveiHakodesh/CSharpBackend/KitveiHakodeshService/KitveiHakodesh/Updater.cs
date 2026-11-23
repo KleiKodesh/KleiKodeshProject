@@ -128,9 +128,19 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
     public async Task<string?> FindOrDownloadNewerInstallerAsync(CancellationToken ct)
     {
         await passGate.WaitAsync(ct);
-        try { return await FindOrDownloadNewerInstallerUnguardedAsync(ct); }
+        // The lock across processes: the Word add-in has its own updater writing to the same
+        // folder (it updates also without this service). While it holds the lock, skip; its
+        // download lands here too and ReadyInstaller picks it up.
+        FileStream? crossProcess = global::KitveiHakodesh.Core.Updates.UpdateInstallers.TryTakeDownloadLock(DownloadFolder);
+        try
+        {
+            if (crossProcess is null)
+                throw new IOException("the Word add-in is checking for updates right now");
+            return await FindOrDownloadNewerInstallerUnguardedAsync(ct);
+        }
         finally
         {
+            crossProcess?.Dispose();
             Volatile.Write(ref downloadingVersion, "");
             Interlocked.Exchange(ref downloadReceived, 0);
             Interlocked.Exchange(ref downloadTotal, 0);

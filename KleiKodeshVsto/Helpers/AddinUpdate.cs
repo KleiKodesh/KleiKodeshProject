@@ -1,7 +1,7 @@
-// ALL of the Word add-in's update logic lives in this one file. The add-in does not update
-// itself and does not run the service for a whole session: it starts the KitveiHakodesh service
-// for one background check when a fresh side pane opens (at most weekly), reads what the service
-// downloaded straight from disk and the registry, and shows an "Update available" ribbon button
+// ALL of the Word add-in's update logic lives in this one file. The add-in updates itself,
+// without the KitveiHakodesh service (which is not installed when Kitvei Hakodesh is not): one
+// background check when a fresh side pane opens (at most weekly), what is ready read straight
+// from disk and the registry, and shows an "Update available" ribbon button
 // (plus the settings view's "Updates" section). Other files only make one-line calls into here:
 //   TaskpaneManager.OnPaneCreated   -> AddinUpdateState.PaneOpened()
 //   KeliKodeshRibbon                -> AddinUpdateRibbon
@@ -9,12 +9,12 @@
 //   RibbonSettingsView              -> AddinUpdateSettingsSection
 using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.Updates;
-using KitveiHakodeshLib.Service;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,158 +25,15 @@ using WinForms = System.Windows.Forms;
 namespace KleiKodesh.Helpers.AddinUpdate
 {
     // ======================================================================================
-    // The wire format (a tiny MessagePack)
+    // The add-in's own update check (no service)
     // ======================================================================================
 
-    /// <summary>
-    /// Just enough MessagePack for the update ops: one request shape (<c>{ Op }</c>, no args)
-    /// and a reader for the reply. The add-in carries no MessagePack package (the service
-    /// pipe library is bytes-only on purpose), so this is written by hand, like the owner
-    /// request in KitveiHakodeshLib's KitveiHakodeshServiceOwnership.
-    ///
-    /// Reader result types: null, bool, long, double, string, byte[] (bin), List&lt;object&gt;,
-    /// and Dictionary&lt;string, object&gt; (keys compared ignoring case, so the service's
-    /// PascalCase or camelCase naming both work).
-    /// </summary>
-    internal static class MsgPackLite
-    {
-        /// <summary>The request <c>{ Op: op }</c>. The op name must be shorter than 32 bytes.</summary>
-        public static byte[] OpRequest(string op)
-        {
-            byte[] name = Encoding.ASCII.GetBytes(op);
-            if (name.Length >= 32) throw new ArgumentException("op name too long for a fixstr", nameof(op));
-
-            var bytes = new byte[1 + 3 + 1 + name.Length];
-            int i = 0;
-            bytes[i++] = 0x81;                                   // fixmap(1)
-            bytes[i++] = 0xA2; bytes[i++] = (byte)'O'; bytes[i++] = (byte)'p';
-            bytes[i++] = (byte)(0xA0 | name.Length);             // fixstr
-            Buffer.BlockCopy(name, 0, bytes, i, name.Length);
-            return bytes;
-        }
-
-        public static object Read(byte[] data)
-        {
-            var reader = new Reader(data);
-            return reader.ReadValue();
-        }
-
-        public static Dictionary<string, object> ReadMap(byte[] data)
-        {
-            return Read(data) as Dictionary<string, object>
-                ?? throw new FormatException("The service reply is not a map.");
-        }
-
-        public static string GetString(Dictionary<string, object> map, string key) =>
-            map.TryGetValue(key, out object v) ? v as string ?? "" : "";
-
-        public static bool GetBool(Dictionary<string, object> map, string key) =>
-            map.TryGetValue(key, out object v) && v is bool b && b;
-
-        private sealed class Reader
-        {
-            private readonly byte[] _b;
-            private int _i;
-
-            public Reader(byte[] data) { _b = data; }
-
-            public object ReadValue()
-            {
-                byte t = _b[_i++];
-                if (t <= 0x7F) return (long)t;
-                if (t >= 0xE0) return (long)(sbyte)t;
-                if ((t & 0xE0) == 0xA0) return ReadString(t & 0x1F);
-                if ((t & 0xF0) == 0x80) return ReadMapOf(t & 0x0F);
-                if ((t & 0xF0) == 0x90) return ReadArrayOf(t & 0x0F);
-
-                switch (t)
-                {
-                    case 0xC0: return null;
-                    case 0xC2: return false;
-                    case 0xC3: return true;
-                    case 0xC4: return ReadBytes(_b[_i++]);
-                    case 0xC5: return ReadBytes(ReadUnsigned(2));
-                    case 0xC6: return ReadBytes(ReadUnsigned(4));
-                    case 0xCA: return (double)BitConverter.ToSingle(ReverseBytes(4), 0);
-                    case 0xCB: return BitConverter.ToDouble(ReverseBytes(8), 0);
-                    case 0xCC: return (long)_b[_i++];
-                    case 0xCD: return (long)ReadUnsigned(2);
-                    case 0xCE: return (long)ReadUnsigned(4);
-                    case 0xCF: return (long)ReadUnsigned(8);
-                    case 0xD0: return (long)(sbyte)_b[_i++];
-                    case 0xD1: return (long)(short)ReadUnsigned(2);
-                    case 0xD2: return (long)(int)ReadUnsigned(4);
-                    case 0xD3: return (long)ReadUnsigned(8);
-                    case 0xD9: return ReadString(_b[_i++]);
-                    case 0xDA: return ReadString(ReadUnsigned(2));
-                    case 0xDB: return ReadString(ReadUnsigned(4));
-                    case 0xDC: return ReadArrayOf(ReadUnsigned(2));
-                    case 0xDD: return ReadArrayOf(ReadUnsigned(4));
-                    case 0xDE: return ReadMapOf(ReadUnsigned(2));
-                    case 0xDF: return ReadMapOf(ReadUnsigned(4));
-                    default: throw new FormatException("Unsupported MessagePack type 0x" + t.ToString("X2"));
-                }
-            }
-
-            private int ReadUnsigned(int byteCount)
-            {
-                ulong v = 0;
-                for (int k = 0; k < byteCount; k++) v = (v << 8) | _b[_i++];
-                return unchecked((int)v);
-            }
-
-            private byte[] ReverseBytes(int count)
-            {
-                var copy = new byte[count];
-                for (int k = 0; k < count; k++) copy[k] = _b[_i + count - 1 - k];
-                _i += count;
-                return copy;
-            }
-
-            private string ReadString(int length)
-            {
-                string s = Encoding.UTF8.GetString(_b, _i, length);
-                _i += length;
-                return s;
-            }
-
-            private byte[] ReadBytes(int length)
-            {
-                var copy = new byte[length];
-                Buffer.BlockCopy(_b, _i, copy, 0, length);
-                _i += length;
-                return copy;
-            }
-
-            private List<object> ReadArrayOf(int count)
-            {
-                var list = new List<object>(count);
-                for (int k = 0; k < count; k++) list.Add(ReadValue());
-                return list;
-            }
-
-            private Dictionary<string, object> ReadMapOf(int count)
-            {
-                var map = new Dictionary<string, object>(count, StringComparer.OrdinalIgnoreCase);
-                for (int k = 0; k < count; k++)
-                {
-                    string key = ReadValue() as string ?? "";
-                    map[key] = ReadValue();
-                }
-                return map;
-            }
-        }
-    }
-
-    // ======================================================================================
-    // The service pipe client
-    // ======================================================================================
-
-    /// <summary>What the service says about the update: a downloaded installer waiting, and the installed version.</summary>
+    /// <summary>What is known about the update: a downloaded installer waiting, and the installed version.</summary>
     internal sealed class AddinUpdateStatus
     {
+        /// <summary>A downloaded installer newer than the installed version is waiting.</summary>
         public bool Ready;
-        /// <summary>The version of the downloaded installer; "" when none is ready.</summary>
+        /// <summary>Its version ("v1.2.3"); "" when nothing is ready.</summary>
         public string ReadyVersion = "";
         /// <summary>The installed copy's version; "" when unknown or not an installed copy.</summary>
         public string InstalledVersion = "";
@@ -185,89 +42,149 @@ namespace KleiKodesh.Helpers.AddinUpdate
     }
 
     /// <summary>
-    /// The add-in's side of the KitveiHakodesh service's self-update (the service owns all of
-    /// it: weekly GitHub check, download, launching the installer). Two calls over the
-    /// service pipe, the same ops the app's settings page uses: checkForUpdateNow and
-    /// installUpdate. Both start the installed service first when it is not running.
+    /// The add-in updates itself, in Word's process: GitHub's latest release, its installer
+    /// downloaded, the installer started on request. It does not use the Kitvei Hakodesh
+    /// service, so the add-in also updates when Kitvei Hakodesh is not installed (then there
+    /// is no service at all).
+    ///
+    /// It shares everything on disk with the service's updater (KitveiHakodeshService
+    /// Updater.cs), so the two never clash: the same "updates" folder
+    /// (install folder\KitveiHakodeshService\updates), the same file names
+    /// (KleiKodeshSetup-TAG.exe, ".part" while downloading), the same installed-version
+    /// stamp, and the same lock file (download.lock, held exclusively for a whole pass). When
+    /// the other one holds the lock, this pass is skipped; a finished download of either is
+    /// picked up by both, because what is ready is always read from disk.
     /// </summary>
     internal static class AddinUpdateClient
     {
-        private static readonly KitveiHakodeshServicePipeChannel Pipe = new KitveiHakodeshServicePipeChannel();
-        private static readonly KitveiHakodeshServiceLauncher Launcher = new KitveiHakodeshServiceLauncher();
+        private const string LatestReleaseApiUrl = "https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest";
 
-        // Starts the installed service when it is not there (no admin prompt).
-        private static readonly IKitveiHakodeshServiceChannel StartingPipe =
-            new KitveiHakodeshServiceSelfStartingChannel(Pipe, Launcher);
+        private static readonly Lazy<HttpClient> Http = new Lazy<HttpClient>(() =>
+        {
+            // .NET Framework does not offer TLS 1.2 by default everywhere; GitHub requires it.
+            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            var client = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("KleiKodesh-WordAddin");
+            return client;
+        });
+
+        /// <summary>Where installers are downloaded (the install folder holds the add-in's DLLs); the service's updater uses the same folder.</summary>
+        public static string DownloadFolder =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodeshService", "updates");
+
+        /// <summary>The installer's own stamp; "" when this is not an installed copy.</summary>
+        public static string InstalledVersion() => UpdateInstallers.InstalledVersion(UserProfile.Hive) ?? "";
 
         /// <summary>
-        /// Runs the weekly pass now, starting the service if needed. A newer release is
-        /// downloaded before the reply, so this can take minutes.
+        /// Checks GitHub now and downloads a newer installer, so this can take minutes. Never
+        /// throws: a failure comes back in <see cref="AddinUpdateStatus.CheckError"/>.
         /// </summary>
         public static async Task<AddinUpdateStatus> CheckNow(CancellationToken ct)
         {
-            // Only the INSTALLED Windows service updates. Without it (a dev checkout, a portable
-            // copy) starting a service here would spawn a console copy tied to Word's process
-            // that lives as long as Word - for nothing, as it would refuse to update anyway.
-            if (!KitveiHakodeshServiceLauncher.IsRegistered())
+            string installed = InstalledVersion();
+            // Only an installed copy updates: a dev checkout or an unzipped copy must never start an installer.
+            if (installed.Length == 0)
                 return new AddinUpdateStatus { CheckError = "updates are checked only by the installed version" };
-            // If the service was not running, THIS call started it, and a started service begins its
-            // background index builds and then stays up until they finish - for a program that
-            // never uses them. So when the check is over, ask it to go away again; it refuses
-            // while any program owns it (a pane, another program), so it never cuts those off.
-            bool startedByThisCall = !Launcher.IsListening();
-            try
+
+            string error = "";
+            try { await FindOrDownloadAsync(installed, ct).ConfigureAwait(false); }
+            catch (Exception ex) { error = ex.Message; }
+
+            var ready = UpdateInstallers.ReadyInstaller(DownloadFolder, installed);
+            return new AddinUpdateStatus
             {
-                return ToStatus(await Call(StartingPipe, "checkForUpdateNow", ct).ConfigureAwait(false));
-            }
-            finally
+                Ready = ready != null,
+                ReadyVersion = ready?.Version ?? "",
+                InstalledVersion = installed,
+                CheckError = error,
+            };
+        }
+
+        /// <summary>Starts the downloaded installer. Returns null on success, the reason otherwise.</summary>
+        public static Task<string> Install(CancellationToken ct)
+        {
+            string installed = InstalledVersion();
+            if (installed.Length == 0) return Task.FromResult("updates are installed only by the installed version");
+            var ready = UpdateInstallers.ReadyInstaller(DownloadFolder, installed);
+            if (ready == null) return Task.FromResult("no update is ready");
+            // No arguments, ever: the installer is a release of its own. It asks to close Word itself.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ready.Value.Path) { UseShellExecute = true });
+            return Task.FromResult<string>(null);
+        }
+
+        private static async Task FindOrDownloadAsync(string installed, CancellationToken ct)
+        {
+            FileStream gate = UpdateInstallers.TryTakeDownloadLock(DownloadFolder);
+            // The service (or another Word) is checking right now; its download lands in the same
+            // folder. Reported as not run, so the weekly stamp is not written and the next pass retries.
+            if (gate == null) throw new InvalidOperationException(AddinUiLanguage.T("בדיקה אחרת כבר רצה, נסו שוב בעוד כמה דקות", "another check is already running, try again in a few minutes"));
+            using (gate)
             {
-                if (startedByThisCall) await AskServiceToStopIfUnowned().ConfigureAwait(false);
+                DeleteInstallers(f => UpdateInstallers.CompareVersions(UpdateInstallers.TagOf(f), installed) <= 0);
+
+                string assetName, url = null;
+                long size = 0;
+                using (var response = await Http.Value.GetAsync(LatestReleaseApiUrl, ct).ConfigureAwait(false))
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound) throw new HttpRequestException("no published release (404)");
+                    response.EnsureSuccessStatusCode();
+                    string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    using (var json = System.Text.Json.JsonDocument.Parse(body))
+                    {
+                        var root = json.RootElement;
+                        string tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+                        if (tag.Length == 0 || UpdateInstallers.CompareVersions(tag, installed) <= 0) return;
+                        // One installer since 2026-10-11: AnyCPU, no platform suffix.
+                        assetName = "KleiKodeshSetup-" + tag + ".exe";
+                        if (root.TryGetProperty("assets", out var assets))
+                            foreach (var a in assets.EnumerateArray())
+                                if (string.Equals(a.GetProperty("name").GetString(), assetName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    size = a.GetProperty("size").GetInt64();
+                                    url = a.GetProperty("browser_download_url").GetString();
+                                }
+                        if (string.IsNullOrEmpty(url) || size <= 0) return;
+                    }
+                }
+
+                string target = Path.Combine(DownloadFolder, assetName);
+                DeleteInstallers(f => !string.Equals(f, target, StringComparison.OrdinalIgnoreCase));
+                // Already downloaded (by either updater): the same name at the published size is that release.
+                if (File.Exists(target) && new FileInfo(target).Length == size) return;
+
+                string partial = target + ".part";
+                try
+                {
+                    using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                    {
+                        // A stalled connection must not hang the pass.
+                        timeout.CancelAfter(TimeSpan.FromMinutes(60));
+                        using (var response = await Http.Value.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false))
+                        {
+                            response.EnsureSuccessStatusCode();
+                            using (var source = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            using (var destination = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None))
+                                await source.CopyToAsync(destination, 81920, timeout.Token).ConfigureAwait(false);
+                        }
+                    }
+                    long length = new FileInfo(partial).Length;
+                    if (length != size) throw new IOException($"download incomplete: {length} of {size} bytes");
+                    if (File.Exists(target)) File.Delete(target);
+                    File.Move(partial, target);
+                }
+                finally
+                {
+                    try { if (File.Exists(partial)) File.Delete(partial); } catch { /* next pass retries */ }
+                }
             }
         }
 
-        // Best effort and bounded: an older service without the op, or one already gone, simply
-        // follows its own stop rules.
-        private static async Task AskServiceToStopIfUnowned()
+        private static void DeleteInstallers(Func<string, bool> which)
         {
-            try
-            {
-                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
-                    await Call(Pipe, "stopIfUnowned", timeout.Token).ConfigureAwait(false);
-            }
-            catch { }
+            foreach (string file in Directory.EnumerateFiles(DownloadFolder, "KleiKodeshSetup-*.exe"))
+                if (which(file))
+                    try { File.Delete(file); } catch { /* locked by a running installer - next pass */ }
         }
-
-        /// <summary>Asks the service to start the downloaded installer. Returns null on success, the reason otherwise.</summary>
-        public static async Task<string> Install(CancellationToken ct)
-        {
-            // Same rule as CheckNow: never start a service for a copy that is not installed.
-            if (!KitveiHakodeshServiceLauncher.IsRegistered())
-                return "updates are installed only by the installed version";
-            Dictionary<string, object> result = await Call(StartingPipe, "installUpdate", ct).ConfigureAwait(false);
-            if (MsgPackLite.GetBool(result, "Ok")) return null;
-            string error = MsgPackLite.GetString(result, "Error");
-            return string.IsNullOrEmpty(error) ? "unknown error" : error;
-        }
-
-        private static async Task<Dictionary<string, object>> Call(
-            IKitveiHakodeshServiceChannel channel, string op, CancellationToken ct)
-        {
-            byte[] reply = await channel.CallAsync(MsgPackLite.OpRequest(op), ct).ConfigureAwait(false);
-            Dictionary<string, object> envelope = MsgPackLite.ReadMap(reply);
-            if (!MsgPackLite.GetBool(envelope, "Ok"))
-                throw new InvalidOperationException(MsgPackLite.GetString(envelope, "Error"));
-            return envelope.TryGetValue("Result", out object bytes) && bytes is byte[] payload
-                ? MsgPackLite.ReadMap(payload)
-                : new Dictionary<string, object>();
-        }
-
-        private static AddinUpdateStatus ToStatus(Dictionary<string, object> result) => new AddinUpdateStatus
-        {
-            Ready = MsgPackLite.GetBool(result, "Ready"),
-            ReadyVersion = MsgPackLite.GetString(result, "Version"),
-            InstalledVersion = MsgPackLite.GetString(result, "InstalledVersion"),
-            CheckError = MsgPackLite.GetString(result, "CheckError"),
-        };
     }
 
     // ======================================================================================
@@ -292,25 +209,17 @@ namespace KleiKodesh.Helpers.AddinUpdate
     ///
     /// WHAT IS READY is never kept: it is read from disk when the ribbon asks (a few seconds'
     /// cache, no timer) with the same rule the service uses (Core's UpdateInstallers: a complete
-    /// installer in the service's "updates" folder that is newer than the version the installer
-    /// stamped in the registry). So it needs no service, and a download the app's service
-    /// finished shows up too. A stale button (installed from the app, say) is caught when the
+    /// installer in the shared "updates" folder that is newer than the version the installer
+    /// stamped in the registry). So a download the service finished shows up too. A stale button (installed from the app, say) is caught when the
     /// user clicks it: the click re-reads, tells the user, and the item drops out.
     ///
-    /// GETTING it downloaded is the service's job, and it must NOT run for a whole Word session
-    /// just for that. Nothing runs at Word's startup. When the user opens a FRESH side pane
-    /// (the first one in a window, or another one beside it - not when an existing pane is
-    /// merely shown again) <see cref="PaneOpened"/> runs: at most once per Word session, and
-    /// only when a week has passed (stamp UpdateChecker/LastCheckUtc), it starts the service in
-    /// the background and asks it to check now (a download included). Word is never registered
-    /// as one of the service's owners, so there is nothing to release and nothing that can fail
-    /// to be released. Two rules end the service, whichever applies: when THIS call started it,
-    /// the add-in asks it to stop right after the check (stopIfUnowned: about 10 s later, even
-    /// while its index builds run, unless a program owns it or a download is still running -
-    /// it then keeps looking until the download ends); when it was already running for someone
-    /// else, that program owns it and the service's own rules apply (it stops itself once
-    /// nobody owns it and its background work is done). No timer, no heartbeat, no event
-    /// subscription is created here. Between checks nothing runs.
+    /// GETTING it downloaded is the add-in's own job (AddinUpdateClient, in Word's process; no
+    /// service is started). Nothing runs at Word's startup. When the user opens a FRESH side
+    /// pane (the first one in a window, or another one beside it - not when an existing pane
+    /// is merely shown again) <see cref="PaneOpened"/> runs: at most once per Word session, and
+    /// only when a week has passed (stamp UpdateChecker/LastCheckUtc), it checks GitHub in the
+    /// background and downloads a newer installer. No timer, no heartbeat. Between checks
+    /// nothing runs.
     ///
     /// The tone ages like the app's button: the moment a version was first seen ready is saved
     /// (UpdateChecker/ReadySeen*), so it survives a Word restart.
@@ -318,7 +227,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
     internal static class AddinUpdateState
     {
         private const string Section = "UpdateChecker";
-        // Lets the pane that just opened make its own first requests to the service first.
+        // Lets the pane that just opened finish its own start first.
         private static readonly TimeSpan StartDelay = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan CheckEvery = TimeSpan.FromDays(7);
         private static readonly TimeSpan CheckTimeout = TimeSpan.FromMinutes(15);
@@ -398,11 +307,11 @@ namespace KleiKodesh.Helpers.AddinUpdate
             try
             {
                 if (AutomaticUpdatesTurnedOff || !IsCheckDue()) return;
-                // Lets the pane that just opened make its own first requests to the service first.
+                // Lets the pane that just opened finish its own start first.
                 await Task.Delay(StartDelay).ConfigureAwait(false);
                 using (var timeout = new CancellationTokenSource(CheckTimeout))
                 {
-                    // Starts the installed service if needed, checks, downloads, answers.
+                    // Checks, downloads, answers.
                     AddinUpdateStatus status = await AddinUpdateClient.CheckNow(timeout.Token).ConfigureAwait(false);
                     // Stamped only when the check ran, so a failed one retries at the next Word session.
                     if (status.CheckError.Length == 0)
@@ -411,8 +320,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
             }
             catch
             {
-                // The service could not be brought up or reached: the settings page's check-now
-                // says why when asked.
+                // Unexpected; the settings page's check-now says why when asked.
             }
             Reload();
         }
@@ -438,12 +346,10 @@ namespace KleiKodesh.Helpers.AddinUpdate
             try
             {
                 installed = UpdateInstallers.InstalledVersion(UserProfile.Hive) ?? "";
-                string exe = KitveiHakodeshServiceLauncher.InstalledExecutable();
-                if (!AutomaticUpdatesTurnedOff && installed.Length > 0 && exe != null)
+                if (!AutomaticUpdatesTurnedOff && installed.Length > 0)
                 {
-                    // The installed service keeps its downloads in "updates" beside its own exe.
-                    string folder = Path.Combine(Path.GetDirectoryName(exe), "updates");
-                    ready = UpdateInstallers.ReadyInstaller(folder, installed)?.Version ?? "";
+                    // The folder both updaters (the add-in's and the service's) download into.
+                    ready = UpdateInstallers.ReadyInstaller(AddinUpdateClient.DownloadFolder, installed)?.Version ?? "";
                     if (ready.Length > 0) since = FirstSeenUtc(ready);
                 }
             }
@@ -594,9 +500,6 @@ namespace KleiKodesh.Helpers.AddinUpdate
         public static string Failed(string reason) => AddinUiLanguage.T(
             "בדיקת העדכונים נכשלה" + Suffix(reason), "The update check failed" + Suffix(reason));
 
-        public static string ServiceUnavailable => AddinUiLanguage.T(
-            "לא ניתן להגיע לשירות כתבי הקודש", "The Kitvei Hakodesh service could not be reached");
-
         private static string Suffix(string reason) => string.IsNullOrEmpty(reason) ? "" : " (" + reason + ")";
     }
 
@@ -606,7 +509,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
 
     /// <summary>
     /// The ribbon update button's click: re-read what is ready (the button may be stale),
-    /// ask the user, and have the service start the downloaded installer (which itself asks
+    /// ask the user, and start the downloaded installer (which itself asks
     /// to close Word).
     /// </summary>
     internal static class AddinUpdateInstall
@@ -628,8 +531,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
                 != WinForms.DialogResult.Yes)
                 return;
 
-            // Off the UI thread: with the service stopped, the call first starts it (up to ~20 s),
-            // and Word must not freeze meanwhile. Only the failure message comes back to the UI thread.
+            // Off the UI thread, so Word never waits on the disk. Only the failure message comes back to the UI thread.
             Task.Run(async () =>
             {
                 string error;
@@ -713,7 +615,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
             _header = header; _installedText = installedText; _statusText = statusText;
             _installButton = installButton; _checkButton = checkButton; _turnOff = turnOff;
 
-            // The checkbox is the same registry value the service reads.
+            // The checkbox is the same registry value the service's updater reads.
             _turnOff.IsChecked = AddinUpdateState.AutomaticUpdatesTurnedOff;
             _turnOff.Checked   += (_, __) => SetTurnedOff(true);
             _turnOff.Unchecked += (_, __) => SetTurnedOff(false);
@@ -744,7 +646,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
             ShowStatus();
         }
 
-        // Can take minutes: a newer release is downloaded before the service answers.
+        // Can take minutes: a newer release is downloaded before this returns.
         private async Task CheckNow()
         {
             if (_isChecking) return;
@@ -754,7 +656,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
             _checkButton.Content = AddinUpdateText.Checking;
             try
             {
-                // A wedged service must not leave the button stuck on "Checking...".
+                // A stalled connection must not leave the button stuck on "Checking..."
                 AddinUpdateStatus status;
                 using (var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15)))
                     status = await Task.Run(() => AddinUpdateClient.CheckNow(timeout.Token));
@@ -765,7 +667,7 @@ namespace KleiKodesh.Helpers.AddinUpdate
             }
             catch
             {
-                _checkResultText = AddinUpdateText.ServiceUnavailable;
+                _checkResultText = AddinUpdateText.Failed("");
             }
             _isChecking = false;
             _checkButton.Content = AddinUpdateText.CheckNow;

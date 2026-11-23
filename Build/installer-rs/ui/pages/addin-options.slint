@@ -38,7 +38,19 @@ component ToolsColumn inherits ScrollView {
         padding-right: Lang.en ? 0px : 14px;
         spacing: 8px;
         SectionTitle { text: root.heading; }
-        for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+        // Row 0 is Kitvei Hakodesh: not offered when it is not being installed (the add-in alone).
+        VerticalLayout {
+            spacing: 0px;
+            for t[i] in Installer.ribbon-tools: CheckRow {
+                property <bool> shown: i != 0 || Installer.kitvei-selected;
+                visible: self.shown;
+                height: self.shown ? self.preferred-height : 0px;
+                padding-bottom: self.shown ? 8px : 0px;
+                text: t.title;
+                checked: t.on;
+                toggled => { Installer.toggle-tool(i); }
+            }
+        }
     }
 }
 

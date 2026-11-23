@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use format::{Footer, FOOTER_LEN};
-pub use rules::{is_tutor_file, purge_stale_files};
+pub use rules::{delete_kitvei_files, is_kitvei_file, is_tutor_file, purge_stale_files};
 
 pub struct Payload {
     exe: PathBuf,
@@ -20,6 +20,8 @@ pub struct Payload {
 #[derive(Clone, Copy)]
 pub struct Selection {
     pub core: bool,
+    /// Kitvei Hakodesh's own files (see `rules::is_kitvei_file`); only together with `core`.
+    pub kitvei: bool,
     pub tutor: bool,
 }
 
@@ -68,7 +70,13 @@ impl Payload {
             let mut entry = entry?;
             let relative = entry.path()?.into_owned();
             let size = entry.header().size()?;
-            let wanted = if is_tutor_file(&relative) { selection.tutor } else { selection.core };
+            let wanted = if is_tutor_file(&relative) {
+                selection.tutor
+            } else if is_kitvei_file(&relative) {
+                selection.core && selection.kitvei
+            } else {
+                selection.core
+            };
             if wanted && entry.header().entry_type().is_file() {
                 let target = install_dir.join(&relative);
                 if !(rules::keep_existing(&relative) && target.exists()) {

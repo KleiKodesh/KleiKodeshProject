@@ -36,6 +36,10 @@ export global Installer {
     in property <string> summary;
     in property <bool> any-selected;
     in property <bool> kitvei-selected;
+    // Kitvei Hakodesh is installed now; unticking it then shows what that means.
+    in property <bool> kitvei-installed;
+    // When it is unticked: also delete its files and indexes (the user's choice).
+    in-out property <bool> delete-kitvei-files: true;
     // A product other than the Word add-in is ticked: only then do the general options matter.
     in property <bool> apps-selected;
     in property <bool> has-changes;

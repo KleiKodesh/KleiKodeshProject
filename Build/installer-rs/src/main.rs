@@ -69,6 +69,7 @@ fn run_silent(layout: &Layout, payload: Option<&Payload>, installed: &HashSet<Pr
         options: Options::current(layout, english),
         clean: false,
         addin_settings: None,
+        delete_kitvei_files: false,
     };
     let reporter = SilentReporter { close_apps };
     match install::run(layout, payload, &request, &reporter) {

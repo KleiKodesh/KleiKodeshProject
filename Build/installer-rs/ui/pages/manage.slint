@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
 import { Installer, Page } from "../state.slint";
-import { PageTitle, CheckRow } from "../widgets.slint";
+import { PageTitle, CheckRow, KitveiRemovalNotice } from "../widgets.slint";
 
 // Like Office's "Change your installation": modify components, repair, or remove.
 export component ManagePage inherits VerticalLayout {
@@ -49,6 +49,7 @@ export component ManagePage inherits VerticalLayout {
                 clicked => { Installer.addin-options-back = Page.manage; Installer.page = Page.addin-options; }
             }
         }
+        if Installer.kitvei-installed && !Installer.kitvei-selected: KitveiRemovalNotice { }
         Rectangle { vertical-stretch: 1; }
         if Installer.confirm-uninstall: Text {
             text: Lang.t("להסיר את כל רכיבי כלי קודש? לחצו שוב על \"הסר\" לאישור.", "Remove all of Klei Kodesh? Click \"Remove\" again to confirm.");

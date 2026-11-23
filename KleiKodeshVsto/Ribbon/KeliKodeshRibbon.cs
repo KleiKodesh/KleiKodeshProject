@@ -72,6 +72,8 @@ namespace KleiKodesh.Ribbon
                 : control.Id;
             // The settings save Torah Design under its old id ("KleiKodesh_Option" radio -> "KleiKodesh").
             if (id == "KleiKodesh") id = "DocDesign";
+            // Kitvei Hakodesh left out by the installer: the main button opens the settings instead.
+            if (id == "KitveiHakodesh" && !AddinCommands.IsKitveiHakodeshInstalled()) id = "Settings";
 
             AddinCommands.Run(id);
         }
@@ -137,7 +139,8 @@ namespace KleiKodesh.Ribbon
         public string getSupertip(Office.IRibbonControl control) => AddinText.Tip(control.Id);
 
         public bool getVisible(Office.IRibbonControl control) =>
-            SettingsManager.GetBool("Ribbon", control.Id + "_Visible", true);
+            (control.Id != "KitveiHakodesh" || AddinCommands.IsKitveiHakodeshInstalled())
+            && SettingsManager.GetBool("Ribbon", control.Id + "_Visible", true);
 
         #endregion
 

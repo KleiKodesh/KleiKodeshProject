@@ -42,6 +42,40 @@ pub fn keep_existing(relative: &Path) -> bool {
         || KEEP_FOLDERS.iter().any(|dir| starts_with_ignore_case(&path, dir))
 }
 
+/// Files only Kitvei Hakodesh uses: the service (search, library data, indexes), the
+/// library screens, and the app's own exe. Left out when the add-in is installed alone; the
+/// add-in's other tools never touch them, and the add-in updates itself without the service.
+const KITVEI_FOLDERS: &[&str] = &[r"KitveiHakodeshService\", r"KitveiHakodesh\"];
+const KITVEI_ROOT_FILE_PREFIX: &str = "כתבי הקודש.";
+
+pub fn is_kitvei_file(relative: &Path) -> bool {
+    let path = normalize(relative);
+    KITVEI_FOLDERS.iter().any(|dir| starts_with_ignore_case(&path, dir))
+        || (!path.contains('\\') && path.starts_with(KITVEI_ROOT_FILE_PREFIX))
+}
+
+/// Deletes Kitvei Hakodesh's files and its indexes (the user chose to, when unticking it).
+/// The service folder's `updates` stays: the add-in downloads its own updates there.
+pub fn delete_kitvei_files(install_dir: &Path) {
+    fn remove(path: &Path) {
+        let _ = if path.is_dir() { std::fs::remove_dir_all(path) } else { std::fs::remove_file(path) };
+    }
+    let Ok(entries) = std::fs::read_dir(install_dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let path = entry.path();
+        if name.eq_ignore_ascii_case(crate::layout::SERVICE_DIR) {
+            let Ok(inner) = std::fs::read_dir(&path) else { continue };
+            for item in inner.flatten().filter(|i| !i.file_name().to_string_lossy().eq_ignore_ascii_case("updates")) {
+                remove(&item.path());
+            }
+        } else if name.eq_ignore_ascii_case("KitveiHakodesh") || name.starts_with(KITVEI_ROOT_FILE_PREFIX) {
+            remove(&path);
+        }
+    }
+    crate::log::line("deleted the Kitvei Hakodesh files");
+}
+
 pub fn is_tutor_file(relative: &Path) -> bool {
     starts_with_ignore_case(&normalize(relative), &format!("{TUTOR_DIR}\\"))
 }

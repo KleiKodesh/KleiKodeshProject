@@ -3,7 +3,7 @@ import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
 import { Shots, Shot } from "shots.slint";
 import { Installer, Page } from "../state.slint";
-import { PageTitle, ShotCard, ProductIcon, CheckRow, Divider, LinkText } from "../widgets.slint";
+import { PageTitle, ShotCard, ProductIcon, CheckRow, Divider, LinkText, KitveiRemovalNotice } from "../widgets.slint";
 
 struct Slide { title: string, shot: Shot }
 
@@ -226,6 +226,7 @@ export component WelcomePage inherits VerticalLayout {
         if !Lang.en: KitveiCard { }
         if !Lang.en: AddinCard { }
     }
+    if Installer.kitvei-installed && !Installer.kitvei-selected: KitveiRemovalNotice { padding-top: 10px; }
     Rectangle { vertical-stretch: 1; min-height: 10px; }
     // Bottom row. Already installed: a clean-install choice (above it a separator);
     // otherwise what will be installed.

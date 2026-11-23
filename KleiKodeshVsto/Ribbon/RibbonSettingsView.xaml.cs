@@ -113,6 +113,13 @@ namespace KleiKodesh.Ribbon
 
         private void InitializeControls()
         {
+            // Kitvei Hakodesh left out by the installer: not offered here; only the installer brings it back.
+            if (!AddinCommands.IsKitveiHakodeshInstalled())
+            {
+                KitveiHakodesh_Visible.Visibility = Visibility.Collapsed;
+                KitveiHakodesh_Option.Visibility = Visibility.Collapsed;
+            }
+
             // cb.Name IS the registry key (e.g. "KitveiHakodesh_Visible") — do not rename the controls.
             foreach (CheckBox cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
             {

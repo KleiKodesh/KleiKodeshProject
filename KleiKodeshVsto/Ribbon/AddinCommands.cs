@@ -207,7 +207,33 @@ namespace KleiKodesh.Ribbon
         private static string ErrorTitle   => AddinUiLanguage.T("שגיאה", "Error");
 
         internal static bool IsKitveiHakodeshEnabled() =>
-            SettingsManager.GetBool("Ribbon", "KitveiHakodesh_Visible", true);
+            IsKitveiHakodeshInstalled() && SettingsManager.GetBool("Ribbon", "KitveiHakodesh_Visible", true);
+
+        /// <summary>
+        /// False when the installer was told to leave Kitvei Hakodesh out (the add-in alone).
+        /// Then it is gone from the ribbon, the right-click menu, the macros and the settings
+        /// pane, and only running the installer again brings it back. The installer's own
+        /// record (HKCU\Software\KleiKodesh, Products: product ids, comma separated) decides;
+        /// without one (a dev copy, an install by the old installer) it counts as installed.
+        /// </summary>
+        internal static bool IsKitveiHakodeshInstalled()
+        {
+            if (_kitveiInstalled == null)
+            {
+                bool installed = true;
+                try
+                {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\KleiKodesh"))
+                        if (key?.GetValue("Products") is string products)
+                            installed = products.Split(',').Any(p => p.Trim() == "kitvei");
+                }
+                catch { }
+                _kitveiInstalled = installed;
+            }
+            return _kitveiInstalled.Value;
+        }
+        // Read once per Word session: the installer closes Word before it changes what is installed.
+        private static bool? _kitveiInstalled;
 
         /// <summary>
         /// Returns the first link among the hyperlinks overlapping the current selection
@@ -253,6 +279,9 @@ namespace KleiKodesh.Ribbon
         /// </summary>
         public static KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
         {
+            // Every way in (button, macros, search and link commands) passes here: without
+            // Kitvei Hakodesh installed there is no pane to open. Callers handle null.
+            if (!IsKitveiHakodeshInstalled()) return null;
             AddinUiLanguage.Apply();
             return TaskPaneManager.Show("KitveiHakodesh", () =>
             {
