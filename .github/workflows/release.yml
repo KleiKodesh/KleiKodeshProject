@@ -137,11 +137,8 @@ jobs:
         shell: pwsh
         env:
           HB_MIRROR_JSON: ${{ secrets.HB_MIRROR_JSON }}
-        run: |
-          # Only the public mirror address ships; any other field in the secret is dropped.
-          $mirror = ($env:HB_MIRROR_JSON | ConvertFrom-Json).publicMirrorUrlFormat
-          [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
-            (@{ publicMirrorUrlFormat = $mirror } | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+        # The bucket settings ship sealed with a per-release key compiled into the service exe.
+        run: ./Build/seal-hb-mirror.ps1
 
       - uses: actions/download-artifact@v8
         if: needs.gate.outputs.renew != 'true'

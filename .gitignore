@@ -399,6 +399,7 @@ kleikodesh-website
 
 # HebrewBooks download fallbacks (R2 keys): shipped in builds, never committed
 KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json
+KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/HebrewBooksMirrorKey.g.cs
 
 /SearchExpansion-models/
 
