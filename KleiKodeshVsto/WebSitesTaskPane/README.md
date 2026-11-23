@@ -24,12 +24,12 @@ All source files live under the `UI/` subdirectory.
 | `AddressBarStyles.xaml` | Address bar styling |
 | `MiscStyles.xaml` | Miscellaneous styles |
 
-### WebSitesTaskPaneDemo
+### WebSitesTaskPaneDebugger
 Standalone WPF demo application that hosts the WebSitesView control. Use this to test and develop the library independently of the VSTO add-in.
 
 **To run the demo:**
 1. Open `WebSitesTaskPane.sln` in Visual Studio
-2. Set `WebSitesTaskPaneDemo` as the startup project
+2. Set `WebSitesTaskPaneDebugger` as the startup project
 3. Press F5
 
 ## Integration with KleiKodesh VSTO
@@ -85,8 +85,8 @@ WebSitesTaskPane/
 │   │       ├── AddressBarStyles.xaml
 │   │       └── MiscStyles.xaml
 │   └── Properties/
-├── WebSitesTaskPaneDemo/                 # Demo application
-│   ├── WebSitesTaskPaneDemo.csproj
+├── WebSitesTaskPaneDebugger/                 # Debugger application
+│   ├── WebSitesTaskPaneDebugger.csproj
 │   ├── App.xaml / App.xaml.cs
 │   ├── MainWindow.xaml / .cs
 │   └── Properties/

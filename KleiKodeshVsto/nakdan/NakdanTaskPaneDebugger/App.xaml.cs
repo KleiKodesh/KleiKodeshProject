@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace NakdanTaskPaneDemo
+namespace NakdanTaskPaneDebugger
 {
     /// <summary>
     /// Interaction logic for App.xaml
@@ -19,13 +19,13 @@ namespace NakdanTaskPaneDemo
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
-            if (KleiKodesh.DemoShared.PaneTiming.TryTime(e.Args, () => new MainWindow()))
+            if (KleiKodesh.TaskPaneDebuggerShared.PaneTiming.TryTime(e.Args, () => new MainWindow()))
             {
                 Shutdown(0);
                 return;
             }
 
-            if (KleiKodesh.DemoShared.PaneSnapshot.TryRender(e.Args, () => new MainWindow()))
+            if (KleiKodesh.TaskPaneDebuggerShared.PaneSnapshot.TryRender(e.Args, () => new MainWindow()))
             {
                 Shutdown(0);
                 return;
@@ -34,7 +34,7 @@ namespace NakdanTaskPaneDemo
             base.OnStartup(e);
 
             var window = new MainWindow();
-            KleiKodesh.DemoShared.PaneSnapshot.ApplyStartupTheme(e.Args, window);
+            KleiKodesh.TaskPaneDebuggerShared.PaneSnapshot.ApplyStartupTheme(e.Args, window);
             window.Show();
         }
     }

@@ -20,23 +20,23 @@ $projects = @(
     
     # DocDesign (depends on WpfLib)
     "KleiKodeshVsto/DocDesign/DocDesignTaskPane/DocDesignTaskPane.csproj",
-    "KleiKodeshVsto/DocDesign/DocDesignTaskPaneDemo/DocDesignTaskPaneDemo.csproj",
+    "KleiKodeshVsto/DocDesign/DocDesignTaskPaneDebugger/DocDesignTaskPaneDebugger.csproj",
     
     # RegexFind (depends on WpfLib)
     "KleiKodeshVsto/RegexInWord/RegexFindTaskPane/RegexFindTaskPane.csproj",
-    "KleiKodeshVsto/RegexInWord/RegexFindTaskPaneDemo/RegexFindTaskPaneDemo.csproj",
+    "KleiKodeshVsto/RegexInWord/RegexFindTaskPaneDebugger/RegexFindTaskPaneDebugger.csproj",
     
     # WebSites (depends on WpfLib)
     "KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPane/WebSitesTaskPane.csproj",
-    "KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPaneDemo/WebSitesTaskPaneDemo.csproj",
+    "KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPaneDebugger/WebSitesTaskPaneDebugger.csproj",
     
     # Kiwix (no WpfLib dependency)
     "KleiKodeshVsto/Kiwix/KiwixTaskPane/KiwixTaskPane.csproj",
-    "KleiKodeshVsto/Kiwix/KiwixTaskPaneDemoApp/KiwixTaskPaneDemoApp.csproj",
+    "KleiKodeshVsto/Kiwix/KiwixTaskPaneDebugger/KiwixTaskPaneDebugger.csproj",
     
     # Nakdan (depends on WpfLib)
     "KleiKodeshVsto/Nakdan/NakdanTaskPane/NakdanTaskPane.csproj",
-    "KleiKodeshVsto/Nakdan/NakdanTaskPaneDemo/NakdanTaskPaneDemo.csproj",
+    "KleiKodeshVsto/Nakdan/NakdanTaskPaneDebugger/NakdanTaskPaneDebugger.csproj",
     
     # KitveiHakodesh backend
     "KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLib/FtsLib.csproj",

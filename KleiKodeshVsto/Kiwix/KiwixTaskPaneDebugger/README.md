@@ -1,6 +1,6 @@
-# KiwixTaskPaneDemoApp
+# KiwixTaskPaneDebugger
 
-Standalone WinForms demo application for testing the Kiwix ZIM file reader.
+Standalone WinForms debugger application for testing the Kiwix ZIM file reader.
 
 ## Purpose
 
@@ -9,7 +9,7 @@ Tests the KiwixTaskPane library independently of the Word VSTO context.
 ## Usage
 
 1. Open `Kiwix.slnx` in Visual Studio
-2. Set `KiwixTaskPaneDemoApp` as the startup project
+2. Set `KiwixTaskPaneDebugger` as the startup project
 3. Press F5 to run
 
 ## Files

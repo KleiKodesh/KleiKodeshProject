@@ -1,8 +1,8 @@
-<Window SizeToContent="WidthAndHeight" x:Class="WebSitesTaskPaneDemo.MainWindow"
+<Window SizeToContent="WidthAndHeight" x:Class="WebSitesTaskPaneDebugger.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:websiteslib="clr-namespace:WebSitesTaskPane.UI;assembly=WebSitesTaskPane"
-        Title="WebSitesTaskPane Demo"
+        Title="WebSitesTaskPane Debugger"
         WindowStartupLocation="CenterScreen">
     <!-- Content = a Word task pane at width 600 px: 400 x 452 DIPs, measured live in Word at 150%. -->
     <Grid Width="400" Height="452" >

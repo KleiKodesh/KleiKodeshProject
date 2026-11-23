@@ -65,4 +65,4 @@ Matches `RegexFindTaskPane` and `WebSitesTaskPane` — same color tokens, `Segoe
 
 ## Running the Demo
 
-Set `DocDesignTaskPaneDemo` as startup project and run. It hosts `DocDesignView` with no Word — all commands no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test dark theme.
+Set `DocDesignTaskPaneDebugger` as startup project and run. It hosts `DocDesignView` with no Word — all commands no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test dark theme.

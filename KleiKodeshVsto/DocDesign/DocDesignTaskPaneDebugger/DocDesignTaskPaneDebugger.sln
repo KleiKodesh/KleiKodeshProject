@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.6.11828.311 oobstable
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocDesignTaskPaneDemo", "DocDesignTaskPaneDemo.csproj", "{E5F6A7B8-C9D0-1234-EFAB-567890123CDE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocDesignTaskPaneDebugger", "DocDesignTaskPaneDebugger.csproj", "{E5F6A7B8-C9D0-1234-EFAB-567890123CDE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocDesignTaskPane", "..\DocDesignTaskPane\DocDesignTaskPane.csproj", "{74E59BC0-41E5-475A-85CB-EACDC2EF6415}"
 EndProject

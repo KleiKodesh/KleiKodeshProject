@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace KiwixTaskPaneDemoApp.Properties
+namespace KiwixTaskPaneDebugger.Properties
 {
 
 

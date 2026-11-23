@@ -8,7 +8,7 @@ Replaces the original HTML/WebView2 frontend with a native WPF UI.
 | Project | Description |
 |---------|-------------|
 | `RegexFindTaskPane/` | The library — WPF UserControl + MVVM |
-| `RegexFindTaskPaneDemo/` | Standalone WPF demo app for UI debugging (no Word required) |
+| `RegexFindTaskPaneDebugger/` | Standalone WPF demo app for UI debugging (no Word required) |
 
 ## Architecture
 
@@ -114,9 +114,9 @@ var view = new RegexFindView(new MockWordService());
 
 ## Demo App
 
-Build and run `RegexFindTaskPaneDemo` to iterate on the UI without launching Word:
+Build and run `RegexFindTaskPaneDebugger` to iterate on the UI without launching Word:
 
 ```
-MSBuild KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\RegexFindTaskPaneDemo.csproj
-KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\bin\Debug\RegexFindTaskPaneDemo.exe
+MSBuild KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDebugger\RegexFindTaskPaneDebugger.csproj
+KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDebugger\bin\Debug\RegexFindTaskPaneDebugger.exe
 ```

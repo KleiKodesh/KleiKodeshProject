@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace WebSitesTaskPaneDemo
+namespace WebSitesTaskPaneDebugger
 {
     public partial class MainWindow : Window
     {

@@ -4,18 +4,18 @@
           Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
 
   <PropertyGroup>
-    <ApplicationManifest>..\..\DemoShared\PaneDemo.manifest</ApplicationManifest>
+    <ApplicationManifest>..\..\TaskPaneDebuggerShared\PaneDebugger.manifest</ApplicationManifest>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{D1E2F3A4-B5C6-7890-DEFA-123456789BCD}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>RegexFindTaskPaneDemo</RootNamespace>
-    <AssemblyName>RegexFindTaskPaneDemo</AssemblyName>
+    <RootNamespace>RegexFindTaskPaneDebugger</RootNamespace>
+    <AssemblyName>RegexFindTaskPaneDebugger</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
-    <StartupObject>RegexFindTaskPaneDemo.App</StartupObject>
+    <StartupObject>RegexFindTaskPaneDebugger.App</StartupObject>
     <RuntimeIdentifier>win</RuntimeIdentifier>
     <RuntimeIdentifiers>win</RuntimeIdentifiers>
     <NuGetPackageImportStamp/>
@@ -68,10 +68,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Compile Include="..\..\DemoShared\PaneSnapshot.cs">
+    <Compile Include="..\..\TaskPaneDebuggerShared\PaneSnapshot.cs">
       <Link>PaneSnapshot.cs</Link>
     </Compile>
-    <Compile Include="..\..\DemoShared\PaneTiming.cs">
+    <Compile Include="..\..\TaskPaneDebuggerShared\PaneTiming.cs">
       <Link>PaneTiming.cs</Link>
     </Compile>
     <Compile Include="App.xaml.cs">

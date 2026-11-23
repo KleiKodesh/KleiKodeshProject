@@ -7,15 +7,15 @@ A WPF class library providing formatting tools tailored for Hebrew Torah documen
 | Project | Type | Purpose |
 |---------|------|---------|
 | `DocDesignTaskPane/` | Class library | The actual library — all logic and UI |
-| `DocDesignTaskPaneDemo/` | WPF exe | Standalone debug host — no Word/VSTO needed |
+| `DocDesignTaskPaneDebugger/` | WPF exe | Standalone debug host — no Word/VSTO needed |
 
 ## How It Integrates with the VSTO Add-in
 
 `KleiKodeshVsto` instantiates `DocDesign.DocDesignView(app, factory)`, passing the Word `Application` and VSTO `ApplicationFactory`. The view is hosted in a WPF task pane via `WpfTaskPane.Show()`. All document manipulation goes through the Word Interop API.
 
-## Running the Demo
+## Running the Debugger
 
-Open `DocDesignTaskPaneDemo` as the startup project and run. It hosts `DocDesignView` with no Word installation required — all commands will no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test the dark Office theme.
+Open `DocDesignTaskPaneDebugger` as the startup project and run. It hosts `DocDesignView` with no Word installation required — all commands will no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test the dark Office theme.
 
 ## Folder Structure
 
@@ -49,7 +49,7 @@ DocDesign/
 │       ├── ScreenFreeze.cs            — RAII: disables screen updates during bulk operations
 │       ├── UndoRecord.cs              — RAII: wraps operations in a named Word undo record
 │       └── RangePageData.cs           — DTO: FirstPage, LastPage, PageCount for a Range
-└── DocDesignTaskPaneDemo/              — Standalone WPF debug host
+└── DocDesignTaskPaneDebugger/              — Standalone WPF debug host
     ├── MainWindow.xaml/.cs            — Hosts DocDesignView with no Word dependency
     └── App.xaml/.cs
 ```

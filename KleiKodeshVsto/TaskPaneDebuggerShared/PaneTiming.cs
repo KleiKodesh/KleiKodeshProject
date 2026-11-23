@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 
-namespace KleiKodesh.DemoShared
+namespace KleiKodesh.TaskPaneDebuggerShared
 {
     /// <summary>
     /// Times how long a pane takes to build, so "the panes feel slow" can be
@@ -20,7 +20,7 @@ namespace KleiKodesh.DemoShared
     /// Window made once so the cost of asking the OS for a window does not
     /// land on the pane being measured.
     ///
-    /// Usage from a demo's App, before base.OnStartup:
+    /// Usage from a debugger's App, before base.OnStartup:
     ///     if (PaneTiming.TryTime(e.Args, () => new MainWindow())) { Shutdown(0); return; }
     /// </summary>
     internal static class PaneTiming
@@ -199,14 +199,14 @@ namespace KleiKodesh.DemoShared
             construct = stopwatch.Elapsed.TotalMilliseconds;
 
             // The pane's content goes into a host window that already exists,
-            // instead of showing the demo's own window.
+            // instead of showing the debugger's own window.
             //
             // Window.Show() is an OS call that costs more than everything else
             // here put together and swings by a factor of four between runs -
             // the empty-window baseline above is almost entirely Show(). Worse,
             // it is not a cost the real pane pays: in Word the pane is a
             // UserControl inside Word's task pane, and no window is created for
-            // it at all. Timing Show() would be measuring the demo harness.
+            // it at all. Timing Show() would be measuring the debugger harness.
             var content = window.Content;
             window.Content = null;
 

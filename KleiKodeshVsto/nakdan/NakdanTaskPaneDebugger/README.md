@@ -1,6 +1,6 @@
-# NakdanTaskPaneDemo
+# NakdanTaskPaneDebugger
 
-Standalone WPF demo application for testing Hebrew diacritical mark functionality.
+Standalone WPF debugger application for testing Hebrew diacritical mark functionality.
 
 ## Purpose
 
@@ -9,7 +9,7 @@ Tests the Nakdan library independently of the Word VSTO context.
 ## Usage
 
 1. Open `Nakdan.slnx` in Visual Studio
-2. Set `NakdanTaskPaneDemo` as the startup project
+2. Set `NakdanTaskPaneDebugger` as the startup project
 3. Press F5 to run
 
 ## Features

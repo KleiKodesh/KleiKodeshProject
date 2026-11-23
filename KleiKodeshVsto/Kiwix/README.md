@@ -7,7 +7,7 @@ This workspace contains the Kiwix desktop integration project for Windows.
 - `Kiwix.slnx` — Visual Studio solution for the desktop projects.
 - `KiwixTaskPane/` — .NET Framework class library that hosts the Kiwix JS app in WebView2.
   - `KiwixTaskPane/Kiwix.js/` — runtime copy of the web app assets used by the library.
-- `KiwixTaskPaneDemoApp/` — WinForms demo application that references `KiwixTaskPane` and displays the Kiwix WebView.
+- `KiwixTaskPaneDebugger/` — WinForms debugger app that references `KiwixTaskPane` and displays the Kiwix WebView.
 - `kiwix-js-main/` — upstream Kiwix JS source tree and build environment.
 - `KIWIX_CHANGES.md` — customisation log and build workflow notes.
 
@@ -16,7 +16,7 @@ This workspace contains the Kiwix desktop integration project for Windows.
 - `kiwix-js-main/` contains the web app source and the JS build pipeline.
 - The desktop app does not build the web app itself.
 - Instead, `KiwixTaskPane` ships the prebuilt static `Kiwix.js` folder and serves it from WebView2.
-- `KiwixTaskPaneDemoApp` references `KiwixTaskPane`, so building the demo app also builds/includes the library.
+- `KiwixTaskPaneDebugger` references `KiwixTaskPane`, so building the debugger app also builds/includes the library.
 
 ## Refreshing the Kiwix JS build output
 
@@ -42,7 +42,7 @@ The helper script is located at:
 After refreshing the JS assets, build the `.NET` projects normally:
 
 - Open `Kiwix.slnx` in Visual Studio and build the solution
-- or use MSBuild / `dotnet build` on `KiwixTaskPaneDemoApp/KiwixTaskPaneDemoApp.csproj` and `KiwixTaskPane/KiwixTaskPane.csproj`
+- or use MSBuild / `dotnet build` on `KiwixTaskPaneDebugger/KiwixTaskPaneDebugger.csproj` and `KiwixTaskPane/KiwixTaskPane.csproj`
 
 ## Notes
 
@@ -54,5 +54,5 @@ After refreshing the JS assets, build the `.NET` projects normally:
 
 - `kiwix-js-main/package.json` — JS build scripts.
 - `KiwixTaskPane/KiwixWebview.cs` — runtime WebView2 host logic.
-- `KiwixTaskPaneDemoApp/MainForm.cs` — demo app entry point.
+- `KiwixTaskPaneDebugger/MainForm.cs` — debugger app entry point.
 - `KIWIX_CHANGES.md` — custom change log and workflow instructions.

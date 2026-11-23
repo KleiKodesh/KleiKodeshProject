@@ -2,8 +2,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 
-[assembly: AssemblyTitle("DocDesignTaskPaneDemo")]
-[assembly: AssemblyDescription("Demo host for DocDesign task pane UI")]
+[assembly: AssemblyTitle("DocDesignTaskPaneDebugger")]
+[assembly: AssemblyDescription("Debugger host for DocDesign task pane UI")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 [assembly: ComVisible(false)]

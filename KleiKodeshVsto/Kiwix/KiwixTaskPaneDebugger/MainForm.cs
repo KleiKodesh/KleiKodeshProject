@@ -1,12 +1,12 @@
 using KiwixTaskPane;
 using System.Windows.Forms;
 
-namespace KiwixTaskPaneDemoApp
+namespace KiwixTaskPaneDebugger
 {
     public class MainForm : Form
     {
         // "--theme <name>": the Office themes as OfficeThemeWatcher applies them in Word
-        // (background, foreground) - same names as DemoShared\PaneSnapshot.cs.
+        // (background, foreground) - same names as TaskPaneDebuggerShared\PaneSnapshot.cs.
         static readonly (string Name, string Back, string Fore)[] Themes =
         {
             ("office-white",      "#FFFFFF", "#262626"),
@@ -18,9 +18,9 @@ namespace KiwixTaskPaneDemoApp
         public MainForm(string theme = null)
         {
             Text = "Kiwix";
-            // Same size as the other pane demos: a Word task pane (400 x 452 at 96 DPI, measured
+            // Same size as the other pane debuggers: a Word task pane (400 x 452 at 96 DPI, measured
             // live in maximized Word at 150% = 600 x 678 px). Declared at 96 DPI; WinForms scales
-            // it to the monitor (the demo is per-monitor aware via PaneDemo.manifest).
+            // it to the monitor (the debugger is per-monitor aware via PaneDebugger.manifest).
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.None;
             float scale;

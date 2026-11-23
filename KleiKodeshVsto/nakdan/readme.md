@@ -11,7 +11,7 @@ Nakdan.slnx              # Solution file (SLNX format)
 │   ├── Helpers/         # Settings manager, VSTO integration helpers
 │   ├── UI/              # WPF user controls (NakdanView, NakdanDictionary)
 │   └── WdStyles/        # Word document style reading and filtering
-├── NakdanTaskPaneDemo/          # WPF demo application (no Word required)
+├── NakdanTaskPaneDebugger/          # WPF debugger app (no Word required)
 ├── sources/             # Reference: unpacked CulmusOOoNakdan extension
 ├── packages/            # NuGet package cache
 └── Nakdan.svg           # Project icon
@@ -30,9 +30,9 @@ The main library providing vowelization functionality:
 | `UI/` | `NakdanView.xaml/.cs`, `NakdanViewModel.cs`, `NakdanDictionary.xaml`, `Converters.cs` | WPF controls for vowelization UI and dictionary display |
 | `WdStyles/` | `DocumentStyle.cs`, `DocumentStyleProvider.cs`, `StyleExtractor.cs`, `StyleItem.cs`, `StyleNameResolver.cs` | Word style enumeration, ignored-style filtering |
 
-### NakdanTaskPaneDemo
+### NakdanTaskPaneDebugger
 
-WPF demo application for testing the Nakdan library outside of Word.
+WPF debugger app for testing the Nakdan library outside of Word.
 
 ### sources/
 

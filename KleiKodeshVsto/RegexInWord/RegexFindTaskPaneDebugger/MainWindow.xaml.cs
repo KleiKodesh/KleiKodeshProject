@@ -2,7 +2,7 @@ using RegexFindTaskPane.UI;
 using System.Windows;
 using System.Windows.Media;
 
-namespace RegexFindTaskPaneDemo
+namespace RegexFindTaskPaneDebugger
 {
     public partial class MainWindow : Window
     {

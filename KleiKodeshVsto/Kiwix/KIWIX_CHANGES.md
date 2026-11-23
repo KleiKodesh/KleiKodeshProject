@@ -88,7 +88,7 @@ Only in `KiwixTaskPane/Kiwix.js`: the source copy `kiwix-js-main` does NOT have 
 
 ---
 
-## Demo App (KiwixTaskPaneDemoApp)
+## Demo App (KiwixTaskPaneDebugger)
 
 | Change | Reason |
 |--------|--------|

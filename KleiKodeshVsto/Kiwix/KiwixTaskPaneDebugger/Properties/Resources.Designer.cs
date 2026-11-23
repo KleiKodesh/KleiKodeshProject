@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace KiwixTaskPaneDemoApp.Properties
+namespace KiwixTaskPaneDebugger.Properties
 {
 
 
@@ -44,7 +44,7 @@ namespace KiwixTaskPaneDemoApp.Properties
             {
                 if ((resourceMan == null))
                 {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("KiwixTaskPaneDemoApp.Properties.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("KiwixTaskPaneDebugger.Properties.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;

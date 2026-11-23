@@ -2,7 +2,7 @@ using KiwixTaskPane;
 using System;
 using System.Windows.Forms;
 
-namespace KiwixTaskPaneDemoApp
+namespace KiwixTaskPaneDebugger
 {
     static class Program
     {

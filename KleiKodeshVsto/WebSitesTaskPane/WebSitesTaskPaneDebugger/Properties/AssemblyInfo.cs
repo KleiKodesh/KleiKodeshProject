@@ -2,11 +2,11 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 
-[assembly: AssemblyTitle("WebSitesTaskPaneDemo")]
-[assembly: AssemblyDescription("Demo application for WebSitesTaskPane")]
+[assembly: AssemblyTitle("WebSitesTaskPaneDebugger")]
+[assembly: AssemblyDescription("Debugger application for WebSitesTaskPane")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("WebSitesTaskPaneDemo")]
+[assembly: AssemblyProduct("WebSitesTaskPaneDebugger")]
 [assembly: AssemblyCopyright("Copyright © 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

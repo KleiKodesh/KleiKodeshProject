@@ -2,7 +2,7 @@ using Microsoft.Office.Interop.Word;
 using RegexFindTaskPane.Search;
 using System.Collections.Generic;
 
-namespace RegexFindTaskPaneDemo
+namespace RegexFindTaskPaneDebugger
 {
     public class MockWordService : IWordService
     {

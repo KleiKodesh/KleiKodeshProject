@@ -4,14 +4,14 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace KleiKodesh.DemoShared
+namespace KleiKodesh.TaskPaneDebuggerShared
 {
     /// <summary>
-    /// Renders a demo window across the four Office themes, straight to PNG.
+    /// Renders a debugger window across the four Office themes, straight to PNG.
     ///
-    /// The panes are only reachable through their demo apps, and until now
+    /// The panes are only reachable through their debugger apps, and until now
     /// checking one against a dark theme meant editing a commented-out
-    /// Background line and rebuilding - the DocDesign demo says exactly that in
+    /// Background line and rebuilding - the DocDesign debugger says exactly that in
     /// its own markup. That is too much friction to do routinely, so it was not
     /// done routinely, which is how thirteen pane styles ended up with text that
     /// goes near-black on a dark Office theme.
@@ -20,10 +20,10 @@ namespace KleiKodesh.DemoShared
     /// with RenderTargetBitmap rather than photograph the screen. It is
     /// deterministic, needs no focus, and does not take over the desktop.
     ///
-    /// Shared by link rather than by assembly, so the demos gain the capability
+    /// Shared by link rather than by assembly, so the debuggers gain the capability
     /// without WpfLib having to ship a test utility to production.
     ///
-    /// Usage from a demo's App:
+    /// Usage from a debugger's App:
     ///     protected override void OnStartup(StartupEventArgs e)
     ///     {
     ///         if (PaneSnapshot.TryRender(e.Args, () => new MainWindow())) { Shutdown(0); return; }
@@ -47,7 +47,7 @@ namespace KleiKodesh.DemoShared
         /// For "--theme office-black" and friends. The renderer cannot help
         /// with popups: RenderTargetBitmap draws the visual tree, and a Popup
         /// is a separate HwndSource that is not in it. So checking a drop-down
-        /// against a dark theme needs the demo actually running, themed, with
+        /// against a dark theme needs the debugger actually running, themed, with
         /// the popup open - which is what this is for.
         /// </summary>
         internal static void ApplyStartupTheme(string[] args, Window window)
@@ -203,7 +203,7 @@ namespace KleiKodesh.DemoShared
 
         private static void Save(Window window, string path)
         {
-            // Render at the monitor's real DPI (the demos are per-monitor aware), so a
+            // Render at the monitor's real DPI (the debuggers are per-monitor aware), so a
             // snapshot on a 150% / 200% screen is as sharp as the pane is in Word.
             // Render the content (= the pane), not the window: ActualWidth/Height of a
             // Window include the title bar and borders, which are not part of the pane.

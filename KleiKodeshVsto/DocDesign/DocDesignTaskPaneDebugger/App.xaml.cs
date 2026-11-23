@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace DocDesignTaskPaneDemo
+namespace DocDesignTaskPaneDebugger
 {
     public partial class App : Application
     {
@@ -10,13 +10,13 @@ namespace DocDesignTaskPaneDemo
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
-            if (KleiKodesh.DemoShared.PaneTiming.TryTime(e.Args, () => new MainWindow()))
+            if (KleiKodesh.TaskPaneDebuggerShared.PaneTiming.TryTime(e.Args, () => new MainWindow()))
             {
                 Shutdown(0);
                 return;
             }
 
-            if (KleiKodesh.DemoShared.PaneSnapshot.TryRender(e.Args, () => new MainWindow()))
+            if (KleiKodesh.TaskPaneDebuggerShared.PaneSnapshot.TryRender(e.Args, () => new MainWindow()))
             {
                 Shutdown(0);
                 return;
@@ -25,7 +25,7 @@ namespace DocDesignTaskPaneDemo
             base.OnStartup(e);
 
             var window = new MainWindow();
-            KleiKodesh.DemoShared.PaneSnapshot.ApplyStartupTheme(e.Args, window);
+            KleiKodesh.TaskPaneDebuggerShared.PaneSnapshot.ApplyStartupTheme(e.Args, window);
             window.Show();
         }
     }

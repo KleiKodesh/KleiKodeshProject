@@ -38,13 +38,13 @@ KleiKodeshVsto/
 ├── DocDesign/                — Torah document formatting (WPF, see DocDesign/README.md)
 ├── RegexInWord/              — Regex find & replace (WPF, see RegexFindTaskPane/README.md)
 │   ├── RegexFindTaskPane/         — WPF library (UserControl + MVVM)
-│   └── RegexFindTaskPaneDemo/        — Standalone WPF demo app (no Word required)
+│   └── RegexFindTaskPaneDebugger/        — Standalone WPF debugger app (no Word required)
 ├── WebSitesTaskPane/              — Curated website browser (WPF + WebView2, see WebSitesTaskPane/README.md)
 │   ├── WebSitesTaskPane/          — WPF library
-│   └── WebSitesTaskPaneDemo/         — Standalone WPF demo app
+│   └── WebSitesTaskPaneDebugger/         — Standalone WPF debugger app
 ├── Kiwix/                    — ZIM file reader (WinForms + kiwix-js, see KIWIX_CHANGES.md)
 │   ├── KiwixTaskPane/             — WinForms UserControl host
-│   ├── KiwixTaskPaneDemoApp/         — Standalone WinForms demo app
+│   ├── KiwixTaskPaneDebugger/         — Standalone WinForms debugger app
 │   └── kiwix-js-main/        — Upstream kiwix-js source (customised for Hebrew/RTL)
 └── Resources/                — Embedded resource files
 ```

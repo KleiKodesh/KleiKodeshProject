@@ -11,7 +11,7 @@
     <!--
         Address-bar ComboBox — custom template.
         All icon data and color values are inlined — no StaticResource inside ControlTemplates,
-        because this template is instantiated inside a Window (WebSitesTaskPaneDemo) which is a
+        because this template is instantiated inside a Window (WebSitesTaskPaneDebugger) which is a
         separate HwndSource and cannot resolve resources from merged dictionaries at template-load time.
     -->
     <Style x:Key="AddressBarCombo" TargetType="ComboBox">

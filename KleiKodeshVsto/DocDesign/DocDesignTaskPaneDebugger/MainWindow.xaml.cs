@@ -2,7 +2,7 @@ using DocDesignTaskPane;
 using System.Windows;
 using System.Windows.Media;
 
-namespace DocDesignTaskPaneDemo
+namespace DocDesignTaskPaneDebugger
 {
     public partial class MainWindow : Window
     {

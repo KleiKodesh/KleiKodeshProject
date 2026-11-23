@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace NakdanTaskPaneDemo.Properties
+namespace NakdanTaskPaneDebugger.Properties
 {
 
 

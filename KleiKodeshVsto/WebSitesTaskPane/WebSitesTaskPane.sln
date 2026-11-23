@@ -5,7 +5,7 @@ VisualStudioVersion = 18.3.11512.155
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSitesTaskPane", "WebSitesTaskPane\WebSitesTaskPane.csproj", "{8100C454-B34E-45A2-98B5-7F766487C9FF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSitesTaskPaneDemo", "WebSitesTaskPaneDemo\WebSitesTaskPaneDemo.csproj", "{A5B8C9D1-E2F3-4A5B-8C9D-1E2F3A5B8C9D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSitesTaskPaneDebugger", "WebSitesTaskPaneDebugger\WebSitesTaskPaneDebugger.csproj", "{A5B8C9D1-E2F3-4A5B-8C9D-1E2F3A5B8C9D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfLib", "..\WpfLib\WpfLib\WpfLib.csproj", "{494B02C1-54F2-4244-9A90-23C9984970E7}"
 EndProject

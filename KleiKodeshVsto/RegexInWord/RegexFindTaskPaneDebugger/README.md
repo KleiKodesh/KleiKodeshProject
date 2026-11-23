@@ -1,6 +1,6 @@
-# RegexFindTaskPaneDemo
+# RegexFindTaskPaneDebugger
 
-Standalone WPF demo application for testing regex find & replace functionality.
+Standalone WPF debugger application for testing regex find & replace functionality.
 
 ## Purpose
 
@@ -11,13 +11,13 @@ Tests the RegexFindTaskPane library independently of the Word VSTO context, usin
 | File | Description |
 |------|-------------|
 | `App.xaml` / `App.xaml.cs` | Application definition and startup |
-| `MainWindow.xaml` / `.cs` | Demo UI |
+| `MainWindow.xaml` / `.cs` | Debugger UI |
 | `MockWordService.cs` | Mock implementation of Word document interface for testing |
 
 ## Usage
 
 1. Open the solution in Visual Studio
-2. Set `RegexFindTaskPaneDemo` as the startup project
+2. Set `RegexFindTaskPaneDebugger` as the startup project
 3. Press F5 to run
 
 Use this when developing regex features without needing Word open.

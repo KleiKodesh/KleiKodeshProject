@@ -7,7 +7,7 @@ Regex find & replace functionality for Word, displayed as a WPF task pane.
 | Project | Description |
 |---------|-------------|
 | `RegexFindTaskPane/` | WPF class library — UserControl + MVVM + search model |
-| `RegexFindTaskPaneDemo/` | Standalone WPF demo app for UI debugging (no Word required) |
+| `RegexFindTaskPaneDebugger/` | Standalone WPF demo app for UI debugging (no Word required) |
 
 ## Architecture (RegexFindTaskPane)
 
@@ -75,11 +75,11 @@ var view = new RegexFindView(new MockWordService());
 | `ComboBoxStyles.xaml` | OfficeComboItem + implicit Office ComboBox style |
 | `MiscStyles.xaml` | Input wrapper, result item, Edge-style scrollbar |
 
-## Running the Demo
+## Running the Debugger
 
 ```powershell
-msbuild KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\RegexFindTaskPaneDemo.csproj
-.\KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\bin\Debug\RegexFindTaskPaneDemo.exe
+msbuild KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDebugger\RegexFindTaskPaneDebugger.csproj
+.\KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDebugger\bin\Debug\RegexFindTaskPaneDebugger.exe
 ```
 
 The demo uses `MockWordService` that operates on an in-memory string — no Word installation required.
