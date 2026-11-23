@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import ZmanimDisclaimer from '@/features/hebrew-calendar/ZmanimDisclaimer.vue'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import SettingRow from './SettingRow.vue'
@@ -106,6 +107,7 @@ function pickCity(id: number) {
         ]"
       />
     </SettingRow>
+    <ZmanimDisclaimer class="settings-zmanim-disclaimer" />
   </div>
 </template>
 

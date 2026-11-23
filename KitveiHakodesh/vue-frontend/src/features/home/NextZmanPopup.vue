@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ZmanRow } from './useNextZman'
+import ZmanimDisclaimer from '@/features/hebrew-calendar/ZmanimDisclaimer.vue'
 
 defineProps<{
   rows: ZmanRow[]
@@ -19,6 +20,7 @@ defineProps<{
         <span class="zp-value" :class="{ next: r.isNext, passed: r.passed }" :title="r.missing ? $t('hebrewCalendar.zmanimNotReached') : undefined">{{ r.time }}</span>
       </template>
     </div>
+    <ZmanimDisclaimer />
   </div>
 </template>
 

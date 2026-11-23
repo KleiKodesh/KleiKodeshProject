@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
+import ZmanimDisclaimer from './ZmanimDisclaimer.vue'
 import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
@@ -128,6 +129,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
           <span v-else class="zg-value" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
         </template>
       </div>
+      <ZmanimDisclaimer />
     </div>
 
     <!-- ── Learning panel ── -->
