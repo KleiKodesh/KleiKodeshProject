@@ -152,7 +152,7 @@ export const curatedGroups = [
         license: 'LGPL-2.1',
         url: '',
         files: [L + 'LGPL-2.1.txt'],
-        source: 'The ported source is in KitveiHakodesh/vue-frontend/src/features/hebrew-calendar/kosherZmanim and the kleikodesh-zmanim.js library (https://github.com/KleiKodesh/kleikodesh-zmanim.js).',
+        source: 'The ported source (NOAA calculator only) is in the kleikodesh-zmanim.js library (https://github.com/KleiKodesh/kleikodesh-zmanim.js).',
       },
       {
         name: 'otzaria_search_engine',
