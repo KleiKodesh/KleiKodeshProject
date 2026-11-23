@@ -54,9 +54,10 @@ component ProductCard inherits Rectangle {
             if !Lang.en: CheckBox { text: ""; enabled: root.available; checked: root.selected; toggled => { root.toggled(); } }
         }
         ShotCard {
-            // 600 x 678 shown at 160 x 181: exact ratio, nothing cropped.
-            width: 160px;
-            height: 181px;
+            // 600 x 678 shown at 160 x 181 (140 x 158 on the update screen, which also has the
+            // clean-install row): exact ratio, nothing cropped.
+            width: Installer.updating ? 140px : 160px;
+            height: Installer.updating ? 158px : 181px;
             source: Shots.pick(root.slides[root.at].shot);
             opacity: root.selected ? 1 : 0.45;
         }
@@ -166,20 +167,23 @@ component WarnIcon inherits Rectangle {
     Text { x: 0; y: 4px; width: 100%; height: 14px; text: "!"; color: white; font-size: 11px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
 }
 
-// The clean-install slot in the bottom row; same one-line height as the checkbox row it replaces.
-// Patch update: the usual checkbox. Minor: checkbox + orange recommendation. Major: same in red, ticked by default.
+// The clean-install row, above the buttons. Every update shows the same checkbox and caption.
+// Minor: an orange recommendation under it. Major: the same in red, ticked by default.
 component CleanChoice inherits VerticalLayout {
     in property <string> en-text;
     in property <string> he-text;
     property <string> caption: Lang.en ? root.en-text : root.he-text;
     property <color> warn-color: Installer.update-kind == 2 ? #d92d20 : #e8820c;
+    property <string> warning: Installer.update-kind == 2
+        ? Lang.t("מומלץ להתקין התקנה נקייה: בגרסה החדשה יש שינויים גדולים, כדי שהכל יעבוד בצורה חלקה", "Clean install recommended: this version has big changes, and a fresh start keeps everything running smoothly")
+        : Lang.t("מומלץ להתקין התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
     horizontal-stretch: 1;
     alignment: center;
-    if Installer.update-kind == 0: CheckRow { text: root.caption; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
+    spacing: 2px;
+    CheckRow { text: root.caption; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
     if Installer.update-kind > 0: HorizontalLayout {
-        spacing: 8px;
-        if Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
-        VerticalLayout { alignment: center; WarnIcon { tint: root.warn-color; } }
+        spacing: 6px;
+        if Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: root.warn-color; } }
         Text {
             horizontal-stretch: 1;
             color: root.warn-color;
@@ -187,12 +191,9 @@ component CleanChoice inherits VerticalLayout {
             vertical-alignment: center;
             horizontal-alignment: Lang.start;
             wrap: word-wrap;
-            max-height: 32px;
-            text: Installer.update-kind == 2
-                ? Lang.t("מומלץ להתקין התקנה נקייה: בגרסה החדשה יש שינויים גדולים, כדי שהכל יעבוד בצורה חלקה", "Clean install recommended: this version has big changes, and a fresh start keeps everything running smoothly")
-                : Lang.t("מומלץ להתקין התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
+            text: root.warning;
         }
-        if !Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
+        if !Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: root.warn-color; } }
     }
 }
 
@@ -213,7 +214,7 @@ export component WelcomePage inherits VerticalLayout {
             clicked => { Installer.whats-new-back = Page.welcome; Installer.page = Page.whats-new; }
         }
     }
-    Rectangle { height: 12px; }
+    Rectangle { height: Installer.updating ? 6px : 12px; }
     // Reading order: add-in first (right in Hebrew, left in English).
     HorizontalLayout {
         alignment: center;
@@ -231,10 +232,13 @@ export component WelcomePage inherits VerticalLayout {
     // Bottom row. Already installed: a clean-install choice (above it a separator);
     // otherwise what will be installed.
     if Installer.updating: Divider { }
-    Rectangle { height: 10px; }
+    Rectangle { height: Installer.updating ? 6px : 10px; }
+    // Its own full-width row: the caption and the warning under it never squeeze the buttons.
+    if Installer.updating: CleanChoice { en-text: "Clean install (removes settings, caches and indexes first)"; he-text: "התקנה נקייה (מסיר קודם הגדרות, מטמון ואינדקסים)"; }
+    if Installer.updating: Rectangle { height: 6px; }
     HorizontalLayout {
         spacing: 8px;
-        if Lang.en && Installer.updating: CleanChoice { en-text: "Clean install (removes settings, caches and indexes first)"; he-text: ""; }
+        if Installer.updating: Rectangle { horizontal-stretch: 1; }
         if Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; vertical-alignment: center; wrap: word-wrap; }
         if Lang.en && Installer.addin-selected: Button { text: "Add-in options"; min-width: 100px; clicked => { Installer.addin-options-back = Page.welcome; Installer.page = Page.addin-options; } }
         if Lang.en && Installer.apps-selected: Button { text: "Options"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
@@ -242,7 +246,6 @@ export component WelcomePage inherits VerticalLayout {
         if !Lang.en: Button { text: Installer.updating ? "עדכן" : "התקן"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
         if !Lang.en && Installer.apps-selected: Button { text: "אפשרויות"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
         if !Lang.en && Installer.addin-selected: Button { text: "אפשרויות התוסף"; min-width: 100px; clicked => { Installer.addin-options-back = Page.welcome; Installer.page = Page.addin-options; } }
-        if !Lang.en && Installer.updating: CleanChoice { en-text: ""; he-text: "התקנה נקייה (מסיר קודם הגדרות, מטמון ואינדקסים)"; }
         if !Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; wrap: word-wrap; }
     }
 }
