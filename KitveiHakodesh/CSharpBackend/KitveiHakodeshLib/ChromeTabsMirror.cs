@@ -88,8 +88,8 @@ namespace KitveiHakodeshLib
         // snapshots of a page that has not caught up yet.
 
         /// <summary>
-        /// Lets the strip drag tabs off into new windows and onto other windows, with the host
-        /// moving the tabs (FluentChromeTabsForm.TabTornOff / TabDroppedFromOtherWindow).
+        /// Lets tabs be dragged out of the strip, with the host deciding where they go and
+        /// moving them (FluentChromeTabsForm.TabDragOutside).
         /// </summary>
         public void EnableTabMovesBetweenWindows()
         {

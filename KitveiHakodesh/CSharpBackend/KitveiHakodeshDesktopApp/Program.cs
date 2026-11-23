@@ -180,15 +180,18 @@ namespace KitveiHakodeshDesktopApp
         private static MainForm CreateWindow(string windowId, string initialRequest)
         {
             var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood };
-            form.Activated += (s, e) => { lock (EarlyRequestsLock) _activeWindow = form; };
+            form.Activated += (s, e) =>
+            {
+                lock (EarlyRequestsLock) _activeWindow = form;
+                OnWindowActivated(form);
+            };
             // Every close completes (AppViewer holds the first one only to save), so the
             // window stops being a target the moment it starts.
             form.FormClosing += (s, e) => OnWindowClosing(form);
             form.FormClosed += (s, e) => OnWindowClosed(form);
             // Tabs drag between windows and off into new ones; the pages move them (TabMoves).
             form.TabsMirror.EnableTabMovesBetweenWindows();
-            form.TabDroppedFromOtherWindow += (s, e) => OnTabDroppedFromOtherWindow(form, e);
-            form.TabTornOff += (s, e) => OnTabTornOff(form, e);
+            form.TabDragOutside += (s, e) => OnTabDragOutside(form, e);
             OpenWindows.Add(form);
             return form;
         }
@@ -198,6 +201,17 @@ namespace KitveiHakodeshDesktopApp
         // lowest number no open window has, so ids stay short however often windows come and go.
         // A torn-off tab's window passes `placeAt` (under the cursor) and the packed tab its
         // page starts with (`movedTab`, still being packed; see TabMoves).
+        /// <summary>The lowest window id no open window has, so ids stay short however often windows come and go.</summary>
+        private static string NextWindowId()
+        {
+            var used = new System.Collections.Generic.HashSet<string>();
+            foreach (MainForm open in OpenWindows) used.Add(open.WindowId);
+            string id;
+            int n = 1;
+            while (used.Contains(id = n.ToString(System.Globalization.CultureInfo.InvariantCulture))) n++;
+            return id;
+        }
+
         private static MainForm OpenNewWindow(MainForm openedFrom, string initialRequest = null,
             System.Drawing.Rectangle? placeAt = null, System.Threading.Tasks.Task<string> movedTab = null,
             System.Threading.Tasks.Task<System.Drawing.Image> movedTabPicture = null)
@@ -292,7 +306,7 @@ namespace KitveiHakodeshDesktopApp
         {
             var ids = new System.Collections.Generic.List<string>();
             foreach (MainForm open in OpenWindows)
-                if (!WindowsClosingForGood.Contains(open)) ids.Add(open.WindowId);
+                if (!WindowsClosingForGood.Contains(open) && !open.Prewarmed) ids.Add(open.WindowId);
             if (ids.Count == 0) return; // the last window keeps the list as it is
             try { AppSettingsRegistry.SetOpenWindowIds(ids); } catch { /* registry unwritable: next start opens one window */ }
         }

@@ -108,6 +108,7 @@ declare global {
     __khsPackTab?: (requestId: string, tabId: string) => 'pending'
     __khsUnpackTab?: (requestId: string, movedJson: string, position: number) => 'pending'
     __khsCloseMovedTab?: (tabId: string) => 'closed'
+    __khsKeepOnlyActiveTab?: () => 'closed'
     __khsArrivingTab?: ArrivingTab
   }
 }
@@ -129,6 +130,12 @@ export function installTabMoveHost(): void {
     postResult(requestId, Promise.resolve().then(() => unpackTab(JSON.parse(movedJson) as MovedTab, Number(position))))
   window.__khsCloseMovedTab = (tabId) => {
     closeMovedTab(String(tabId))
+    return 'closed'
+  }
+  // A window started ahead of a drop, now holding the dropped tab: its starter tab goes.
+  window.__khsKeepOnlyActiveTab = () => {
+    const tabStore = useTabStore()
+    for (const id of tabStore.tabs.map((t) => t.id)) if (id !== tabStore.activeTabId) tabStore.closeTab(id)
     return 'closed'
   }
 }

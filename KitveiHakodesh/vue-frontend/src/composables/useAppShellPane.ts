@@ -197,6 +197,7 @@ export function useAppShellPane() {
     openNewHomeTab,
     updateActiveTab,
     openOrUpdateActiveTab,
+    updateTab: (id: string, patch: Partial<Omit<Tab, 'id'>>) => tabStore.updateTab(id, patch),
     openBookTarget,
     navigateToDestination,
     goHome,

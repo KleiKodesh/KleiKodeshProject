@@ -43,6 +43,19 @@ namespace KitveiHakodeshLib
             return ParseTabId(result);
         }
 
+        private readonly TaskCompletionSource<bool> _pageReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once the page has mounted and can take requests ('appReady').</summary>
+        public Task PageReady => _pageReady.Task;
+
+        /// <summary>Closes every tab of this page but the active one. Fire and forget.</summary>
+        public void KeepOnlyActiveTab()
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
+            try { _ = _webView.CoreWebView2.ExecuteScriptAsync("window.__khsKeepOnlyActiveTab&&window.__khsKeepOnlyActiveTab()"); }
+            catch (Exception) { /* the page went away */ }
+        }
+
         /// <summary>Closes the source copy of a tab another window now has. Fire and forget.</summary>
         public void CloseMovedTab(string tabId)
         {

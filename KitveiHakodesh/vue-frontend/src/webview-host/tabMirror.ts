@@ -2,11 +2,14 @@ import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { computed, ref, watch } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
-import { rasterizeTabIcons } from './rasterizeTabIcons'
+import { rasterizeTabIcons, rasterizeWidgetTabIcons, widgetTabIconKey } from './rasterizeTabIcons'
+import { WIDGET_ITEMS, findWidgetItem } from '@/features/widgets/widgetItems'
+import type { WidgetId } from '@/features/widgets/widgetWindowStore'
 import { addinTabIconKey, rasterizeAddinTabIcons, rasterizeSiteTabIcons, siteTabIconKey } from './rasterizeSiteTabIcons'
 import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/websitesList'
-import { iconKeyForEntry } from '@/utils/documentIcons'
+import { iconKeyForEntry, isDocumentIconKey } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
+import { openWidgetTab } from '@/features/widgets/openWidgetTab'
 import {
   activateStripTab,
   closeStripTab,
@@ -69,9 +72,9 @@ export function initTabMirror(): void {
     lastRatio = ratio
     lastSiteCount = sites.length
     lastAddinPaths = addinKey
-    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites), rasterizeAddinTabIcons(addinPaths)]).then(([icons, siteIcons, addinIcons]) => {
+    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites), rasterizeAddinTabIcons(addinPaths), rasterizeWidgetTabIcons(WIDGET_ITEMS.filter((w) => !isDocumentIconKey(w.id)))]).then(([icons, siteIcons, addinIcons, widgetIcons]) => {
       siteIconKeys.value = new Set([...siteIcons, ...addinIcons].map((icon) => icon.key))
-      const all = [...icons, ...siteIcons, ...addinIcons]
+      const all = [...icons, ...siteIcons, ...addinIcons, ...widgetIcons]
       if (all.length) notifyTabIcons(all)
     })
   }
@@ -81,6 +84,18 @@ export function initTabMirror(): void {
   watch(openAddinPaths, sendTabIcons)
   // devicePixelRatio changes fire as a resize, not as their own event.
   window.addEventListener('resize', sendTabIcons)
+
+  /**
+   * A widget tab's icon: the widget's document icon (dictionary, calendar, units, a custom
+   * page's file), else its own (clock, zmanim, learning).
+   */
+  function widgetIconKeyFor(t: Tab): string | undefined {
+    if (t.route !== '/widget' || !t.widgetId) return undefined
+    if (isDocumentIconKey(t.widgetId)) return t.widgetId
+    const item = findWidgetItem(t.widgetId as WidgetId)
+    if (item?.custom) return 'html'
+    return widgetTabIconKey(t.widgetId)
+  }
 
   /** A website's or Otzaria addin's tab icon, once it is rasterized (else the route's globe / puzzle piece). */
   function siteIconKeyFor(t: Tab): string | undefined {
@@ -107,7 +122,7 @@ export function initTabMirror(): void {
         listTitle: listTitleFor(t),
         // Favicon key into the set pushed by sendTabIcons — same shared mapping
         // the in-page lists use, so the strip shows the identical glyph.
-        iconKey: siteIconKeyFor(t) ?? iconKeyForEntry(t),
+        iconKey: widgetIconKeyFor(t) ?? siteIconKeyFor(t) ?? iconKeyForEntry(t),
       })),
     activeTabId: tabStore.activeTabId,
   }))
@@ -135,6 +150,10 @@ export function initTabMirror(): void {
         break
       case 'chromeTabNewRequested':
         openNewStripTab()
+        break
+      case 'openWidgetAsTab':
+        // A widget window dropped on this window's tab strip (AppViewer.OpenWidgetAsTab).
+        if (typeof msg.widgetId === 'string') openWidgetTab(msg.widgetId)
         break
     }
   })

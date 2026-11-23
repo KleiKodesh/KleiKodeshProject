@@ -70,6 +70,7 @@ export type TabRoute =
   | '/websites'
   | '/web-view'
   | '/file-search'
+  | '/widget'
   | '/user-space'
   | '/user-space-search'
 
@@ -153,6 +154,8 @@ export interface Tab {
   isOtzariaAddin?: boolean
   /** Persisted — the address a /web-view tab shows (a site from public/websites.json). */
   webUrl?: string
+  /** Persisted — the widget a /widget tab shows (a widget window dragged onto the tab strip). */
+  widgetId?: string
 }
 
 /**
@@ -181,6 +184,7 @@ const IDENTITY_FIELDS = [
   'localFileName',
   'searchQuery',
   'webUrl',
+  'widgetId',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
@@ -260,6 +264,7 @@ const WATCHED_FIELDS = [
   'pdfViewerTitleBarVisible',
   'isOtzariaAddin',
   'webUrl',
+  'widgetId',
   'bookId',
   'searchQuery',
   'catalogQuery',

@@ -126,6 +126,11 @@ export function documentIcon(key: DocumentIconKey): DocumentIcon {
 }
 
 /** Every icon, for callers that need to enumerate (e.g. rasterizing the whole set). */
+/** Whether a string is one of the document icon keys. */
+export function isDocumentIconKey(key: string): key is DocumentIconKey {
+  return Object.prototype.hasOwnProperty.call(ICONS, key)
+}
+
 export function allDocumentIcons(): DocumentIcon[] {
   return Object.values(ICONS)
 }

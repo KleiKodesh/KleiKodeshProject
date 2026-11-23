@@ -115,6 +115,12 @@ namespace KitveiHakodeshLib
                             form.ClientSize.Width, form.ClientSize.Height);
                 };
                 form.FormClosed += (s, _) => popupView.Dispose();
+                // A widget window let go over one of our tab strips becomes a tab there; a
+                // commentary pop-out let go over its own window's strip goes back into its book.
+                bool isWidget = name.StartsWith(WidgetWindowPrefix, StringComparison.Ordinal);
+                bool isCommentary = name.StartsWith(CommentaryWindowPrefix, StringComparison.Ordinal);
+                if (isWidget || isCommentary)
+                    HandleDropOnStrip(form, isWidget ? name.Substring(WidgetWindowPrefix.Length) : null);
 
                 e.NewWindow = popupView.CoreWebView2;
                 e.Handled = true;
@@ -128,6 +134,71 @@ namespace KitveiHakodeshLib
             {
                 deferral.Complete();
             }
+        }
+
+        // The page names a widget's window "widget-<id>" (WidgetWindow.vue) and a commentary
+        // panel's "commentary-<n>-<slot>" (BookViewPage.vue).
+        private const string WidgetWindowPrefix = "widget-";
+        private const string CommentaryWindowPrefix = "commentary-";
+
+        /// <summary>
+        /// Lets a pop-out window be dropped onto a tab strip: while it is moved, the strip under
+        /// the cursor is outlined; on release there, a widget (<paramref name="widgetId"/> set)
+        /// opens as a tab in that window, and a commentary pop-out (null) closes - which docks
+        /// the panel back into its book. A commentary panel belongs to this viewer's book, so
+        /// only this viewer's own strip takes it.
+        /// </summary>
+        private void HandleDropOnStrip(Form popup, string widgetId)
+        {
+            FluentChromeTabs.FluentChromeTabsForm hinted = null;
+            Action<FluentChromeTabs.FluentChromeTabsForm> hint = target =>
+            {
+                if (hinted == target) return;
+                if (hinted != null && !hinted.IsDisposed) hinted.DropHintVisible = false;
+                hinted = target;
+                if (hinted != null) hinted.DropHintVisible = true;
+            };
+            Func<FluentChromeTabs.FluentChromeTabsForm> stripUnderCursor = () =>
+            {
+                var strip = FluentChromeTabs.FluentChromeTabsForm.FormWithStripAt(Cursor.Position, popup.Handle);
+                if (strip == null) return null;
+                AppViewer viewer = ViewerIn(strip);
+                if (viewer == null) return null;
+                return widgetId != null || viewer == this ? strip : null;
+            };
+
+            Point placeBeforeMove = Point.Empty;
+            bool moving = false;
+            popup.ResizeBegin += (s, _) => { placeBeforeMove = popup.Location; moving = true; };
+            popup.Move += (s, _) => { if (moving) hint(stripUnderCursor()); };
+            popup.FormClosed += (s, _) => hint(null);
+            popup.ResizeEnd += (s, _) =>
+            {
+                moving = false;
+                hint(null);
+                if (popup.Location == placeBeforeMove) return; // a resize, not a move
+                var strip = stripUnderCursor();
+                if (strip == null) return;
+                if (widgetId != null) ViewerIn(strip).OpenWidgetAsTab(widgetId);
+                strip.Activate();
+                popup.Close();
+            };
+        }
+
+        /// <summary>Opens a widget (by its id) as a tab of this viewer's page: a widget window was dropped on its strip.</summary>
+        public void OpenWidgetAsTab(string widgetId)
+            => _bridge?.PushEvent(new { @event = "openWidgetAsTab", widgetId });
+
+        // The viewer that fills a window, if any.
+        private static AppViewer ViewerIn(Control parent)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                if (child is AppViewer viewer) return viewer;
+                AppViewer nested = ViewerIn(child);
+                if (nested != null) return nested;
+            }
+            return null;
         }
 
         // Reachable if a reasonable part of its title bar is on some screen.

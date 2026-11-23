@@ -24,7 +24,7 @@ const pageKey = computed(() => {
   }
   // Home is keyed for the same reason: its search box is a local ref, so without a
   // key two home tabs in a pane share one typed query (the component never remounts).
-  if (r === '/' || r === '/search') return activeTabId.value
+  if (r === '/' || r === '/search' || r === '/widget') return activeTabId.value
   // FastDocView reads its file once at setup: another file on the same tab remounts it.
   if (r === '/fast-doc-view') return `${activeTabId.value}:${activeTab.value.localFilePath ?? ''}`
   return undefined
@@ -47,6 +47,7 @@ const pages: Record<string, unknown> = {
   '/file-search': defineAsyncComponent(() => import('@/features/local-file-search/LocalFileSearchPage.vue')),
   '/user-space': defineAsyncComponent(() => import('@/features/user-space/UserSpacePage.vue')),
   '/user-space-search': defineAsyncComponent(() => import('@/features/user-space/UserSpaceSearchPage.vue')),
+  '/widget': defineAsyncComponent(() => import('@/features/widgets/WidgetTabPage.vue')),
 }
 </script>
 

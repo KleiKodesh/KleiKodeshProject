@@ -18,49 +18,6 @@ namespace KitveiHakodeshDesktopApp
         // period, and only after the hand-over has finished.
         private static readonly HashSet<MainForm> WindowsEmptiedByMove = new HashSet<MainForm>();
 
-        // ── Strip events ───────────────────────────────────────────────────────────
-
-        private static void OnTabDroppedFromOtherWindow(MainForm target, FluentTabDroppedEventArgs e)
-        {
-            target.TabsMirror.HoldArrivingLabel(e.Tab);
-            var source = e.Origin as MainForm;
-            if (source == null || source.IsDisposed || !(e.Tab.Tag is string tabId))
-            {
-                target.TabsMirror.SettleArrivingLabel(e.Tab, null);
-                return;
-            }
-            _ = MoveTabToWindowAsync(source, tabId, target, e.Position, e.Tab);
-        }
-
-        private static void OnTabTornOff(MainForm current, FluentTabTornOffEventArgs e)
-        {
-            var source = e.Origin as MainForm;
-            // The label left `current`'s strip; when it was carried over from another
-            // window, that strip simply drops it.
-            if (current != source) current.TabsMirror.Resync();
-            if (source == null || source.IsDisposed || !(e.Tab.Tag is string tabId))
-            {
-                source?.TabsMirror.Resync();
-                return;
-            }
-
-            // The window's only tab: the window itself goes with the cursor, no copy.
-            if (source.TabsMirror.PageTabCount <= 1)
-            {
-                source.TabsMirror.Resync();
-                if (source.WindowState != System.Windows.Forms.FormWindowState.Normal)
-                    source.WindowState = System.Windows.Forms.FormWindowState.Normal;
-                source.Location = e.SuggestedBounds.Location;
-                source.Activate();
-                ExpectTabDragMove(source);
-                source.BeginWindowMoveWithCursor();
-                TabDragMoveReturned(source);
-                return;
-            }
-
-            TearOffTab(source, tabId, e.SuggestedBounds, e.Tab.Title, followCursor: true);
-        }
-
         // ── Moves ─────────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -92,12 +49,12 @@ namespace KitveiHakodeshDesktopApp
         }
 
         /// <summary>
-        /// Opens a tab of <paramref name="source"/> in a new window at <paramref name="bounds"/>.
-        /// The window shows at once (with <paramref name="followCursor"/> the pressed mouse
-        /// button keeps moving it); its page starts with the tab, packed meanwhile. Completes
-        /// with the new window once the tab is there, or null (window closed, tab stays).
+        /// Opens a tab of <paramref name="source"/> in a new window at <paramref name="bounds"/>
+        /// and returns that window. It shows at once, with the tab's picture until its page
+        /// has drawn the tab (packed meanwhile). Should the tab never arrive, the window closes
+        /// again and the tab stays where it was.
         /// </summary>
-        internal static Task<MainForm> TearOffTab(MainForm source, string tabId, Rectangle bounds, string title, bool followCursor)
+        internal static MainForm TearOffTab(MainForm source, string tabId, Rectangle bounds, string title)
         {
             source.TabsMirror.HoldDepartingTab(tabId);
             source.TabsMirror.Resync();
@@ -112,16 +69,8 @@ namespace KitveiHakodeshDesktopApp
             label.Tag = null;
             window.TabsMirror.HoldArrivingLabel(label);
 
-            Task<MainForm> finished = FinishTearOffAsync(source, tabId, window, label);
-            // Last: the native move runs a modal loop until the button is released, and the
-            // hand-over above continues inside it.
-            if (followCursor)
-            {
-                ExpectTabDragMove(window);
-                window.BeginWindowMoveWithCursor();
-                TabDragMoveReturned(window);
-            }
-            return finished;
+            _ = FinishTearOffAsync(source, tabId, window, label);
+            return window;
         }
 
         private static async Task<MainForm> FinishTearOffAsync(MainForm source, string tabId, MainForm window, FluentTab label)
@@ -191,7 +140,7 @@ namespace KitveiHakodeshDesktopApp
                 if (source != null && parts.Length > 1)
                 {
                     var at = new Rectangle(source.Left + 60, source.Top + 60, source.Width, source.Height);
-                    _ = Program.TearOffTab(source, parts[1], at, source.TabsMirror.TitleOf(parts[1]), followCursor: false);
+                    Program.TearOffTab(source, parts[1], at, source.TabsMirror.TitleOf(parts[1]));
                 }
                 return true;
             }

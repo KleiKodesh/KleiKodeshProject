@@ -362,6 +362,7 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { });
             _appReady = true;
+            _pageReady.TrySetResult(true);
             // The page has applied the launch files at boot; a reload must not open them again.
             if (_startupEventsScriptId != null)
             {

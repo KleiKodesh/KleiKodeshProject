@@ -21,7 +21,8 @@ import { allDocumentIcons, type DocumentIconKey } from '@/utils/documentIcons'
 const ICON_LOGICAL_PX = 16
 
 export interface RasterizedIcon {
-  key: DocumentIconKey
+  /** A document icon key, or a widget's (widgetTabIconKey). */
+  key: DocumentIconKey | `widget:${string}`
   /** PNG data URI at the current device pixel ratio. */
   png: string
 }
@@ -117,6 +118,33 @@ function svgToPng(svgText: string, devicePx: number): Promise<string | null> {
  * Rasterize every shared icon at the current device pixel ratio.
  * Returns only the ones that rendered — a failure just means that tab shows no icon.
  */
+/** The strip key of a widget's own icon (a widget with no document icon of its own). */
+export function widgetTabIconKey(widgetId: string): `widget:${string}` {
+  return `widget:${widgetId}`
+}
+
+/**
+ * The icons of the widgets that have one of their own (the world clock, zmanim, daily
+ * learning), under widgetTabIconKey - for a widget dropped on the strip as a tab.
+ */
+export async function rasterizeWidgetTabIcons(widgets: { id: string; icon: Component; color: string | undefined }[]): Promise<RasterizedIcon[]> {
+  const devicePx = Math.max(16, Math.round(ICON_LOGICAL_PX * (window.devicePixelRatio || 1)))
+  const out: RasterizedIcon[] = []
+  for (const widget of widgets) {
+    const rendered = renderIconSvg(widget.icon, widget.color ?? 'currentColor')
+    if (!rendered) continue
+    let svgText: string
+    try {
+      svgText = serializeSvg(rendered.svg, devicePx)
+    } finally {
+      rendered.dispose()
+    }
+    const png = await svgToPng(svgText, devicePx)
+    if (png) out.push({ key: `widget:${widget.id}`, png })
+  }
+  return out
+}
+
 export async function rasterizeTabIcons(): Promise<RasterizedIcon[]> {
   const devicePx = Math.max(16, Math.round(ICON_LOGICAL_PX * (window.devicePixelRatio || 1)))
   const out: RasterizedIcon[] = []
