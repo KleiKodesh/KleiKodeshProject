@@ -1,0 +1,14 @@
+User-facing: new - Open file: Word documents are shown at the width of their own pages, section by section
+User-facing-he: מסמכי וורד מוצגים ברוחב העמודים שלהם, קטע אחר קטע
+User-facing: new - Open file: the table of contents can be resized and searched
+User-facing-he: אפשר לשנות את גודל תוכן העניינים ולחפש בו
+User-facing: new - Open file: clicking a footnote mark shows the footnote, and clicking the footnote's number returns to the text
+User-facing-he: לחיצה על ציון הערת שוליים מציגה את ההערה, ולחיצה על מספר ההערה חוזרת לטקסט
+User-facing: new - Open file: links inside a document, including table-of-contents entries and links to books, now work
+User-facing-he: קישורים בתוך מסמך, כולל שורות בתוכן העניינים וקישורים לספרים, עובדים
+User-facing: new - Open file: a button opens the document in the program that usually opens it
+User-facing-he: כפתור שפותח את המסמך בתוכנה שבדרך כלל פותחת אותו
+User-facing: improved - Open file: converting to PDF shows its progress on the button, which can cancel it and then opens the PDF when ready
+User-facing-he: ההמרה ל-PDF מציגה את ההתקדמות על הכפתור, שממנו אפשר לבטל אותה, ופותחת את ה-PDF כשהוא מוכן
+User-facing: fixed - Open file: empty lines at the end of a text file are shown when jumping to the end
+User-facing-he: שורות ריקות בסוף קובץ טקסט מוצגות בקפיצה לסוף
