@@ -2,7 +2,7 @@ import { ref, shallowRef, computed, onMounted } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
-import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
+import { OPTIONAL_ZMANIM, zmanLabelKey, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
 import { lsSet } from '@/utils/persistence'
 import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
 import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
@@ -161,7 +161,7 @@ export function useNextZman() {
     // the next zman is actually present to highlight).
     const fromTomorrow = !!n && cachedToday![n.key]?.time.getTime() !== nextTime
     const day = fromTomorrow && cachedTomorrow ? cachedTomorrow : cachedToday!
-    return ZMAN_ORDER.filter(({ key }) => !(ELEVATED_ZMANIM.has(key) && day[key] == null)).map(({ key, label }) => {
+    return ZMAN_ORDER.filter(({ key }) => !(OPTIONAL_ZMANIM.has(key) && day[key] == null)).map(({ key, label }) => {
       const zman = day[key]
       const t = zman?.time
       return {

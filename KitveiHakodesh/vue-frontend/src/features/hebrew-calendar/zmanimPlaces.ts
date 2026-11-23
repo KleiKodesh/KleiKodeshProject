@@ -4,7 +4,7 @@
 // are read on first need: names only when a picker opens, the coordinates when zmanim
 // are first computed.
 import {
-  configure, epochMs, formatTime, getPlace, listPlaces, nearestPlaceId, placeTree as libraryPlaceTree, ROUNDING, searchPlaces,
+  configure, epochMs, formatTime, getPlace, getTerrainHorizon, listPlaces, nearestPlaceId, placeTree as libraryPlaceTree, ROUNDING, searchPlaces,
   toCivilDate, ZMAN_NAMES, zmanInstants, type Lang, type Place, type PlaceOption, type PlaceTree, type ZmanName,
 } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
@@ -36,21 +36,27 @@ export function findPlaces(query: string): Promise<Array<{ id: number, name: str
   return searchPlaces(query, lang, Number.MAX_SAFE_INTEGER)
 }
 
+/** A place with its terrain horizon attached (for the terrain sunrise/sunset lines; null where it has none). */
+async function withTerrain(place: Place): Promise<Place> {
+  const terrainHorizon = await getTerrainHorizon(place.id).catch(() => null)
+  return { ...place, terrainHorizon }
+}
+
 /** The saved place, or Jerusalem when nothing valid is saved (older versions saved a name). */
 export async function loadPlace(saved: unknown): Promise<Place> {
   if (typeof saved === 'number' && Number.isInteger(saved) && saved > 0) {
     try {
-      return await getPlace(saved)
+      return await withTerrain(await getPlace(saved))
     } catch {
       // An id this place list does not have: fall back below.
     }
   }
-  return getPlace(JERUSALEM_ID)
+  return withTerrain(await getPlace(JERUSALEM_ID))
 }
 
 /** The listed place nearest to a point. */
 export async function nearestPlace(lat: number, lng: number): Promise<Place> {
-  return getPlace(await nearestPlaceId(lat, lng))
+  return withTerrain(await getPlace(await nearestPlaceId(lat, lng)))
 }
 
 /** The three-step place picker (country > city > neighbourhood) in the UI language; the library sorts each list on first ask. */

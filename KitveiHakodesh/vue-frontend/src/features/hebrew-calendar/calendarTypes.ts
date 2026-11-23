@@ -10,6 +10,9 @@ export const zmanLabelKey = (name: ZmanName): string => `hebrewCalendar.zmanim.$
 /** Zmanim seen from the place's height; null (and hidden) where the place is not above sea level. */
 export const ELEVATED_ZMANIM: ReadonlySet<string> = new Set(['sunriseElevated', 'sunsetElevated'])
 
+/** Lines hidden (not shown as "not reached") when null: the elevated ones, and the terrain ones for a place without terrain data. */
+export const OPTIONAL_ZMANIM: ReadonlySet<string> = new Set([...ELEVATED_ZMANIM, 'sunriseTerrain', 'sunsetTerrain'])
+
 export interface CalendarDay {
   date: Date
   dayOfWeek: number // 0=Sun … 6=Sat

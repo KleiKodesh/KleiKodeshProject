@@ -5,7 +5,7 @@ const { t } = useI18n()
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import ZmanimDisclaimer from './ZmanimDisclaimer.vue'
 import { usePrimaryZmanNames } from './zmanimCommunity'
-import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
+import { OPTIONAL_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
 import { useDailyLearningOpener } from '@/features/home/useHomeDailyLearning'
@@ -31,7 +31,7 @@ const ZMANIM_ROWS = ZMAN_NAMES.map((key) => ({ key, label: t(zmanLabelKey(key)) 
 const primaryZmanNames = usePrimaryZmanNames()
 /** The community's primary lines first (their group order), then every other line. */
 const zmanRows = computed(() => {
-  const shown = ZMANIM_ROWS.filter((r) => !(ELEVATED_ZMANIM.has(r.key) && props.day.zmanim[r.key] == null))
+  const shown = ZMANIM_ROWS.filter((r) => !(OPTIONAL_ZMANIM.has(r.key) && props.day.zmanim[r.key] == null))
   const primary = primaryZmanNames.value.flatMap((name) => shown.filter((r) => r.key === name))
   return { primary, other: shown.filter((r) => !primary.includes(r)) }
 })
