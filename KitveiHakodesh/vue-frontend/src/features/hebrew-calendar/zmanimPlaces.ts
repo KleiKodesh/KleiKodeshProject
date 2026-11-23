@@ -4,7 +4,7 @@
 // are read on first need: names only when a picker opens, the coordinates when zmanim
 // are first computed.
 import {
-  configure, epochMs, formatTime, getPlace, listPlaceGeo, listPlaces, placeCount, ROUNDING, searchPlaces,
+  configure, epochMs, getMonthlyTemperatures, formatTime, getPlace, listPlaceGeo, listPlaces, placeCount, ROUNDING, searchPlaces,
   toCivilDate, ZMAN_NAMES, zmanInstants, type Lang, type Place, type ZmanName,
 } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
@@ -36,16 +36,25 @@ export function findPlaces(query: string): Promise<Array<{ id: number, name: str
   return searchPlaces(query, lang, Number.MAX_SAFE_INTEGER)
 }
 
+/**
+ * A place with its monthly mean temperatures attached, so sunrise and sunset use the same
+ * refraction as the library's zmanim(); without them the library falls back to the standard
+ * atmosphere and can print a minute off.
+ */
+async function withClimate(place: Place): Promise<Place> {
+  return { ...place, monthlyTemperatureC: await getMonthlyTemperatures(place.id) } as Place
+}
+
 /** The saved place, or Jerusalem when nothing valid is saved (older versions saved a name). */
 export async function loadPlace(saved: unknown): Promise<Place> {
   if (typeof saved === 'number' && Number.isInteger(saved) && saved > 0) {
     try {
-      return await getPlace(saved)
+      return await withClimate(await getPlace(saved))
     } catch {
       // An id this place list does not have: fall back below.
     }
   }
-  return getPlace(JERUSALEM_ID)
+  return withClimate(await getPlace(JERUSALEM_ID))
 }
 
 /** The listed place nearest to a point. */
@@ -59,7 +68,7 @@ export async function nearestPlace(lat: number, lng: number): Promise<Place> {
     const distance = (place.lat - lat) ** 2 + (place.lng - lng) ** 2
     if (distance < bestDistance) { bestDistance = distance; best = place }
   }
-  return best
+  return withClimate(best)
 }
 
 /** A name with what it stands for: a country (ISO code) or a place (id). */
