@@ -155,6 +155,21 @@ namespace KitveiHakodeshLib
             e.Frame.NavigationStarting += (s, args) => OnSiteFrameNavigationStarting(name, args);
         }
 
+        /// <summary>
+        /// A page inside the app (a Torah website such as Hameshiv, in a frame or a popup) follows
+        /// an otzaria:// / zayit:// / our own book link: open it here, not in the other app.
+        /// Hooked on the main view and on every popup view.
+        /// </summary>
+        internal void OnLaunchingExternalUriScheme(object sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
+        {
+            HostLink link = HostLink.TryParse(e.Uri);
+            if (link == null) return; // mailto:, other apps - Windows' usual prompt
+            e.Cancel = true;
+            Log("external link opened in the app: " + e.Uri);
+            if (InvokeRequired) BeginInvoke((Action)(() => OpenBookFromHost(link)));
+            else OpenBookFromHost(link);
+        }
+
         private void OnSiteFrameNavigationStarting(string name, CoreWebView2NavigationStartingEventArgs e)
         {
             if (_webSites == null) return;

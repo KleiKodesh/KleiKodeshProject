@@ -18,6 +18,14 @@ namespace KitveiHakodeshLib
     {
         private async void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
+            // A library-app link opened as a new window (target=_blank): open the book here.
+            HostLink bookLink = HostLink.TryParse(e.Uri);
+            if (bookLink != null)
+            {
+                e.Handled = true;
+                OpenBookFromHost(bookLink);
+                return;
+            }
             var features = e.WindowFeatures;
             // A plain new-window link inside a Torah website: a whitelisted address opens as an app
             // tab, anything else in the system browser - never a bare browser window over the app.
@@ -92,6 +100,7 @@ namespace KitveiHakodeshLib
                 popupView.CoreWebView2.DocumentTitleChanged += (s, _) =>
                     form.Text = popupView.CoreWebView2.DocumentTitle;
                 popupView.CoreWebView2.WindowCloseRequested += (s, _) => form.Close();
+                popupView.CoreWebView2.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 form.FormClosing += (s, _) =>
                 {
                     if (name.Length == 0 || form.WindowState != FormWindowState.Normal) return;

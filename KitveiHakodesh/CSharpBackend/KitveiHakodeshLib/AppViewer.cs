@@ -858,6 +858,7 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             _webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
 
+            _webView.CoreWebView2.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
             _webView.Source = new Uri("http://kitveihakodesh-app/index.html");
 
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
@@ -921,6 +922,7 @@ namespace KitveiHakodeshLib
                     _webView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
                     _webView.CoreWebView2.NewWindowRequested -= OnNewWindowRequested;
                     // OnNavigationCompleted stays subscribed for the WebView2's whole lifetime —
+                    _webView.CoreWebView2.LaunchingExternalUriScheme -= OnLaunchingExternalUriScheme;
                     // it is what restores the app shell when a navigation off it fails — so this
                     // is the only place it comes off.
                     _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
