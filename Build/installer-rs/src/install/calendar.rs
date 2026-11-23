@@ -15,8 +15,9 @@ const SHORTCUT: Text = Text::new("לוח שנה כתבי הקודש", "Kitvei Ha
 const SHORTCUT_NAMES: [&str; 2] = [SHORTCUT.he, SHORTCUT.en];
 const PAGE: &str = "calendar.html";
 const ICON: &str = "calendar.ico";
-/// A green calendar (the app's calendar color), written beside the page so the shortcut
-/// shows it instead of Edge's.
+/// A purple calendar (the typing tutor icon's purple), written beside the page so the
+/// shortcut shows it instead of Edge's. calendar.html carries the same icon inline, which
+/// is what the taskbar shows for the open window.
 const ICON_BYTES: &[u8] = include_bytes!("../../assets/calendar.ico");
 
 pub fn page(layout: &Layout) -> PathBuf {
