@@ -20,7 +20,7 @@ namespace KitveiHakodeshService.Http;
 ///   • <see cref="OwnerWatcher"/> checks every few seconds which owners are still alive (a host
 ///     that crashed never releases) and stops the service when none is left.
 /// Never in the middle of long-running work - an index build (FTS, catalog, file index), an
-/// update download, a HebrewBooks catalog walk: each would only restart from scratch on the
+/// update download: each would only restart from scratch on the
 /// next start, so the stop waits until they are done. A service that never had an owner (started by the installer to build the
 /// indexes) stops once it has been idle for <see cref="OwnerlessIdleLimit"/>. In service mode
 /// stopping the data host stops the service (Hosting/UserSessionBinding); the SCM shows it
@@ -32,7 +32,6 @@ public sealed class OwnerRegistry(
     CatalogTocSearchService catalogToc,
     LocalFileIndexService localFiles,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
-    KitveiHakodeshService.HebrewBooks.HebrewBooksCatalogUpdateService hebrewBooksCatalog,
     KitveiHakodeshService.SeforimDb.SeforimLibraryDownloadService libraryDownload,
     ILogger<OwnerRegistry> logger)
 {
@@ -130,7 +129,6 @@ public sealed class OwnerRegistry(
         : catalogToc.IsBusy ? "catalog index"
         : localFiles.IsBusy ? "local-file index"
         : updater.IsBusy ? "update check"
-        : hebrewBooksCatalog.IsBusy ? "HebrewBooks catalog walk"
         : libraryDownload.IsBusy ? "library download"
         : null;
 

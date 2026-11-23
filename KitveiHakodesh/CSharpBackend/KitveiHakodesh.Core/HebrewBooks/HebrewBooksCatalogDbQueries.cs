@@ -14,7 +14,8 @@ namespace KitveiHakodesh.Core.HebrewBooks
     /// local file and fetching over the network are not the same work.
     ///
     /// Schema: hebrewBooks(id, title, author, placeOfPublication, year, pageCount, categories)
-    /// plus a one-row _metadata table the updater stamps. Opened read-only.
+    /// plus a one-row _metadata table. Opened read-only. Kept current by the private
+    /// KleiKodesh/HebrewBooksCatalog repo, whose monthly workflow commits the refreshed file here.
     ///
     /// The one statement is built per query from the caller's word count, so it stays inline
     /// rather than in a strings file (project rule 5).
@@ -34,10 +35,6 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// </summary>
         private const string SearchExpression =
             "lower(coalesce(title,'') || ' ' || coalesce(author,'') || ' ' || coalesce(categories,''))";
-
-        private const string MaxIdSql = "SELECT COALESCE(MAX(id), 0) FROM hebrewBooks";
-
-        private const string ReadMetadataSql = "SELECT value FROM _metadata WHERE key = @key";
 
         private readonly string _databasePath;
 
@@ -148,32 +145,6 @@ namespace KitveiHakodesh.Core.HebrewBooks
             }
 
             return normalized.ToString().Trim();
-        }
-
-        /// <summary>The highest book id in the catalog, or 0 when it is empty. The updater
-        /// resumes its walk from here.</summary>
-        public int MaxBookId()
-        {
-            if (!IsAvailable) return 0;
-
-            using var connection = SqliteConnectionFactory.OpenCorpusRead(_databasePath);
-            using var command = connection.CreateCommand();
-            command.CommandText = MaxIdSql;
-            object? value = command.ExecuteScalar();
-            return value == null || value is DBNull ? 0 : Convert.ToInt32(value);
-        }
-
-        /// <summary>Reads a value from the catalog's _metadata table, or null if absent.</summary>
-        public string? ReadMetadata(string key)
-        {
-            if (!IsAvailable) return null;
-
-            using var connection = SqliteConnectionFactory.OpenCorpusRead(_databasePath);
-            using var command = connection.CreateCommand();
-            command.CommandText = ReadMetadataSql;
-            command.Parameters.AddWithValue("@key", key);
-            object? value = command.ExecuteScalar();
-            return value == null || value is DBNull ? null : Convert.ToString(value);
         }
     }
 }

@@ -111,12 +111,6 @@ internal static partial class Program
         // Singleton too, so the diagnostics endpoint can trigger a trim on the same instance.
         builder.Services.AddSingleton<IdleMemoryTrimmer>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleMemoryTrimmer>());
-        // Grows the bundled HebrewBooks catalog in the background. Checks twice a day and almost
-        // always finds nothing to do - the interval between actual walks is a stamp inside the
-        // catalog file, not a schedule here.
-        // Singleton too, so the owner watcher can see a walk in progress (Http/OwnerWatcher).
-        builder.Services.AddSingleton<HebrewBooksCatalogUpdateService>();
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<HebrewBooksCatalogUpdateService>());
         // Downloads Otzaria's library when none is installed, and resumes a pending download on
         // start. Singleton too, so the owner watcher can see a download in progress.
         builder.Services.AddSingleton<SeforimLibraryDownloadService>();
