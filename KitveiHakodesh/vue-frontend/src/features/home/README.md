@@ -28,7 +28,7 @@ Folders get **half** the dynamic tile budget (rounded down) or `MAX_FOLDER_CARDS
 
 **useHomeSearchNavigation.ts** — turns a dropdown selection or a recently-opened tile into a navigation. Owns all four `onSelect*` handlers (catalog book, catalog TOC entry, HebrewBooks book, local file), `openRecentEntry`, and `openFullTextSearch`. Every handler honours Ctrl/⌘-click for open-in-new-tab. This is the only file in the feature that touches `tabStore` / `localFileStore` / the bridge.
 
-**HomePageDateBar.vue** — the bottom bar: clock, nearest zman, Hebrew date and daily learning. Each item toggles its widget window (world clock, zmanim, calendar, daily learning - see features/widgets). The Hebrew date rolls over at צאת הכוכבים rather than civil midnight, reusing `useNextZman`'s tzeit as the single source of truth.
+**HomePageDateBar.vue** — the bottom bar: clock, nearest zman, Hebrew date and daily learning, each opening its own in-app dropdown (world clock: HomeWorldClockDropdown; month: HomeCalendarPopup, whose "open full" opens the calendar widget). The Hebrew date rolls over at צאת הכוכבים rather than civil midnight, reusing `useNextZman`'s tzeit as the single source of truth.
 
 **useHomeDateBarFit.ts** — keeps the date bar on one line by dropping optional items by priority (clock first, then the zman) instead of wrapping. Handles resizes itself; call `remeasure()` when the bar's *content* changes.
 
@@ -38,7 +38,7 @@ Folders get **half** the dynamic tile budget (rounded down) or `MAX_FOLDER_CARDS
 
 **homeDailyLearningBookMatch.ts** — pure: spelling-folded title match that prefers the base text over its commentaries, and the TOC path walk.
 
-**useNextZman.ts** / **NextZmanPopup.vue** — nearest-zman computation (date bar) and the all-times list (the zmanim widget).
+**useNextZman.ts** / **NextZmanPopup.vue** — nearest-zman computation and the all-times list (date-bar popup and the zmanim widget).
 
 ## Search bar wiring
 

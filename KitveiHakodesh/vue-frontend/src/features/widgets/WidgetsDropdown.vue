@@ -71,7 +71,10 @@ function onRemove(id: CustomWidgetId) {
       @click="onTap(index)"
     >
       <span class="widgets-icon"><component :is="item.icon" :style="item.color ? { color: item.color } : {}" /></span>
-      <span class="widgets-label">{{ item.text }}</span>
+      <span class="widgets-text">
+        <span class="widgets-label">{{ item.text }}</span>
+        <span v-if="item.subtitle" class="widgets-subtitle">{{ item.subtitle }}</span>
+      </span>
       <span v-if="item.shortcut" class="widgets-shortcut">{{ item.shortcut }}</span>
       <span
         v-if="item.custom"
@@ -115,8 +118,8 @@ function onRemove(id: CustomWidgetId) {
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 32px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 4px 10px;
   background: none;
   border: none;
   cursor: pointer;
@@ -127,7 +130,9 @@ function onRemove(id: CustomWidgetId) {
 .widgets-row--open { border-inline-start: 3px solid var(--accent-color, #3478f6); padding-inline-start: 7px; }
 .widgets-icon { display: flex; align-items: center; color: var(--text-primary); }
 .widgets-icon svg { width: 18px; height: 18px; }
-.widgets-label { flex: 1; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widgets-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.widgets-label { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widgets-subtitle { font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .widgets-shortcut { font-size: 11px; color: var(--text-secondary); direction: ltr; }
 .widgets-remove {
   display: flex;

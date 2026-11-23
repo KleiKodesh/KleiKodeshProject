@@ -20,13 +20,15 @@ const props = defineProps<{
   name: string
   title: string
   width?: number
+  /** Never reopen narrower than this, whatever width was saved. */
+  minWidth?: number
   height?: number
 }>()
 
 const emit = defineEmits<{ closed: []; blocked: [] }>()
 
 const handle = openDetachedWindow(
-  { name: props.name, title: props.title, width: props.width ?? WIDGET_WINDOW_SIZE.width, height: props.height ?? WIDGET_WINDOW_SIZE.height },
+  { name: props.name, title: props.title, width: props.width ?? WIDGET_WINDOW_SIZE.width, height: props.height ?? WIDGET_WINDOW_SIZE.height, minWidth: props.minWidth },
   () => emit('closed'),
 )
 

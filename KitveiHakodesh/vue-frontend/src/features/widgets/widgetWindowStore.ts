@@ -29,11 +29,18 @@ export interface WidgetWindowState {
 }
 
 /**
- * A widget window's first size (the calendar's, which suits every tool); also the size
+ * A widget window's first size (suits the small tools); also the size
  * of a panel moved to its own window (DetachedWindow). After that the host keeps the
  * size the user gives it.
  */
 export const WIDGET_WINDOW_SIZE = { width: 440, height: 560 }
+/**
+ * The extended calendar: today's zmanim and daily learning beside it. Off for now (they
+ * are widgets of their own); flip to turn it on. The calendar window then opens wide
+ * enough for both and never reopens too narrow for them.
+ */
+export const CALENDAR_EXTENDED = false
+const CALENDAR_EXTENDED_SIZE = { width: 820, height: 600, minWidth: 820 }
 /** A user-added widget is a whole web page (an Otzaria add-in): it starts larger, at the installer window's size. */
 const CUSTOM_SIZE = { width: 640, height: 460 }
 
@@ -85,7 +92,8 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 })
 
 /** The size a widget's window first opens at; after that the host keeps the user's. */
-export function widgetWindowSize(id: WidgetId): { width: number; height: number } {
+export function widgetWindowSize(id: WidgetId): { width: number; height: number; minWidth?: number } {
+  if (id === 'calendar' && CALENDAR_EXTENDED) return CALENDAR_EXTENDED_SIZE
   return id.startsWith('custom:') ? CUSTOM_SIZE : WIDGET_WINDOW_SIZE
 }
 

@@ -3,7 +3,7 @@ import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled }
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
 import type { TabRoute } from '@/stores/tabStore'
-import { useWidgetWindowStore, type WidgetId, type CustomWidget } from './widgetWindowStore'
+import { useWidgetWindowStore, CALENDAR_EXTENDED, type WidgetId, type CustomWidget } from './widgetWindowStore'
 
 export interface WidgetItem {
   id: WidgetId
@@ -11,6 +11,8 @@ export interface WidgetItem {
   route: TabRoute
   text: string
   description: string
+  /** What else the widget shows, listed under its name in the menu. */
+  subtitle?: string
   icon: Component
   color: string | undefined
   shortcut: string
@@ -22,10 +24,13 @@ export interface WidgetItem {
 }
 
 /** A former tab page (dictionary, calendar, halachic units): text and icon shared with the nav tables. */
-function pageWidget(id: WidgetId & DocumentIconKey, shortcut: string, page: Component): WidgetItem {
+function pageWidget(
+  id: WidgetId & DocumentIconKey, shortcut: string, page: Component,
+  extra?: Pick<WidgetItem, 'subtitle' | 'props'>,
+): WidgetItem {
   const icon = documentIcon(id)
   return {
-    id, route: '/', shortcut, page,
+    id, route: '/', shortcut, page, ...extra,
     text: t(`layout.nav.${id}.label`),
     description: t(`layout.nav.${id}.description`),
     icon: icon.icon24,
@@ -34,7 +39,7 @@ function pageWidget(id: WidgetId & DocumentIconKey, shortcut: string, page: Comp
 }
 
 /** A widget born from the home date bar. */
-function barWidget(id: WidgetId, icon: Component, color: string, shortcut: string, page: Component): WidgetItem {
+function barWidget(id: 'worldClock' | 'zmanim' | 'learning', icon: Component, color: string, shortcut: string, page: Component): WidgetItem {
   return {
     id, route: '/', shortcut, page, icon, color,
     text: t(`layout.widgets.${id}.label`),
@@ -45,7 +50,10 @@ function barWidget(id: WidgetId, icon: Component, color: string, shortcut: strin
 /** The widgets & tools menu, in order. Ctrl+Shift+1..6 toggle them. */
 export const WIDGET_ITEMS: WidgetItem[] = [
   pageWidget('dict', 'Ctrl+Shift+1', defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue'))),
-  pageWidget('calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue'))),
+  pageWidget('calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue')),
+    CALENDAR_EXTENDED
+      ? { props: { extended: true }, subtitle: `${t('layout.widgets.zmanim.label')} · ${t('layout.widgets.learning.label')}` }
+      : undefined),
   pageWidget('ruler', 'Ctrl+Shift+3', defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue'))),
   barWidget('worldClock', IconClock24Filled, '#2b88d8', 'Ctrl+Shift+4', defineAsyncComponent(() => import('./WorldClockWidget.vue'))),
   barWidget('zmanim', IconWeatherSunnyLow24Filled, '#e3a21a', 'Ctrl+Shift+5', defineAsyncComponent(() => import('./ZmanimWidget.vue'))),

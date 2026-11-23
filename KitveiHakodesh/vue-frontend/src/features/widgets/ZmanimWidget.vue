@@ -32,7 +32,6 @@ function onPick(e: Event) {
 </template>
 
 <style scoped>
-.zmanim-widget { overflow-y: auto; }
 .zw-city {
   display: block;
   width: calc(100% - 16px);
@@ -46,7 +45,7 @@ function onPick(e: Event) {
   cursor: pointer;
 }
 .zw-city:hover { border-color: var(--accent-color); }
-/* The popup's own frame goes: the widget window is the frame now. */
+/* The popup's own frame goes: the widget window (or the calendar's side column) is the frame. */
 .zmanim-widget :deep(.zman-popup) { border: none; box-shadow: none; border-radius: 0; max-height: none; }
 .zmanim-widget :deep(.zp-city) { display: none; }
 </style>

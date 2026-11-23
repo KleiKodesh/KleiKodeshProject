@@ -13,6 +13,11 @@ import { useMonthlyView } from './useMonthlyView'
 import CalendarHeader from './CalendarHeader.vue'
 import WeeklyView from './WeeklyView.vue'
 import MonthlyView from './MonthlyView.vue'
+import ZmanimWidget from '@/features/widgets/ZmanimWidget.vue'
+import DailyLearningWidget from '@/features/widgets/DailyLearningWidget.vue'
+
+/** The extended calendar: today's zmanim and daily learning beside it (CALENDAR_EXTENDED). */
+const props = defineProps<{ extended?: boolean }>()
 
 type ViewMode = 'weekly' | 'monthly'
 
@@ -70,8 +75,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <PageCard>
+  <div class="page" :class="{ 'page--extended': props.extended }">
+    <PageCard class="calendar-card">
           <CalendarHeader
             :view-mode="viewMode"
             :hebrew-label="
@@ -94,15 +99,54 @@ onMounted(() => {
           <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" class="calendar-view" />
           <MonthlyView v-else :monthly="monthly" class="calendar-view" />
     </PageCard>
+    <!-- Extended calendar: today's zmanim and daily learning beside it (below it in a narrow window). -->
+    <aside v-if="props.extended" class="calendar-side">
+      <section class="calendar-side-zmanim">
+        <ZmanimWidget />
+      </section>
+      <section class="calendar-side-learning">
+        <h3 class="calendar-side-title">{{ $t('layout.widgets.learning.label') }}</h3>
+        <DailyLearningWidget />
+      </section>
+    </aside>
   </div>
 </template>
 
 <style scoped>
 .page {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
   background: var(--bg-primary);
+}
+
+.calendar-card { flex: 1 1 auto; min-width: 0; }
+.calendar-side {
+  flex: 0 0 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-inline-start: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+/* Half each, each scrolling on its own. */
+.calendar-side-zmanim,
+.calendar-side-learning { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.calendar-side-learning { border-top: 1px solid var(--border-color); }
+.calendar-side-title {
+  margin: 0;
+  padding: 8px 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* Narrow window: zmanim and learning go under the calendar. */
+@media (max-width: 640px) {
+  .page--extended { flex-direction: column; overflow-y: auto; }
+  .page--extended .calendar-card { min-height: 420px; }
+  .calendar-side-zmanim,
+  .calendar-side-learning { flex: none; overflow: visible; }
+  .calendar-side { flex: none; border-inline-start: none; border-top: 1px solid var(--border-color); }
 }
 
 .calendar-view {

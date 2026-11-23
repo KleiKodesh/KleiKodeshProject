@@ -22,7 +22,7 @@ const entries = useHomeDailyLearningEntries()
 </template>
 
 <style scoped>
-.learning-widget { display: flex; flex-direction: column; padding: 6px; overflow-y: auto; }
+.learning-widget { display: flex; flex-direction: column; padding: 6px; }
 .learning-row {
   display: flex;
   justify-content: space-between;

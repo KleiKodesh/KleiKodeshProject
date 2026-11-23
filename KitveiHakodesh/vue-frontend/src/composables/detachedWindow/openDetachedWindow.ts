@@ -17,6 +17,8 @@ export interface DetachedWindowOptions {
   title: string
   width: number
   height: number
+  /** Never reopen narrower than this (CSS pixels), whatever width was saved. */
+  minWidth?: number
 }
 
 export interface DetachedWindowHandle {
@@ -54,6 +56,11 @@ export function openDetachedWindow(
   onClosedByUser: () => void,
 ): DetachedWindowHandle | null {
   const saved = lsGet<SavedBounds>(boundsKey(options.name))
+  if (saved && options.minWidth) {
+    // The host's saved numbers are device pixels; a browser's are CSS pixels.
+    const minWidth = isInHost() ? options.minWidth * window.devicePixelRatio : options.minWidth
+    saved.width = Math.max(saved.width, minWidth)
+  }
   // In the app the saved bounds travel in the window's name (the host reads them there);
   // in a browser they are ordinary window features.
   const popup = (isInHost()

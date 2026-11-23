@@ -56,6 +56,7 @@ function onBlocked() {
     :name="`widget-${win.id}`"
     :title="item.text"
     :width="size.width"
+    :min-width="size.minWidth"
     :height="size.height"
     @closed="store.close(win.id)"
     @blocked="onBlocked"
