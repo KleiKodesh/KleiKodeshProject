@@ -11,7 +11,7 @@ Dictionary widget (features/widgets): opens in a floating window, not a tab. Que
 - Definitions — all sources merged into one grouped list, grouped by word form (nikud if present, else plain headword)
 - קשורים — synonyms, related links, spelling variants
 
-Source labels for מצודת ציון and מלבי"ם are Ctrl+clickable — opens the source book in a new tab at the matched line. מחברת מנחם entries are also Ctrl+clickable for the same reason.
+Source labels for מצודת ציון and מלבי"ם are links — a plain click opens the source book in a new tab at the matched line. מחברת מנחם (and the other special-source) entries open the same way from their label.
 
 `dictionaryCache.ts` — LRU-disk-cached dictionary lookups (100 headwords). Stores full `WordPageData` per headword in `app-dict-cache` IDB. Repeated lookups of the same word skip all DB queries.
 
@@ -43,7 +43,7 @@ Related words (synonyms, links, variants) are only fetched when `isExact` is tru
 
 All three sources are queried from the main seforim DB. Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
 
-**מצודת ציון / מלבי"ם**: Lines are matched against the bold header tag only. The SQL pattern `<b>TERM...</b>%` ensures the term ends inside `<b>...</b>` and is never matched against the definition body. Each `MetzudatRow` carries `bookId`, `lineId`, and `lineIndex` for Ctrl+click navigation.
+**מצודת ציון / מלבי"ם**: Lines are matched against the bold header tag only. The SQL pattern `<b>TERM...</b>%` ensures the term ends inside `<b>...</b>` and is never matched against the definition body. Each `MetzudatRow` carries `bookId`, `lineId`, and `lineIndex` for click navigation.
 
 **מחברת מנחם**: The book has two sections. The dictionary section uses `<strong><big>HEADWORD</big></strong>` lines — the term is matched inside the `<big>` tag (with and without trailing space), and the next line is returned as the definition. The synonym section uses lines where multiple `<b>WORD</b>` entries appear — the term is matched as the end of a bold word (`%<b>%TERM</b>%`) to prevent false positives from plain text between tags. The nearest preceding pure-bold line is returned as the section title. Both sections use contains matching inside the tag patterns.
 

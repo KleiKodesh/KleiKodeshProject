@@ -197,9 +197,9 @@ const visibleSenseGroups = computed((): SenseGroup[] => {
 
 const visibleSpecialEntries = computed(() => specialEntries.value.filter(i => isShown(i.family)))
 
-function onSourceClick(event: MouseEvent, location: BookLocation | null) {
-  if (!event.ctrlKey || !location) return
-  event.preventDefault()
+// The source name is a link: a plain click opens the book at that line.
+function openSource(location: BookLocation | null) {
+  if (!location) return
   paneNavigation.openTab({
     title: location.bookTitle,
     route: '/book-view',
@@ -251,7 +251,7 @@ const allRelated = computed(() => [
               v-if="item.sourceLabel"
               class="def-source"
               :class="{ 'def-source--link': item.bookLocation }"
-              @click="onSourceClick($event, item.bookLocation)"
+              @click="openSource(item.bookLocation)"
             > ({{ item.sourceLabel }})</span>
           </li>
         </ol>
@@ -260,9 +260,8 @@ const allRelated = computed(() => [
         v-for="(item, itemIndex) in visibleSpecialEntries"
         :key="`special-${itemIndex}`"
         class="special-entry"
-        @click="onSourceClick($event, item.bookLocation)"
       >
-        <span class="special-entry-label">{{ item.sourceLabel }}</span>
+        <span class="special-entry-label def-source--link" @click="openSource(item.bookLocation)">{{ item.sourceLabel }}</span>
         {{ maybeFilter(item.text) }}
       </div>
     </section>
