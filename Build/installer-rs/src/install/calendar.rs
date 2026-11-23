@@ -15,6 +15,7 @@ const SHORTCUT: Text = Text::new("לוח שנה כתבי הקודש", "Kitvei Ha
 const SHORTCUT_NAMES: [&str; 2] = [SHORTCUT.he, SHORTCUT.en];
 const PAGE: &str = "calendar.html";
 const ICON: &str = "calendar.ico";
+const WINDOW_SIZE: &str = "--window-size=900,900";
 /// A purple calendar (the typing tutor icon's purple), written beside the page so the
 /// shortcut shows it instead of Edge's. calendar.html carries the same icon inline, which
 /// is what the taskbar shows for the open window.
@@ -30,7 +31,8 @@ pub fn is_installed(layout: &Layout) -> bool {
 
 pub fn register(layout: &Layout, desktop_shortcut: bool, english: bool) -> std::io::Result<()> {
     let edge = edge_app::edge_exe().ok_or_else(|| std::io::Error::other("Microsoft Edge was not found"))?;
-    let arguments = edge_app::arguments(&page(layout));
+    // Square by default: the month beside the picked day's zmanim and learning.
+    let arguments = format!("{} {WINDOW_SIZE}", edge_app::arguments(&page(layout)));
     let dir = layout.install_dir.join(CALENDAR_DIR);
     let icon = dir.join(ICON);
     std::fs::write(&icon, ICON_BYTES)?;

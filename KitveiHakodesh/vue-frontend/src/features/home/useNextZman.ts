@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, type Ref } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
@@ -81,7 +81,7 @@ export interface ZmanRow {
  * paint. Until it resolves, `next` and `rows` are empty and the bar renders
  * without the zman item.
  */
-export function useNextZman() {
+export function useNextZman(shownDay?: Ref<Date | null>) {
   /** Only the lines the user shows in the zmanim tool (default: the common ones). */
   const shownNames = useShownZmanNames()
   const now = ref(new Date())
@@ -163,6 +163,12 @@ export function useNextZman() {
     // `next` (which fills the day cache) BEFORE checking the cache — otherwise,
     // with no other reader of `next`, the first run returns [] forever.
     const current = now.value
+    // Another day picked (the separate calendar app): that day's table, nothing marked.
+    const picked = shownDay?.value
+    if (picked && picked.toDateString() !== current.toDateString()) {
+      if (!calc || !city.value) return []
+      return dayRows(calc(city.value, picked), null, null)
+    }
     const n = next.value
     if (!cachedToday) return []
     const nextTime = n?.time.getTime()
@@ -172,6 +178,11 @@ export function useNextZman() {
     // the next zman is actually present to highlight).
     const fromTomorrow = !!n && cachedToday![n.key]?.time.getTime() !== nextTime
     const day = fromTomorrow && cachedTomorrow ? cachedTomorrow : cachedToday!
+    return dayRows(day, nextTime ?? null, current)
+  })
+
+  /** One day's table; `nextTime`/`current` mark the next and the passed (null: mark none). */
+  function dayRows(day: DayTimedZmanim, nextTime: number | null, current: Date | null): ZmanRow[] {
     return ZMAN_ORDER.filter(({ key }) => shownNames.value.has(key) && !(OPTIONAL_ZMANIM.has(key) && day[key] == null)
       && !(isCandleLine(key) && day[key]?.time.getDay() !== 5)).map(({ key, label }) => {
       const zman = day[key]
@@ -184,10 +195,10 @@ export function useNextZman() {
         // Match by exact instant, not key, so a rolled-over next zman can never
         // highlight a same-named row from the wrong day.
         isNext: !!t && t.getTime() === nextTime,
-        passed: !!t && t.getTime() <= current.getTime(),
+        passed: !!t && !!current && t.getTime() <= current.getTime(),
       }
     })
-  })
+  }
 
   onMounted(async () => {
     // Deferred load — keeps the zmanim engine out of the home page's critical bundle.

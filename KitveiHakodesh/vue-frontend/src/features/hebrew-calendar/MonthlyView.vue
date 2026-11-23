@@ -6,7 +6,11 @@ import type { useMonthlyView } from './useMonthlyView'
 
 const props = defineProps<{
   monthly: ReturnType<typeof useMonthlyView>
+  /** The separate calendar app: a click picks the day, and the grid fills the whole card. */
+  selectedDate?: Date | null
 }>()
+const emit = defineEmits<{ (e: 'select-day', date: Date): void }>()
+const selectable = computed(() => props.selectedDate !== undefined)
 
 const HEB_DAY_ABBR = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
 const GREG_DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -116,14 +120,14 @@ const grid = computed<GridCell[]>(() => {
 </script>
 
 <template>
-  <div class="monthly">
+  <div class="monthly" :class="{ fill: selectable }">
     <!-- Day-of-week header -->
     <div class="dow-header">
       <div v-for="label in GREG_DAY_ABBR" :key="label" class="dow-cell">{{ label }}</div>
     </div>
 
     <!-- Grid -->
-    <div class="grid">
+    <div class="grid" :style="selectable ? { gridTemplateRows: `repeat(${grid.length / 7}, 1fr)` } : undefined">
       <div
         v-for="cell in grid"
         :key="cell.date.toISOString()"
@@ -133,7 +137,13 @@ const grid = computed<GridCell[]>(() => {
           shabbat: cell.isShabbat,
           outside: !cell.isCurrentMonth,
           holiday: cell.holidays.length > 0,
+          selectable,
+          selected: selectable && selectedDate?.toDateString() === cell.date.toDateString(),
         }"
+        :role="selectable ? 'button' : undefined"
+        :tabindex="selectable ? 0 : undefined"
+        @click="selectable && emit('select-day', cell.date)"
+        @keydown.enter.space.prevent="selectable && emit('select-day', cell.date)"
       >
         <div class="cell-header">
           <span class="greg-num">{{ cell.gregDay }}</span>
@@ -218,6 +228,17 @@ const grid = computed<GridCell[]>(() => {
   border-color: var(--accent-color, #0078d4);
   border-width: 2px;
 }
+/* Separate calendar app: the rows share the card's height (cells are not forced square). */
+.monthly.fill .grid { overflow: hidden; align-content: stretch; }
+.monthly.fill .cell { aspect-ratio: auto; }
+.monthly.fill .greg-num { font-size: clamp(11px, 18cqmin, 20px); }
+.monthly.fill .heb-gem { font-size: clamp(9px, 12cqmin, 14px); }
+.monthly.fill .ev { font-size: clamp(9px, 10cqmin, 12px); }
+.monthly.fill .dow-cell { font-size: 11px; }
+.cell.selectable { cursor: pointer; }
+.cell.selectable:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.cell.selected,
+.cell.selected:hover { background: color-mix(in srgb, var(--accent-color, #0078d4) 14%, transparent); opacity: 1; }
 
 .cell-header {
   display: flex;

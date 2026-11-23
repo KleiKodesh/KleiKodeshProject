@@ -5,7 +5,12 @@ import type { useWeeklyView } from './useWeeklyView'
 
 const props = defineProps<{
   weekly: ReturnType<typeof useWeeklyView>
+  /** The separate calendar app: a click picks the day (its zmanim and learning show beside). */
+  selectedDate?: Date | null
 }>()
+const emit = defineEmits<{ (e: 'select-day', date: Date): void }>()
+
+const selectable = computed(() => props.selectedDate !== undefined)
 
 const openZmanim = ref<number | null>(null)
 const openLearning = ref<number | null>(null)
@@ -30,8 +35,11 @@ const expanded = computed(() => openZmanim.value !== null || openLearning.value 
       :day="day"
       :zmanim-open="openZmanim === day.dayOfWeek"
       :learning-open="openLearning === day.dayOfWeek"
+      :selectable="selectable"
+      :selected="selectable && selectedDate?.toDateString() === day.date.toDateString()"
       @toggle-zmanim="toggleZmanim(day.dayOfWeek)"
       @toggle-learning="toggleLearning(day.dayOfWeek)"
+      @select="emit('select-day', day.date)"
     />
   </div>
 </template>

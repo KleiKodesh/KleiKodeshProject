@@ -17,11 +17,15 @@ const props = defineProps<{
   day: CalendarDay
   zmanimOpen: boolean
   learningOpen: boolean
+  /** The separate calendar app: the whole row picks the day, no zmanim/learning pills. */
+  selectable?: boolean
+  selected?: boolean
 }>()
 
 defineEmits<{
   (e: 'toggle-zmanim'): void
   (e: 'toggle-learning'): void
+  (e: 'select'): void
 }>()
 
 const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -68,7 +72,14 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
       shabbat: day.isShabbat,
       friday: day.isFriday,
       holiday: day.holidays.length > 0,
+      selectable,
+      selected,
     }"
+    :role="selectable ? 'button' : undefined"
+    :tabindex="selectable ? 0 : undefined"
+    :aria-pressed="selectable ? !!selected : undefined"
+    @click="selectable && $emit('select')"
+    @keydown.enter.space.prevent="selectable && $emit('select')"
   >
     <!-- ── Summary row ── -->
     <div class="summary">
@@ -87,11 +98,11 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
           <span class="chip holiday">{{ h }}</span>
         </template>
         <span v-if="day.chanukahCandles" class="chip chanukah">{{ day.chanukahCandles }}</span>
-        <button class="chip pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
+        <button v-if="!selectable" class="chip pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
           {{ $t('hebrewCalendar.day.zmanim') }}
         </button>
         <button
-          v-if="hasLearning"
+          v-if="hasLearning && !selectable"
           class="chip pill green"
           :class="{ on: learningOpen }"
           @click="$emit('toggle-learning')"
@@ -186,6 +197,10 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 .day-row.today {
   border-inline-start: 3px solid var(--accent-color, #0078d4);
 }
+.day-row.selectable { cursor: pointer; }
+.day-row.selectable:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.day-row.selected,
+.day-row.selected:hover { background: color-mix(in srgb, var(--accent-color, #0078d4) 14%, transparent); }
 
 /* ── Summary ── */
 .summary {

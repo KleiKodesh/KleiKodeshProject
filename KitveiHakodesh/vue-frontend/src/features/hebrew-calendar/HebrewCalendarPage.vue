@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import PageCard from '@/components/PageCard.vue'
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { HDate } from '@hebcal/core'
+import { uiLanguage } from '@/i18n'
 import { lsGet, lsSet } from '@/utils/persistence'
 
 const KEYS = {
@@ -16,12 +17,25 @@ import MonthlyView from './MonthlyView.vue'
 import ZmanimWidget from '@/features/widgets/ZmanimWidget.vue'
 import DailyLearningWidget from '@/features/widgets/DailyLearningWidget.vue'
 
-/** The extended calendar: today's zmanim and daily learning beside it (CALENDAR_EXTENDED). */
+/**
+ * The extended calendar (the separate calendar app): a click on a day picks it, and that
+ * day's zmanim and daily learning show beside the calendar. Opens on the month.
+ */
 const props = defineProps<{ extended?: boolean }>()
 
 type ViewMode = 'weekly' | 'monthly'
 
 const viewMode = ref<ViewMode>('weekly')
+
+const selectedDate = ref(new Date())
+/** undefined = days are not pickable (the in-app calendar widget). */
+const pickedDate = computed(() => (props.extended ? selectedDate.value : undefined))
+const selectedLabel = computed(() => {
+  const d = selectedDate.value
+  const hd = new HDate(d)
+  const heb = uiLanguage === 'en' ? hd.render('en') : hd.renderGematriya(true)
+  return `${heb} · ${d.toLocaleDateString(uiLanguage === 'en' ? 'en-US' : 'he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`
+})
 watch(viewMode, (v) => lsSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
 const { activeCity, init: initZmanim } = useZmanim()
@@ -42,6 +56,7 @@ function onNext() {
 }
 function onToday() {
   viewMode.value === 'weekly' ? weekly.goToday() : monthly.goToday()
+  selectedDate.value = new Date()
 }
 
 // ── Date-picker selections ────────────────────────────────────────────────
@@ -67,7 +82,8 @@ function onSelectGregYear(y: number) {
 
 onMounted(() => {
   const savedView = lsGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
-  viewMode.value = savedView === 'monthly' ? 'monthly' : 'weekly'
+  const fallback: ViewMode = props.extended ? 'monthly' : 'weekly'
+  viewMode.value = savedView === 'monthly' || savedView === 'weekly' ? savedView : fallback
   weekly.reset()
   monthly.reset()
   initZmanim()
@@ -96,17 +112,18 @@ onMounted(() => {
             @select-greg-month="onSelectGregMonth"
             @select-greg-year="onSelectGregYear"
           />
-          <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" class="calendar-view" />
-          <MonthlyView v-else :monthly="monthly" class="calendar-view" />
+          <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" :selected-date="pickedDate" class="calendar-view" @select-day="selectedDate = $event" />
+          <MonthlyView v-else :monthly="monthly" :selected-date="pickedDate" class="calendar-view" @select-day="selectedDate = $event" />
     </PageCard>
-    <!-- Extended calendar: today's zmanim and daily learning beside it (below it in a narrow window). -->
+    <!-- Extended calendar: the picked day's zmanim and daily learning beside it (below it in a narrow window). -->
     <aside v-if="props.extended" class="calendar-side">
+      <div class="calendar-side-date">{{ selectedLabel }}</div>
       <section class="calendar-side-zmanim">
-        <ZmanimWidget />
+        <ZmanimWidget :date="selectedDate" />
       </section>
       <section class="calendar-side-learning">
         <h3 class="calendar-side-title">{{ $t('layout.widgets.learning.label') }}</h3>
-        <DailyLearningWidget />
+        <DailyLearningWidget :date="selectedDate" />
       </section>
     </aside>
   </div>
@@ -121,8 +138,11 @@ onMounted(() => {
 }
 
 .calendar-card { flex: 1 1 auto; min-width: 0; }
+/* Extended: the month takes two shares of the width, the side column one (never under 260px). */
+.page--extended .calendar-card { flex: 2 1 0; }
 .calendar-side {
-  flex: 0 0 260px;
+  flex: 1 1 0;
+  min-width: 260px;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -133,6 +153,14 @@ onMounted(() => {
 .calendar-side-zmanim,
 .calendar-side-learning { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .calendar-side-learning { border-top: 1px solid var(--border-color); }
+.calendar-side-date {
+  flex: none;
+  padding: 10px 12px 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
 .calendar-side-title {
   margin: 0;
   padding: 8px 12px 0;

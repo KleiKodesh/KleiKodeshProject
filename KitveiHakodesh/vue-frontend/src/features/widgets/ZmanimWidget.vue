@@ -2,14 +2,16 @@
 // The zmanim tool: a title with the current place (country › city › neighbourhood) and a
 // settings toggle. The settings popup holds the place, the community custom and which
 // zman lines to show (the list shows the common ones by default; more or fewer on request).
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, toRef } from 'vue'
 import NextZmanPopup from '@/features/home/NextZmanPopup.vue'
 import { useNextZman } from '@/features/home/useNextZman'
 import { IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
 import ZmanimSettingsDialog from '@/features/hebrew-calendar/ZmanimSettingsDialog.vue'
 import { placeTree, type PlaceTree } from '@/features/hebrew-calendar/zmanimPlaces'
 
-const { rows, city, setCity } = useNextZman()
+/** The day to show (the separate calendar app's picked day); today when absent. */
+const props = defineProps<{ date?: Date | null }>()
+const { rows, city, setCity } = useNextZman(toRef(() => props.date ?? null))
 const settingsOpen = ref(false)
 
 const tree = shallowRef<PlaceTree | null>(null)
