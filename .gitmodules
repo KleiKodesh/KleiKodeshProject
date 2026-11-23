@@ -7,3 +7,6 @@
 [submodule "KitveiHakodesh/CSharpBackend/ChromeTabs"]
 	path = KitveiHakodesh/CSharpBackend/ChromeTabs
 	url = https://github.com/KleiKodesh/EasyTabs.git
+[submodule "KitveiHakodesh/kleikodesh-zmanim.js"]
+	path = KitveiHakodesh/kleikodesh-zmanim.js
+	url = https://github.com/KleiKodesh/kleikodesh-zmanim.js.git
