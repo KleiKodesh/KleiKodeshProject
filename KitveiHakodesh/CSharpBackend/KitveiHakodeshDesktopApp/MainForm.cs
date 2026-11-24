@@ -45,6 +45,27 @@ namespace KitveiHakodeshDesktopApp
         /// </summary>
         internal MainForm OpenedFrom { get; set; }
 
+        /// <summary>
+        /// Asked when the reader closes this window: true when other windows of its page stay
+        /// open, so only this window and its tabs go - the page lives on, hidden here, for the
+        /// others (Program.CloseOnlyThisWindow). Set by Program.
+        /// </summary>
+        internal Func<MainForm, bool> CloseOnlyThisWindow { get; set; }
+
+        /// <summary>The reader closed this window while others of its page stay: hidden, its page still running.</summary>
+        internal bool ClosedWhileOthersStay { get; set; }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.UserClosing && !ClosedWhileOthersStay
+                && CloseOnlyThisWindow != null && CloseOnlyThisWindow(this))
+            {
+                e.Cancel = true;
+                return;
+            }
+            base.OnFormClosing(e);
+        }
+
         /// <summary>This window's page (tabs move between windows through it, Program.TabMoves).</summary>
         internal AppViewer Viewer => _viewer;
 

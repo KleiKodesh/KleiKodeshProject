@@ -346,7 +346,7 @@ namespace KitveiHakodeshDesktopApp
             if (window == null || window.IsDisposed) return false;
             if (window is PageWindowForm page) return PageWindows.Contains(page) && IsDropTarget(page.PageOwner);
             var main = window as MainForm;
-            return main != null && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
+            return main != null && main.Visible && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
         }
 
         private static Rectangle HalfOf(Rectangle area, DropSide side)

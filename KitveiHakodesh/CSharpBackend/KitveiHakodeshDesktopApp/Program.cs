@@ -179,7 +179,13 @@ namespace KitveiHakodeshDesktopApp
 
         private static MainForm CreateWindow(string windowId, string initialRequest)
         {
-            var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood };
+            var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood, CloseOnlyThisWindow = CloseOnlyThisWindow };
+            // Its tabs are gone after the reader closed it while other windows stay: it hides.
+            form.Viewer.TabsStateChanged += (s, e) =>
+            {
+                if (form.ClosedWhileOthersStay && e.WindowKey.Length == 0 && e.Tabs.Count == 0 && form.Visible)
+                    form.BeginInvoke(new Action(form.Hide));
+            };
             form.Activated += (s, e) =>
             {
                 lock (EarlyRequestsLock) _activeWindow = form;
@@ -249,6 +255,27 @@ namespace KitveiHakodeshDesktopApp
         // VS Code window: its saved tabs are deleted and it is not reopened. The last window
         // keeps its tabs for the next start, and so does every window when Windows shuts
         // down, the app is quit from outside, or all windows close together.
+        // The reader closed a main window while windows its page draws stay open: like any
+        // window, it goes with its tabs, and the app keeps running in the others. The page
+        // closes the tabs (asking about unsaved work); the window hides once they are gone.
+        private static bool CloseOnlyThisWindow(MainForm form)
+        {
+            if (!PageWindows.Exists(w => w.PageOwner == form && !w.IsDisposed && w.Visible)) return false;
+            form.ClosedWhileOthersStay = true;
+            form.Viewer.CloseAppWindow("");
+            return true;
+        }
+
+        /// <summary>True when no other window of the app is open on screen: closing this one is quitting.</summary>
+        internal static bool IsLastOpenWindow(System.Windows.Forms.Form window)
+        {
+            foreach (MainForm open in OpenWindows)
+                if (open != window && !open.IsDisposed && open.Visible) return false;
+            foreach (PageWindowForm open in PageWindows)
+                if (open != window && !open.IsDisposed && open.Visible) return false;
+            return true;
+        }
+
         private static async System.Threading.Tasks.Task<bool> ClosesForGood(MainForm form, FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.WindowsShutDown || e.CloseReason == CloseReason.TaskManagerClosing

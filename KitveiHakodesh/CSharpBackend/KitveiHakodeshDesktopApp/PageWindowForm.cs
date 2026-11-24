@@ -35,7 +35,10 @@ namespace KitveiHakodeshDesktopApp
             if (!ClosingByPage && e.CloseReason == CloseReason.UserClosing && !PageOwner.IsDisposed)
             {
                 e.Cancel = true;
-                PageOwner.Viewer.CloseAppWindow(WindowKey);
+                // The last window of the app: closing it is quitting, and quitting keeps the
+                // tabs for the next start - the page's window closes, and this one with it.
+                if (Program.IsLastOpenWindow(this)) PageOwner.Close();
+                else PageOwner.Viewer.CloseAppWindow(WindowKey);
                 return;
             }
             base.OnFormClosing(e);

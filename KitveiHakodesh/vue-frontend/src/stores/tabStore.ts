@@ -332,6 +332,9 @@ export const useTabStore = defineStore('tabs', () => {
   const activeByWindow = ref<Record<string, string>>({ '': '1' })
   const focusedWindow = ref('')
   let windowCounter = 0
+  // The reader closed the main window while extra windows stay: it holds no tabs from here on
+  // and nothing opens there (the host keeps it hidden). Not saved: the next start shows it again.
+  let mainWindowClosed = false
 
   function windowOf(tabId: string): string {
     return tabs.value.find((t) => t.id === tabId)?.windowKey ?? ''
@@ -361,6 +364,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   /** The reader is working in this window now (its page got the focus). */
   function focusWindow(windowKey: string) {
+    if (windowKey === '' && mainWindowClosed) return
     if (windowKey === '' || windowKey in activeByWindow.value) focusedWindow.value = windowKey
   }
 
@@ -394,10 +398,13 @@ export const useTabStore = defineStore('tabs', () => {
     const left = tabsIn(windowKey)
     const next = { ...activeByWindow.value }
     if (left.length === 0) {
-      if (windowKey !== '') {
-        delete next[windowKey]
+      if (windowKey !== '' || mainWindowClosed) {
+        if (windowKey !== '') delete next[windowKey]
+        else next[''] = ''
         activeByWindow.value = next
-        if (focusedWindow.value === windowKey) focusedWindow.value = ''
+        // The reader carries on in another window still open.
+        if (focusedWindow.value === windowKey)
+          focusedWindow.value = mainWindowClosed ? (Object.keys(next).find((k) => k !== '') ?? '') : ''
         return
       }
       const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
@@ -421,9 +428,15 @@ export const useTabStore = defineStore('tabs', () => {
    * tab (leaveWindowIfEmpty). A tab with unsaved work asks first and keeps the window open.
    */
   function closeWindow(windowKey: string) {
-    if (windowKey === '' || !(windowKey in activeByWindow.value)) return
+    if (!(windowKey in activeByWindow.value)) return
     const closing = tabsIn(windowKey)
     if (guardPdfClose(closing, () => closeWindow(windowKey))) return
+    // The main window: only while an extra window stays (the host asks only then).
+    if (windowKey === '') {
+      if (extraWindowKeys.value.length === 0) return
+      mainWindowClosed = true
+      if (focusedWindow.value === '') focusedWindow.value = extraWindowKeys.value[0]!
+    }
     for (const tab of closing) closeTab(tab.id)
   }
 
@@ -489,11 +502,12 @@ export const useTabStore = defineStore('tabs', () => {
         windowCounter = Math.max(windowCounter, Number(key) || 0)
       }
       if (!windows['']) {
-        // Every saved tab was in an extra window: the main window still needs one.
-        const home: Tab = { id: String(saved.nextId + 1), title: t('stores.tabTitle.home'), route: '/' }
-        saved.nextId++
-        tabs.value.unshift(home)
-        windows[''] = home.id
+        // Every saved tab was in an extra window (the main window had been closed before the
+        // app quit): the first of those windows comes back as the main one.
+        const first = Object.keys(windows).filter((k) => k !== '').sort((a, b) => Number(a) - Number(b))[0]!
+        for (const tab of tabs.value) if (tab.windowKey === first) delete tab.windowKey
+        windows[''] = windows[first]!
+        delete windows[first]
       }
       activeByWindow.value = windows
       const mainTabs = tabs.value.filter((t) => !t.windowKey)
@@ -1325,6 +1339,8 @@ export const useTabStore = defineStore('tabs', () => {
     // A moved tab arrives on its own, never as part of a pair (and drops the old model's `pane`).
     const { pane: _oldPane, windowKey: _theirWindow, ...moved } = withoutTransientFields(entry) as Tab & { pane?: unknown }
     const tab: Tab = { ...moved, id: String(++nextId) }
+    // Into the window the reader is working in (never a main window that was closed).
+    if (focusedWindow.value !== '') tab.windowKey = focusedWindow.value
     seedState(tab.id)
     const visible = tabs.value
     const before = position >= 0 && position < visible.length ? visible[position] : undefined
