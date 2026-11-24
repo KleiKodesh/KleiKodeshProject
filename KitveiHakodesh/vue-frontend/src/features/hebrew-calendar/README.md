@@ -20,7 +20,6 @@ Hebrew calendar widget (features/widgets): opens in a floating window, not a tab
 
 **useZmanim.ts** — place selection. Tries geolocation first (nearest listed place), falls back to Jerusalem. Persists the selected place id to localStorage via `KEYS.SETTINGS_ZMANIM_CITY` (a saved value that is not a valid id means Jerusalem).
 
-**usePlacePicker.ts** — options for the settings / setup-wizard place pickers (search box over the place names).
 
 **zmanimPlaces.ts** — the app's door to the `kleikodesh-zmanim` library (submodule `../kleikodesh-zmanim.js`, imported through the `kleikodesh-zmanim` alias in vite.config.ts, vitest.config.ts and tsconfig.app.json; LGPL-2.1; NREL SPA sun position, refraction from published physics, every zman defined from its cited halachic sources). Places are numeric ids; names come from the library in the UI language. `dayPrintedZmanim` feeds the weekly view, `dayTimedZmanim` the home page's next-zman bar. The library's data files ship beside the app in `zmanim/` (the `zmanimAssets` plugin in vite.config.ts serves them in dev and writes them into the build) and are read on first need. Definitions and rounding: see the library README.
 
