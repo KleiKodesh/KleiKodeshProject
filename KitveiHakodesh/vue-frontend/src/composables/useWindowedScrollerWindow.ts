@@ -74,11 +74,55 @@ export interface WindowedScrollerLandingOptions {
 export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions) {
   const windowStart = ref(0)
   const windowEnd = ref(0)
-  // Window changes being prepared (rows requested) or applied but not yet patched
-  // into the DOM. No filling until they are done: it would measure a layout that is
-  // about to change. A count, because a landing and an extension can overlap.
-  // Cleared on the very next tick after the patch, never on a timer.
-  let changesPending = 0
+  // What holds fill() back: a window change being prepared (its rows requested) or
+  // applied but not yet patched into the DOM - filling then would measure a layout
+  // that is about to change.
+  //
+  // A request holds fill back only while it can still be APPLIED. One that has gone
+  // stale - the window it was asked for has changed, or a newer landing took over -
+  // will be dropped when it answers, so it holds nothing: a row source that answers
+  // late, or never, cannot leave the window unable to grow.
+  /** Window changes applied and waiting for their patch. Cleared on the very next tick, never on a timer. */
+  let patchesPending = 0
+  /** Extensions (and snaps to blocks) in flight, each with the window it was asked for. */
+  const growthsAskedFor = new Set<{ start: number; end: number }>()
+  /**
+   * The generation of the landing under way, from asking for its rows until it has set
+   * the scroll: in between, the window is the new one but the scroll still the old.
+   */
+  let landingAskedFor: number | null = null
+
+  function isWindowChangePending(): boolean {
+    if (patchesPending > 0) return true
+    if (landingAskedFor != null && landingAskedFor === landingGeneration) return true
+    for (const request of growthsAskedFor) {
+      if (request.start === windowStart.value && request.end === windowEnd.value) return true
+    }
+    return false
+  }
+
+  /** Records a growth request against the window as it is now. Hand the result to `endGrowthRequest`. */
+  function beginGrowthRequest() {
+    const request = { start: windowStart.value, end: windowEnd.value }
+    growthsAskedFor.add(request)
+    return request
+  }
+
+  function endGrowthRequest(request: { start: number; end: number }) {
+    growthsAskedFor.delete(request)
+  }
+
+  /** The landing's scroll is set (or it gave up): it no longer holds fill back. */
+  function endLandingRequest(generation: number) {
+    if (landingAskedFor === generation) landingAskedFor = null
+  }
+
+  /** Waits for an applied window change to be patched into the DOM, holding fill back meanwhile. */
+  async function whenPatched() {
+    patchesPending++
+    await nextTick()
+    patchesPending--
+  }
 
   function isRowInWindow(index: number) {
     return index >= windowStart.value && index < windowEnd.value
@@ -314,20 +358,17 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
    * superseded this one.
    */
   async function prepareWindow(generation: number, start: number, end: number, apply: () => void): Promise<boolean> {
-    changesPending++
+    landingAskedFor = generation
     try {
       await options.ensureRows(start, end)
     } catch {
-      changesPending--
+      endLandingRequest(generation)
       return false
     }
-    if (generation !== landingGeneration) {
-      changesPending--
-      return false
-    }
+    if (generation !== landingGeneration) return false
+    // Still held: landAt ends the request once the scroll is set.
     apply()
-    await nextTick()
-    changesPending--
+    await whenPatched()
     return true
   }
 
@@ -367,7 +408,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         windowEnd.value = Math.min(wantEnd, options.count())
       })
       if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
-      if (!applied) return false
+      if (!applied) return landingNotApplied()
     } else if (windowEnd.value < wantEnd) {
       let isTargetPastEnd = false
       const applied = await prepareWindow(generation, windowEnd.value, wantEnd, () => {
@@ -376,7 +417,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         clampToCount()
       })
       if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
-      if (!applied) return false
+      if (!applied) return landingNotApplied()
     }
     // Cancelled (or superseded) after the window moved: the reader moved on, but
     // the new rows still need an anchor to hold and their neighbours filled.
@@ -387,7 +428,10 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     }
     const viewport = options.viewport()
     const row = options.rowElement(target)
-    if (!viewport || !row) return false
+    if (!viewport || !row) {
+      endLandingRequest(generation)
+      return false
+    }
     // A positive offset is a saved position partway down the row; one that no
     // longer fits (the row re-wrapped at another zoom or width) lands at its top
     // rather than inside the row after it.
@@ -403,9 +447,21 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
       landing.align === 'end'
         ? Math.ceil(row.getBoundingClientRect().bottom - viewportTop + viewport.scrollTop - viewport.clientHeight + offset)
         : Math.max(0, Math.round(row.getBoundingClientRect().top - viewportTop + viewport.scrollTop + offset))
+    endLandingRequest(generation)
     rememberAnchor()
     fill()
     return true
+  }
+
+  /**
+   * A landing that applied nothing (its rows not to be had, or cancelled / superseded)
+   * leaves the reader in the window they were in. Fills it: fill was held back while
+   * the landing's rows were being fetched, and the reader may have scrolled to the
+   * window's edge meanwhile - where no further scroll event will come to ask again.
+   */
+  function landingNotApplied(): false {
+    fill()
+    return false
   }
 
   /**
@@ -434,16 +490,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const endBefore = windowEnd.value
     const start = blockStartOf(startBefore)
     if (endBefore <= startBefore || start === startBefore) return
-    changesPending++
+    const request = beginGrowthRequest()
     try {
       await options.ensureRows(start, startBefore)
     } catch {
-      changesPending--
+      endGrowthRequest(request)
       return
     }
+    endGrowthRequest(request)
     if (windowStart.value === startBefore && windowEnd.value === endBefore) windowStart.value = start
-    await nextTick()
-    changesPending--
+    await whenPatched()
     fill()
   }
 
@@ -454,14 +510,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   }
 
   /**
-   * Extends the window toward an edge the viewport is near. Call on scroll and on content resize.
+   * Extends the window toward an edge the viewport is near. Call on scroll, on content
+   * resize, and when the reader pushes on (wheel, touch, keys): a viewport already at the
+   * very end of the mounted rows does not scroll, so no scroll event comes to ask again.
    * Never before the first window exists: that window is built AT the start row (an argument of
    * the scroller's creation), and growing an empty window would grow it from row 0 - the top of
    * the list painted first, then replaced.
    */
   function fill() {
     const viewport = options.viewport()
-    if (!viewport || changesPending || windowEnd.value <= windowStart.value) return
+    if (!viewport || isWindowChangePending() || windowEnd.value <= windowStart.value) return
     const count = options.count()
     const edge = edgePx(viewport)
     const belowViewport = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
@@ -482,10 +540,13 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   /**
    * Asks for the next rows on one side, then mounts them and trims the far side.
-   * The component's update hooks hold the anchor through the render. Dropped if a
-   * landing moved the window meanwhile, or if the rows cannot be had — the next
-   * scroll asks again, so a failing source costs one request per reader scroll,
-   * never a loop.
+   * The component's update hooks hold the anchor through the render.
+   *
+   * Dropped if the window changed meanwhile (a landing, rows replaced, the count
+   * shrinking): the new window is then filled afresh. Dropped too if the rows cannot
+   * be had - and then NOT asked again here: the reader's next move asks (fill runs on
+   * scroll and on a push against the edge), so a failing source costs one request per
+   * reader move, never a loop.
    */
   async function extend(side: 'top' | 'bottom', rows: number) {
     const startBefore = windowStart.value
@@ -493,29 +554,34 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     // Upward, the whole block the step reaches into comes along.
     const addStart = side === 'bottom' ? endBefore : blockStartOf(Math.max(0, startBefore - rows))
     const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + rows) : startBefore
-    changesPending++
+    const request = beginGrowthRequest()
     try {
       await options.ensureRows(addStart, addEnd)
     } catch {
-      changesPending--
+      endGrowthRequest(request)
       return
     }
+    endGrowthRequest(request)
     const viewport = options.viewport()
-    if (!viewport || windowStart.value !== startBefore || windowEnd.value !== endBefore) {
-      changesPending--
+    if (!viewport) return
+    if (windowStart.value !== startBefore || windowEnd.value !== endBefore) {
+      // Measure the new window once it is in the DOM, not before.
+      await nextTick()
+      fill()
       return
     }
     const heightBefore = viewport.scrollHeight
     if (side === 'bottom') {
-      windowEnd.value = addEnd
+      // The count may have shrunk while the rows were fetched.
+      windowEnd.value = Math.min(addEnd, options.count())
       trimTop(viewport)
     } else {
       windowStart.value = addStart
       trimBottom(viewport)
     }
-    await nextTick()
-    changesPending--
-    // Rows that added no height would be asked for again at once, forever.
+    await whenPatched()
+    // Rows that added no height: growing on at once would mount the whole list. The
+    // reader's next move asks for more.
     if (viewport.scrollHeight === heightBefore) return
     // One step may not have been enough (a landing near the end of a short book, a
     // zoom-out that halved every row).

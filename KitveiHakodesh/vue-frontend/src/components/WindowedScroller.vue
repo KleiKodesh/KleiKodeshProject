@@ -640,6 +640,23 @@ async function landOn(index: number, options: WindowedScrollerScrollToOptions, b
   return landed
 }
 
+/**
+ * The reader pushes on - wheel (over the text or the bar), touch or a key. Anywhere but
+ * at an end of the mounted rows the push scrolls, and the scroll event fills: nothing to
+ * do here. AT an end the viewport cannot scroll, so no scroll event follows; rows that
+ * could not be had a moment ago (a failed read) would then never be asked for again.
+ */
+function onReaderPush() {
+  const viewport = viewportElement.value
+  if (!viewport) return
+  const isAtMountedTop = viewport.scrollTop <= 0 && windowStart.value > 0
+  const isAtMountedBottom = viewport.scrollTop >= viewport.scrollHeight - viewport.clientHeight - 1 && windowEnd.value < props.count
+  if (isAtMountedTop || isAtMountedBottom) fill()
+}
+
+/** Keys that scroll the viewport natively (Home/End are landings of their own). */
+const SCROLLING_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', ' '])
+
 function onViewportKeydown(event: KeyboardEvent) {
   // Plain Home/End too: natively they would reach the ends of the mounted window,
   // which is nowhere in particular.
@@ -653,6 +670,8 @@ function onViewportKeydown(event: KeyboardEvent) {
       const viewport = viewportElement.value
       if (props.endPaddingEm && viewport) viewport.scrollTop = viewport.scrollHeight
     })
+  } else if (SCROLLING_KEYS.has(event.key)) {
+    onReaderPush()
   }
 }
 
@@ -705,7 +724,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="windowed-scroller">
+  <div class="windowed-scroller" @wheel.passive="onReaderPush" @touchmove.passive="onReaderPush">
     <div
       ref="viewportElement"
       class="windowed-scroller-viewport"
