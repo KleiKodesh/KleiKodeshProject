@@ -1,0 +1,380 @@
+<script setup lang="ts">
+import { ref, nextTick } from 'vue'
+import { HDate } from '@hebcal/core'
+import {
+  IconChevronLeft20Regular,
+  IconChevronRight20Regular,
+  IconHome20Regular,
+  IconCalendarAgenda20Regular,
+  IconCalendarMonth20Regular,
+} from '@iconify-prerendered/vue-fluent'
+import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
+import { HEB_MONTHS, GREG_MONTHS } from './useMonthlyView'
+
+const props = defineProps<{
+  viewMode: 'weekly' | 'monthly'
+  hebrewLabel: string
+  gregLabel: string
+  hebMonth: number
+  hebYear: number
+  gregMonth: number
+  gregYear: number
+}>()
+
+const emit = defineEmits<{
+  (e: 'prev'): void
+  (e: 'next'): void
+  (e: 'today'): void
+  (e: 'set-view', mode: 'weekly' | 'monthly'): void
+  (e: 'select-heb-month', m: number): void
+  (e: 'select-heb-year', y: number): void
+  (e: 'select-greg-month', m: number): void
+  (e: 'select-greg-year', y: number): void
+}>()
+
+// ── Label parsing ─────────────────────────────────────────────────────────────
+function labelMonth(label: string) {
+  return label.split(' ').slice(0, -1).join(' ')
+}
+function labelYear(label: string) {
+  const p = label.split(' ')
+  return p[p.length - 1] ?? ''
+}
+
+// ── Year lists ────────────────────────────────────────────────────────────────
+const THIS_YEAR = new Date().getFullYear()
+const GREG_YEARS = Array.from({ length: 200 }, (_, i) => THIS_YEAR - 100 + i)
+const HEB_YEARS = Array.from({ length: 200 }, (_, i) => THIS_YEAR + 3760 - 100 + i)
+
+function hebYearGem(y: number): string {
+  try {
+    return new HDate(1, 7, y).renderGematriya().split(' ').pop() ?? String(y)
+  } catch {
+    return String(y)
+  }
+}
+
+// ── Dropdowns ───────────────────────────────────────────────────────────────
+// One "which dropdown is open" flag instead of per-dropdown object-path refs.
+// (Template refs bound via `ref="obj.prop"` are fragile in production builds;
+// a single discriminant + top-level refs is robust across dev and WebView2.)
+type DropId = 'hebMonth' | 'hebYear' | 'gregMonth' | 'gregYear' | null
+const openDrop = ref<DropId>(null)
+
+const rootRef = ref<HTMLElement | null>(null)
+const hebYearListRef = ref<HTMLElement | null>(null)
+const gregYearListRef = ref<HTMLElement | null>(null)
+
+// Close whenever the click lands outside the whole header (covers all four).
+// The root is the inline header; only the open drop (one at a time) is fitted.
+useDropdownClose(
+  rootRef,
+  () => {
+    openDrop.value = null
+  },
+  { fitToViewport: false },
+)
+const openDropEl = ref<HTMLElement | null>(null)
+useDropdownViewportFit(openDropEl)
+
+function toggleDrop(id: Exclude<DropId, null>) {
+  const willOpen = openDrop.value !== id
+  openDrop.value = willOpen ? id : null
+  if (willOpen && (id === 'hebYear' || id === 'gregYear')) {
+    nextTick(() => {
+      const list = id === 'hebYear' ? hebYearListRef.value : gregYearListRef.value
+      const active = list?.querySelector<HTMLElement>('.active')
+      if (!list || !active) return
+      list.scrollTop = active.offsetTop - list.clientHeight / 2 + active.offsetHeight / 2
+    })
+  }
+}
+
+function selectHebMonth(m: number) {
+  emit('select-heb-month', m)
+  openDrop.value = null
+}
+function selectHebYear(y: number) {
+  emit('select-heb-year', y)
+  openDrop.value = null
+}
+function selectGregMonth(i: number) {
+  emit('select-greg-month', i)
+  openDrop.value = null
+}
+function selectGregYear(y: number) {
+  emit('select-greg-year', y)
+  openDrop.value = null
+}
+</script>
+
+<template>
+  <div ref="rootRef" class="header">
+    <!-- Physical RIGHT: Hebrew label -->
+    <div class="side side--he">
+      <div class="picker">
+        <span class="label-btn" @click="toggleDrop('hebMonth')">
+          {{ labelMonth(hebrewLabel) }}
+        </span>
+        <div v-if="openDrop === 'hebMonth'" ref="openDropEl" class="drop month-drop">
+          <button
+            v-for="m in HEB_MONTHS"
+            :key="m.num"
+            class="drop-item"
+            :class="{ active: hebMonth === m.num }"
+            @click="selectHebMonth(m.num)"
+          >
+            {{ m.name }}
+          </button>
+        </div>
+      </div>
+      <div class="picker">
+        <span class="label-btn" @click="toggleDrop('hebYear')">
+          {{ labelYear(hebrewLabel) }}
+        </span>
+        <div v-if="openDrop === 'hebYear'" ref="openDropEl" class="drop year-drop">
+          <div ref="hebYearListRef" class="year-list">
+            <button
+              v-for="y in HEB_YEARS"
+              :key="y"
+              class="drop-item"
+              :class="{ active: hebYear === y }"
+              @click="selectHebYear(y)"
+            >
+              {{ hebYearGem(y) }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: navigation + view toggle -->
+    <div class="nav">
+      <button class="nav-btn nav-next" :title="$t('hebrewCalendar.nav.next')" @click="emit('next')">
+        <IconChevronLeft20Regular class="dir-icon" />
+      </button>
+      <button class="nav-btn nav-prev" :title="$t('hebrewCalendar.nav.prev')" @click="emit('prev')">
+        <IconChevronRight20Regular class="dir-icon" />
+      </button>
+      <div class="sep" />
+      <button class="nav-btn" :title="$t('hebrewCalendar.nav.today')" @click="emit('today')"><IconHome20Regular /></button>
+      <div class="sep" />
+      <button
+        class="nav-btn"
+        :class="{ active: viewMode === 'monthly' }"
+        :title="$t('hebrewCalendar.nav.monthly')"
+        @click="emit('set-view', 'monthly')"
+      >
+        <IconCalendarMonth20Regular />
+      </button>
+      <button
+        class="nav-btn"
+        :class="{ active: viewMode === 'weekly' }"
+        :title="$t('hebrewCalendar.nav.weekly')"
+        @click="emit('set-view', 'weekly')"
+      >
+        <IconCalendarAgenda20Regular />
+      </button>
+    </div>
+
+    <!-- Physical LEFT: Gregorian label -->
+    <div class="side side--greg">
+      <div class="picker">
+        <span class="label-btn" @click="toggleDrop('gregMonth')">
+          {{ labelMonth(gregLabel) }}
+        </span>
+        <div v-if="openDrop === 'gregMonth'" ref="openDropEl" class="drop month-drop greg-drop">
+          <button
+            v-for="(name, i) in GREG_MONTHS"
+            :key="i"
+            class="drop-item"
+            :class="{ active: gregMonth === i }"
+            @click="selectGregMonth(i)"
+          >
+            {{ name }}
+          </button>
+        </div>
+      </div>
+      <div class="picker">
+        <span class="label-btn" @click="toggleDrop('gregYear')">
+          {{ labelYear(gregLabel) }}
+        </span>
+        <div v-if="openDrop === 'gregYear'" ref="openDropEl" class="drop year-drop greg-drop">
+          <div ref="gregYearListRef" class="year-list">
+            <button
+              v-for="y in GREG_YEARS"
+              :key="y"
+              class="drop-item"
+              :class="{ active: gregYear === y }"
+              @click="selectGregYear(y)"
+            >
+              {{ y }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.side {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.side--he {
+  justify-content: flex-start;
+}
+.side--greg {
+  justify-content: flex-end;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  direction: ltr;
+  flex-shrink: 0;
+}
+.nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+.nav-btn.active {
+  color: var(--accent-color, #0078d4);
+}
+.sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color);
+  margin: 0 2px;
+}
+
+/* Picker */
+.picker {
+  position: relative;
+  min-width: 0;
+}
+.label-btn {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 3px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* Dropdowns */
+.drop {
+  position: absolute;
+  top: calc(100% + 4px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 10000;
+  overflow: hidden;
+}
+.side--he .drop {
+  inset-inline-start: 0;
+}
+.side--greg .drop {
+  inset-inline-end: 0;
+}
+/* English (LTR) reads Gregorian first: it takes the inline-start side. */
+:root[dir='ltr'] .side--greg {
+  order: -1;
+  justify-content: flex-start;
+}
+:root[dir='ltr'] .side--he {
+  order: 1;
+  justify-content: flex-end;
+}
+:root[dir='ltr'] .side--greg .drop {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+}
+/* .nav is physically LTR (next, prev). English reads prev then next. */
+:root[dir='ltr'] .nav > * {
+  order: 2;
+}
+:root[dir='ltr'] .nav > .nav-prev {
+  order: 0;
+}
+:root[dir='ltr'] .nav > .nav-next {
+  order: 1;
+}
+:root[dir='ltr'] .side--he .drop {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+
+.month-drop {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 162px;
+  padding: 2px;
+  gap: 1px;
+}
+.year-drop {
+  width: 88px;
+}
+.year-list {
+  height: 224px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.drop-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  font-size: 12px;
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.drop-item:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.drop-item.active {
+  background: color-mix(in srgb, var(--accent-color, #0078d4) 15%, transparent);
+  color: var(--accent-color, #0078d4);
+  font-weight: 700;
+}
+</style>

@@ -1,0 +1,94 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer, Page } from "../state.slint";
+import { PageTitle, CheckRow, KitveiRemovalNotice } from "../widgets.slint";
+
+// Like Office's "Change your installation": modify components, repair, or remove.
+export component ManagePage inherits VerticalLayout {
+    // Products or install options differ from what is installed.
+    property <bool> can-change: Installer.has-changes
+        || Installer.desktop-shortcut != Installer.installed-desktop-shortcut
+        || Installer.file-associations != Installer.installed-file-associations;
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 14px;
+        PageTitle {
+            title: Lang.t("שינוי ההתקנה", "Change your installation");
+            subtitle: Lang.t("הוסיפו או הסירו רכיבים, תקנו את ההתקנה או הסירו את כלי קודש.", "Add or remove parts, repair the installation, or remove Klei Kodesh.");
+        }
+        for p[i] in Installer.products: CheckRow {
+            text: p.installed ? p.title + Lang.t(" (מותקן)", " (installed)") : p.title;
+            detail: p.available ? p.description : p.note;
+            side-note: p.size;
+            icon: p.id;
+            enabled: p.available;
+            checked: p.selected;
+            toggled => { Installer.toggle-product(i); }
+        }
+        // The calendar app is a Kitvei Hakodesh option; once installed (or ticked) it is listed
+        // here too, so it can be updated or removed like the others.
+        if Installer.calendar-installed || Installer.calendar-selected: CheckRow {
+            text: Installer.calendar-installed ? Lang.t("לוח שנה (מותקן)", "Calendar (installed)") : Lang.t("לוח שנה", "Calendar");
+            detail: Lang.t("לוח שנה עם זמני היום ולימוד יומי, כתוכנה קטנה בחלון משלה.", "The calendar with zmanim and daily learning as a small app in its own window.");
+            side-note: Lang.t("כ־1 MB", "about 1 MB");
+            icon: "calendar";
+            checked: Installer.calendar-selected;
+            toggled => { Installer.toggle-calendar(); }
+        }
+        HorizontalLayout {
+            alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
+            spacing: 8px;
+            // Same split as the home page: add-in options and the rest, each only when relevant.
+            if Lang.en && Installer.addin-selected: Button {
+                text: "Add-in options";
+                clicked => { Installer.addin-options-back = Page.manage; Installer.page = Page.addin-options; }
+            }
+            if Installer.apps-selected: Button {
+                text: Lang.t("אפשרויות", "Options");
+                clicked => {
+                    Installer.options-back = Page.manage;
+                    Installer.page = Page.options;
+                }
+            }
+            if !Lang.en && Installer.addin-selected: Button {
+                text: "אפשרויות התוסף";
+                clicked => { Installer.addin-options-back = Page.manage; Installer.page = Page.addin-options; }
+            }
+        }
+        if Installer.kitvei-installed && !Installer.kitvei-selected: KitveiRemovalNotice { }
+        Rectangle { vertical-stretch: 1; }
+        if Installer.confirm-uninstall: Text {
+            text: Lang.t("להסיר את כל רכיבי כלי קודש? לחצו שוב על \"הסר\" לאישור.", "Remove all of Klei Kodesh? Click \"Remove\" again to confirm.");
+            color: Theme.danger;
+            font-size: 12.5px;
+            horizontal-alignment: Lang.start;
+            wrap: word-wrap;
+        }
+    }
+    // Hebrew: [Cancel] ... [Remove] [Repair] [Change]. English: [Change] [Repair] [Remove] ... [Cancel].
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 12px;
+        height: 42px;
+        spacing: 8px;
+        if Lang.en: Button { text: "Change"; primary: true; min-width: 80px; enabled: root.can-change; clicked => { Installer.apply-changes(); } }
+        if Lang.en: Button { text: "Repair"; min-width: 80px; clicked => { Installer.repair(); } }
+        if Lang.en: Button { text: "Remove"; min-width: 80px; clicked => { root.remove(); } }
+        if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { Installer.quit(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { Installer.quit(); } }
+        if !Lang.en: Button { text: "הסר"; min-width: 80px; clicked => { root.remove(); } }
+        if !Lang.en: Button { text: "תיקון"; min-width: 80px; clicked => { Installer.repair(); } }
+        if !Lang.en: Button { text: "שינוי"; primary: true; min-width: 80px; enabled: root.can-change; clicked => { Installer.apply-changes(); } }
+    }
+
+    // First click asks, second click removes.
+    function remove() {
+        if Installer.confirm-uninstall { Installer.uninstall(); } else { Installer.confirm-uninstall = true; }
+    }
+}

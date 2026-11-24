@@ -1,0 +1,261 @@
+import { ref, computed, watch } from 'vue'
+import { HDate } from '@hebcal/hdate'
+import { HebrewCalendar } from '@hebcal/core/dist/esm/hebcal'
+import { Event, flags } from '@hebcal/core/dist/esm/event'
+import { isShownEvent } from './isShownModernHoliday'
+import { Location } from '@hebcal/core/dist/esm/location'
+import { getDailyLearning } from './hebrewCalendarLearning'
+import { ZMAN_NAMES, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
+import { chosenCommunity, primaryGroupsFor } from './zmanimCommunity'
+import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
+import { specialDayRows } from './specialDayZmanim'
+import { altFastTime, fastTime } from './fastTimes'
+import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
+import { GREG_MONTHS } from './useMonthlyView'
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const DAY_NAMES_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+
+const MONTH_NAMES: Record<number, string> = {
+  1: 'ניסן', 2: 'אייר', 3: 'סיון', 4: 'תמוז', 5: 'אב', 6: 'אלול',
+  7: 'תשרי', 8: 'חשון', 9: 'כסלו', 10: 'טבת', 11: 'שבט', 12: 'אדר', 13: 'אדר ב׳',
+}
+
+/** Places that hebcal knows by name (it has their customary candle-lighting minutes), by place id. */
+const HEBCAL_LOCATION: Record<number, string> = {
+  [JERUSALEM_ID]: 'Jerusalem', 45: 'Tel Aviv', 52: 'Haifa', 60: 'Beer Sheva', 97: 'Eilat', 100: 'Tiberias',
+  105: 'New York', 109: 'London', 154: 'Montreal',
+}
+
+/** End of Shabbat / Yom Tov when the preset names no line: the default list's tzeit line. */
+const DEFAULT_TZEIT_SHABBAT: ZmanName = 'tzeit18Sun'
+
+/** hebcal's own label for the start of a fast (it has no such event on erev Yom Kippur). */
+const YK_FAST_BEGINS = strip(new Event(new HDate(), 'Fast begins', flags.MAJOR_FAST).render('he'))
+
+type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
+
+const NO_ZMANIM = Object.fromEntries(ZMAN_NAMES.map((name) => [name, null])) as CalendarZmanim
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function strip(s: string): string {
+  return s.replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '')
+}
+
+function dayGem(hd: HDate): string {
+  return (hd.renderGematriya().split(' ')[0] ?? String(hd.getDate())).replace(/[\u05F3\u05F4]/g, '')
+}
+
+function sundayOf(d: Date): Date {
+  const s = new Date(d)
+  s.setDate(s.getDate() - s.getDay())
+  s.setHours(0, 0, 0, 0)
+  return s
+}
+
+function resolveLocation(place: Place | null): InstanceType<typeof Location> {
+  const en = HEBCAL_LOCATION[place?.id ?? JERUSALEM_ID]
+  const found = en ? Location.lookup(en) : null
+  if (found) return found
+  const il = place!.tzid === 'Asia/Jerusalem'
+  return new Location(place!.lat, place!.lng, il, place!.tzid, String(place!.id), il ? 'IL' : undefined)
+}
+
+function rangeLabel(aMonth: string, aYear: string, bMonth: string, bYear: string): string {
+  if (aMonth === bMonth && aYear === bYear) return `${aMonth} ${aYear}`
+  if (aYear === bYear) return `${aMonth} – ${bMonth} ${aYear}`
+  return `${aMonth} ${aYear} – ${bMonth} ${bYear}`
+}
+
+// ── Build week ────────────────────────────────────────────────────────────────
+
+// hebcal only says WHICH days have candle lighting / havdalah; the times come from our library.
+function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: PrimaryGroups | null): CalendarWeek {
+  const saturday = new Date(sunday)
+  saturday.setDate(sunday.getDate() + 6)
+
+  const loc = resolveLocation(city)
+  const events = HebrewCalendar.calendar({
+    start: new HDate(sunday),
+    end: new HDate(saturday),
+    sedrot: true,
+    candlelighting: true, // only for the day flags; times are ours
+    location: loc,
+    il: loc.getIsrael(),
+    omer: true,
+    shabbatMevarchim: true,
+    molad: true,
+    yomKippurKatan: true,
+  })
+
+  const byDate = new Map<string, typeof events>()
+  for (const e of events) {
+    const k = e.getDate().greg().toISOString().slice(0, 10)
+    if (!byDate.has(k)) byDate.set(k, [])
+    byDate.get(k)!.push(e)
+  }
+
+  const days: CalendarDay[] = []
+
+  for (let d = 0; d < 7; d++) {
+    const date = new Date(sunday)
+    date.setDate(sunday.getDate() + d)
+    date.setHours(0, 0, 0, 0)
+    const hd = new HDate(date)
+    const dayEvents = byDate.get(date.toISOString().slice(0, 10)) ?? []
+    const zmanim = city ? dayPrintedZmanim(city, date) : NO_ZMANIM
+
+    const holidays: string[] = []
+    let parasha: string | null = null
+    let candleLighting: string | null = null
+    let havdalah: string | null = null
+    let omer: string | null = null
+    let chanukahCandles: string | null = null
+    let shabbatMevarchim: string | null = null
+    let molad: string | null = null
+    let yomKippurKatan: string | null = null
+    let fastStart: string | null = null
+    let fastEnd: string | null = null
+    let fastStartAlt: CalendarDay['fastStartAlt'] = null
+    let fastEndAlt: CalendarDay['fastEndAlt'] = null
+
+    for (const e of dayEvents) {
+      if (!isShownEvent(e)) continue
+      const f = e.getFlags()
+      if (f & flags.PARSHA_HASHAVUA) {
+        parasha = strip(e.render('he')).replace(/^פרשת\s+/, '')
+      } else if (f & flags.LIGHT_CANDLES) {
+        candleLighting = primary?.candles ? zmanim[primary.candles] ?? null : null
+      } else if (f & flags.YOM_TOV_ENDS || f & flags.LIGHT_CANDLES_TZEIS) {
+        havdalah = primary ? zmanim[primary.tzeitShabbat ?? DEFAULT_TZEIT_SHABBAT] ?? null : null
+      } else if (f & flags.OMER_COUNT) {
+        omer = strip(e.render('he'))
+      } else if (f & flags.CHANUKAH_CANDLES) {
+        chanukahCandles = strip(e.render('he'))
+      } else if (f & flags.SHABBAT_MEVARCHIM) {
+        shabbatMevarchim = strip(e.render('he'))
+      } else if (f & flags.MOLAD) {
+        molad = strip(e.render('he'))
+      } else if (f & flags.YOM_KIPPUR_KATAN) {
+        yomKippurKatan = strip(e.render('he'))
+      } else if (f & flags.MINOR_FAST || f & flags.MAJOR_FAST) {
+        const desc = e.getDesc()
+        if (desc === 'Fast begins' || desc === 'Fast ends') {
+          const edge = desc === 'Fast ends' ? 'end' : f & flags.MAJOR_FAST ? 'majorStart' : 'minorStart'
+          const time = fastTime(edge, zmanim, primary)
+          const label = strip(e.renderBrief('he'))
+          if (time) {
+            if (edge === 'end') fastEnd = `${label}: ${time}`
+            else fastStart = `${label}: ${time}`
+          }
+          if (edge === 'end') fastEndAlt = altFastTime(edge, zmanim, primary)
+          else fastStartAlt = altFastTime(edge, zmanim, primary)
+        } else {
+          holidays.push(strip(e.render('he')))
+        }
+      } else if (f & (flags.CHAG | flags.MINOR_FAST | flags.MAJOR_FAST | flags.ROSH_CHODESH | flags.SPECIAL_SHABBAT | flags.MODERN_HOLIDAY | flags.CHOL_HAMOED | flags.MINOR_HOLIDAY)) {
+        holidays.push(strip(e.render('he')))
+      }
+    }
+
+    if (hd.getMonth() === 7 && hd.getDate() === 9) {
+      const time = fastTime('majorStart', zmanim, primary)
+      if (time) fastStart = `${YK_FAST_BEGINS}: ${time}`
+    }
+
+    days.push({
+      date,
+      dayOfWeek: d,
+      gregDay: date.getDate(),
+      hebGem: dayGem(hd),
+      hebDayName: DAY_NAMES_HE[d]!,
+      isToday: date.getTime() === today0.getTime(),
+      isShabbat: d === 6,
+      isFriday: d === 5,
+      holidays,
+      parasha,
+      candleLighting,
+      havdalah,
+      omer,
+      chanukahCandles,
+      shabbatMevarchim,
+      molad,
+      yomKippurKatan,
+      fastStart,
+      fastEnd,
+      fastStartAlt,
+      fastEndAlt,
+      learning: getDailyLearning(hd),
+      zmanim,
+      specialZmanim: city ? specialDayRows(city, date) : [],
+    })
+  }
+
+  const hdSun = new HDate(sunday)
+  const hdSat = new HDate(saturday)
+  const sunYear = hdSun.renderGematriya().split(' ').pop() ?? ''
+  const satYear = hdSat.renderGematriya().split(' ').pop() ?? ''
+
+  const hebrewLabel = rangeLabel(
+    MONTH_NAMES[hdSun.getMonth()] ?? '', sunYear,
+    MONTH_NAMES[hdSat.getMonth()] ?? '', satYear,
+  )
+  const gregLabel = rangeLabel(
+    GREG_MONTHS[sunday.getMonth()] ?? '', String(sunday.getFullYear()),
+    GREG_MONTHS[saturday.getMonth()] ?? '', String(saturday.getFullYear()),
+  )
+
+  return { hebrewLabel, gregLabel, days }
+}
+
+// ── Composable ────────────────────────────────────────────────────────────────
+
+export function useWeeklyView(city: { value: Place | null }) {
+  const today0 = new Date()
+  today0.setHours(0, 0, 0, 0)
+
+  const offset = ref(0)
+
+  const currentSunday = computed(() => {
+    const s = sundayOf(today0)
+    s.setDate(s.getDate() + offset.value * 7)
+    return s
+  })
+
+  // The preset's lines for this place (null until loaded: no candle/havdalah times yet).
+  const primary = ref<PrimaryGroups | null>(null)
+  let generation = 0
+  watch([chosenCommunity, () => city.value?.id ?? JERUSALEM_ID], async ([chosen, placeId]) => {
+    const mine = ++generation
+    let groups: PrimaryGroups = {}
+    try { groups = await primaryGroupsFor(chosen, placeId) } catch { /* no preset: defaults below */ }
+    if (mine === generation) primary.value = groups
+  }, { immediate: true })
+
+  const week = computed<CalendarWeek>(() => buildWeek(currentSunday.value, city.value, today0, primary.value))
+
+  watch(
+    () => city.value,
+    () => { offset.value = 0 },
+  )
+
+  // Jump so the visible week contains `date`. Offset is measured in whole
+  // weeks between the Sunday of today's week and the Sunday of the target's.
+  function goToDate(date: Date) {
+    const targetSunday = sundayOf(date)
+    const baseSunday = sundayOf(today0)
+    const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
+    offset.value = Math.round((targetSunday.getTime() - baseSunday.getTime()) / MS_PER_WEEK)
+  }
+
+  return {
+    week,
+    prev: () => { offset.value-- },
+    next: () => { offset.value++ },
+    goToday: () => { offset.value = 0 },
+    goToDate,
+    reset: () => { offset.value = 0 },
+  }
+}

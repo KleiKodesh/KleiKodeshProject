@@ -1,0 +1,10 @@
+version 20141029:
+Database updated for Hebrew Wiktionary dump 20141027.
+Supports nouns, adpositions, numerals.
+
+version 20120304:
+Database updated for Hebrew Wiktionary dump 20120304.
+Now builds for Java 1.5
+
+version 20120218:
+Initial release, supports only nouns. Uses wiktionary dump 20120215.

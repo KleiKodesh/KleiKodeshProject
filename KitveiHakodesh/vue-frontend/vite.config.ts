@@ -1,0 +1,935 @@
+import { defineConfig, loadEnv } from 'vite'
+import { appResolve, vueSingleFilePlugins, ZMANIM_ASSETS_DIR, zmanimAssetFiles } from './vite.shared.js'
+import { fileURLToPath, URL } from 'node:url'
+import type { Plugin } from 'vite'
+import path from 'node:path'
+import fs from 'node:fs'
+import { fileURLToPath as toPath } from 'node:url'
+import net from 'node:net'
+import http from 'node:http'
+import { spawn, exec, type ChildProcess } from 'node:child_process'
+import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { websitesDevProxy } from './websitesDevProxy.js'
+import { buildBridgeStubScript } from './src/features/html-view/otzariaAddinBridgeStub.js'
+
+// ── KitveiHakodesh service (loopback HTTP host + private pipe handshake) ────────
+// The clean data path: this dev server spawns ITS OWN .NET service instance, which
+// hosts a MessagePack RPC over http://127.0.0.1:<port> on an OS-assigned free port.
+// That port is PRIVATE — the service never writes it to a file or stdout; this dev
+// server learns it over the service's named pipe (the getHttpPort op), which is
+// ACL'd to our user. The BROWSER then talks to the HTTP host DIRECTLY (serviceClient
+// discovers the base via /khs-endpoint) — node is not in the data path.
+//
+// Isolation: each dev server uses a UNIQUE pipe name (its pid), so it reaches ITS
+// instance and never reuses/kills another dev server's or app's service. The service
+// is tied to our lifetime via KHS_OWNER_PID (Http/OwnerWatcher) so it can't orphan.
+const KHS_HOST = '127.0.0.1'
+// Unique per dev-server PROCESS (stable across in-process config reloads). Any spawner
+// picks its own name; the service reads it from KHS_PIPE_NAME.
+const KHS_PIPE_NAME = `KitveiHakodesh.${process.pid}`
+const KHS_PIPE = `\\\\.\\pipe\\${KHS_PIPE_NAME}`
+const KHS_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/KitveiHakodeshService',
+)
+const KHS_PROJECT = path.join(KHS_DIR, 'KitveiHakodeshService.csproj')
+// The FtsLib project reference — its source affects the built exe, so it counts
+// toward the "needs rebuild?" staleness check below.
+const KHS_FTSLIB_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/FtsLib-Csharp/FtsLib',
+)
+// KitveiHakodesh.Core — the service's other project reference; same staleness rule.
+const KHS_CORE_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/KitveiHakodesh.Core',
+)
+// FastDocView and its two submodule libraries, all compiled into the service through
+// KitveiHakodesh.Core. Without them here a library change (or a submodule pointer update)
+// never marked the exe stale, so dev kept starting the old service.
+const KHS_FASTDOCVIEW_DIRS = [
+  '../FastDocView/FastDocView',
+  '../FastDocView/SeekableDeflate/SeekableDeflate',
+  '../FastDocView/TextEncodingDetection/TextEncodingDetection',
+].map((p) => path.resolve(path.dirname(toPath(import.meta.url)), p))
+
+/**
+ * Inserts the Otzaria addin SDK stub into an HTML byte stream, right after the
+ * opening <head> tag (falling back to <html>, then to the start of the body).
+ * Works on BYTES: the stub is pure ASCII, so the insert is charset-transparent
+ * for UTF-8 and Windows-1255 alike. UTF-16/32 documents (BOM-detected) are the
+ * one place a byte insert would corrupt — those are returned untouched and fall
+ * back to the post-load injection in useOtzariaAddinBridge.
+ */
+function injectAddinBridgeStub(body: Buffer): Buffer {
+  const b0 = body[0], b1 = body[1]
+  const isUtf16or32 = (b0 === 0xff && b1 === 0xfe) || (b0 === 0xfe && b1 === 0xff)
+  if (isUtf16or32) return body
+
+  const stubTag = Buffer.from(`<script>${buildBridgeStubScript()}</script>`, 'ascii')
+  const ascii = body.toString('latin1')
+  // (?=[\s>]) so <header> can never match as <head>
+  for (const openTag of [/<head(?=[\s>])[^>]*>/i, /<html(?=[\s>])[^>]*>/i]) {
+    const match = ascii.match(openTag)
+    if (match && match.index !== undefined) {
+      const at = match.index + match[0].length
+      return Buffer.concat([body.subarray(0, at), stubTag, body.subarray(at)])
+    }
+  }
+  return Buffer.concat([stubTag, body])
+}
+// The already-built Release exe. We spawn THIS directly (not `dotnet run`): a warm
+// `dotnet run` costs ~4s to pipe-ready (SDK host + MSBuild up-to-date check on every
+// launch) versus ~385ms for the prebuilt exe — a ~3.6s tax paid on every dev start.
+// TFM is net10.0-windows (the UAC manifest + USN journal work), so the output lands in
+// bin\Release\net10.0-windows\. Pointing at the old bin\Release\net10.0\ silently runs a
+// stale exe that has no DocumentLocator.dll beside it — searches still answer (via the
+// standalone DocumentLocator service's index) so the staleness is easy to miss.
+// KHS_EXE env overrides it (e.g. a native-AOT publish, to test what users actually run);
+// an overridden exe is used as-is, never rebuilt.
+const KHS_EXE_OVERRIDE = process.env.KHS_EXE || ''
+const KHS_EXE = KHS_EXE_OVERRIDE || path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
+// ── Shadow copy: the running service never locks bin\Release ───────────────────
+// The service runs from a COPY of the program files (top-level files + runtimes/) in
+// bin\dev-shadow\<exe-mtime-ms>\, so `dotnet build -c Release` from any shell can overwrite
+// bin\Release while our service is up. KHS_DATA_DIR points the copy back at the real build
+// folder, where the data (FtsIndex, CatalogTocIndex, hb-cache, Dictionary, ...) stays — see
+// AppFileLocator.DataRoot. Real copies, not hard links: a hard link shares the locked file.
+// Only top-level files + runtimes/ are program files; every other subfolder is data (or a
+// stale RID publish like win-x64/) and is never copied.
+const KHS_BUILD_DIR = path.dirname(KHS_EXE)
+const KHS_SHADOW_ROOT = path.join(KHS_DIR, 'bin', 'dev-shadow')
+
+function copyDirSync(src: string, dst: string): void {
+  fs.mkdirSync(dst, { recursive: true })
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, e.name), d = path.join(dst, e.name)
+    if (e.isDirectory()) copyDirSync(s, d)
+    else fs.copyFileSync(s, d)
+  }
+}
+
+/** The exe to spawn: a shadow copy matching the current build (made or reused). Older shadows
+ *  nobody holds are deleted; one still locked (EBUSY/EPERM) is left for next time. */
+function ensureKhsShadowExe(): string {
+  if (KHS_EXE_OVERRIDE) return KHS_EXE
+  const stamp = String(Math.floor(fs.statSync(KHS_EXE).mtimeMs))
+  const dir = path.join(KHS_SHADOW_ROOT, stamp)
+  const exe = path.join(dir, path.basename(KHS_EXE))
+  const done = path.join(dir, '.complete')
+  if (!fs.existsSync(done)) {
+    const t0 = Date.now()
+    fs.rmSync(dir, { recursive: true, force: true }) // a half-written copy from a crash
+    fs.mkdirSync(dir, { recursive: true })
+    for (const e of fs.readdirSync(KHS_BUILD_DIR, { withFileTypes: true })) {
+      const s = path.join(KHS_BUILD_DIR, e.name)
+      if (e.isFile()) fs.copyFileSync(s, path.join(dir, e.name))
+      else if (e.isDirectory() && e.name === 'runtimes') copyDirSync(s, path.join(dir, e.name))
+    }
+    fs.writeFileSync(done, '')
+    console.log(`[khs] shadow copy made (${Date.now() - t0}ms) — ${path.relative(KHS_DIR, dir)}`)
+  }
+  try {
+    for (const old of fs.readdirSync(KHS_SHADOW_ROOT)) {
+      if (old === stamp) continue
+      try { fs.rmSync(path.join(KHS_SHADOW_ROOT, old), { recursive: true, force: true }) }
+      catch (e: any) { if (e?.code !== 'EBUSY' && e?.code !== 'EPERM') throw e }
+    }
+  } catch (e: any) { console.warn('[khs] old shadow cleanup skipped:', e?.message) }
+  return exe
+}
+const KHS_CONNECT_TIMEOUT_MS = 2_000
+const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
+const KHS_STARTUP_POLL_MS = 250
+
+/** One request/response round-trip over OUR private pipe using 4-byte LE length framing.
+ *  Used only for the control plane (getHttpPort, shutdown) — data goes browser↔HTTP. */
+function callPipe(requestBody: Buffer, connectTimeoutMs = KHS_CONNECT_TIMEOUT_MS): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(KHS_PIPE)
+    let connected = false
+    const timer = setTimeout(() => {
+      socket.destroy()
+      reject(Object.assign(new Error('pipe connection timed out'), { code: 'ETIMEDOUT', connected }))
+    }, connectTimeoutMs)
+    let resp = Buffer.alloc(0)
+    let expected = -1
+    socket.on('connect', () => {
+      connected = true
+      clearTimeout(timer)
+      const header = Buffer.alloc(4)
+      header.writeInt32LE(requestBody.length, 0)
+      socket.write(Buffer.concat([header, requestBody]))
+    })
+    socket.on('data', (chunk) => {
+      resp = Buffer.concat([resp, chunk])
+      if (expected === -1 && resp.length >= 4) expected = resp.readInt32LE(0)
+      if (expected !== -1 && resp.length >= 4 + expected) {
+        const body = resp.subarray(4, 4 + expected)
+        socket.destroy()
+        resolve(body)
+      }
+    })
+    socket.on('error', (err) => { clearTimeout(timer); reject(Object.assign(err as Error, { connected })) })
+  })
+}
+
+/** Encode a control-op request frame: { Op, Args } (Args = nested msgpack, PascalCase keys). */
+function encodeReq(op: string, args: unknown = {}): Buffer {
+  return Buffer.from(mpEncode({ Op: op, Args: mpEncode(args ?? {}) }))
+}
+
+/** Decode the { Ok, Result?, Error? } envelope and return the nested-msgpack Result decoded. */
+function decodeResult<T = any>(body: Buffer): T {
+  const env = mpDecode(body) as { Ok: boolean; Result?: Uint8Array; Error?: string }
+  if (!env.Ok) throw new Error(env.Error || 'service error')
+  return (env.Result && env.Result.length ? mpDecode(env.Result) : undefined) as T
+}
+
+/** True if OUR service instance is answering on its private pipe. */
+function khsPipeIsUp(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection(KHS_PIPE)
+    socket.setTimeout(300)
+    socket.on('connect', () => { socket.destroy(); resolve(true) })
+    socket.on('timeout', () => { socket.destroy(); resolve(false) })
+    socket.on('error', () => resolve(false))
+  })
+}
+
+function waitForKhsPipe(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + KHS_STARTUP_TIMEOUT_MS
+    const attempt = async () => {
+      if (await khsPipeIsUp()) { resolve(); return }
+      if (Date.now() >= deadline) { reject(new Error('KitveiHakodesh service did not start in time')); return }
+      setTimeout(attempt, KHS_STARTUP_POLL_MS)
+    }
+    void attempt()
+  })
+}
+
+/** Ask the service (over the private pipe) for its loopback HTTP port + bearer token. Retries
+ *  briefly to ride out the pipe accept-loop gap / boot window. This is the ONLY way the
+ *  port/token leave the service — never a file, never stdout. */
+async function fetchHttpEndpointOverPipe(attempts = 8): Promise<{ port: number; token: string }> {
+  let lastErr: any
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const { Port, Token } = decodeResult<{ Port: number; Token: string }>(
+        await callPipe(encodeReq('getHttpPort')))
+      if (Port > 0 && Token) return { port: Port, token: Token }
+    } catch (err) { lastErr = err }
+    await new Promise((r) => setTimeout(r, 40 + i * 40))
+  }
+  throw lastErr ?? new Error('service did not report an HTTP endpoint')
+}
+
+/** Graceful `shutdown` over the private pipe: the service cancels its FTS build cleanly
+ *  (aborts any merge, releases the index lock) and exits, freeing its HTTP port. */
+async function pipeShutdown(): Promise<void> {
+  try { await callPipe(encodeReq('shutdown')) } catch { /* it drops the pipe as it exits — expected */ }
+}
+
+// Config-reload handoff: on a vite.config change vite evaluates the NEW config (fresh module,
+// fresh copy of all this state) BEFORE closing the old server, and the new instance reuses the
+// still-running service. A process-global generation counter lets the OLD instance's close
+// handler tell that handoff apart from a real dev-server shutdown — otherwise it stops the
+// service right after the new instance decided to reuse it, leaving vite up with no service.
+const khsGen: number = ((globalThis as any).__khsGen = ((globalThis as any).__khsGen ?? 0) + 1)
+
+// ── Single-dev-server lock (CROSS-PROCESS) ──────────────────────────────────────
+// khsGen above lives on globalThis, so it only ever sees config reloads INSIDE this node
+// process. It cannot see a second `npm run dev` in another terminal — and that case is
+// actively harmful, not merely redundant:
+//   • Each dev server keys its service pipe to its OWN pid (KitveiHakodesh.<pid>), so both
+//     spawn a service and each publishes a different /khs-endpoint.
+//   • The browser has learned exactly ONE endpoint. When the other dev server rebuilds, it
+//     graceful-stops then taskkills ITS service and respawns — the browser's service
+//     disappears. (Services run from a shadow copy, so the build itself no longer fails
+//     on locked DLLs; both instances would still share the data folder.) The generation guard then makes the owner DECLINE to respawn (it sees a
+//     gen it doesn't recognise), so nothing comes back.
+// The visible symptom is "the service worked for a while, then went unresponsive" while vite
+// itself keeps serving pages — the service is gone (or is the wrong instance) but the page is
+// still up. Guard with a pid-bearing lock file: stale locks (dead pid) are reclaimed
+// automatically, so a hard-killed dev server never wedges the next start.
+const KHS_LOCK = path.join(KHS_DIR, 'bin', '.dev-server.lock')
+
+// Why this dev server has no service, in one human-readable sentence — set when we give up
+// (duplicate dev server, crash-loop). Reported straight back through /khs-endpoint, so
+// ANY caller that asks for the service — the browser, curl, a debugging session — is told the
+// actual reason instead of a bare 503 it has to go and interpret. Null while healthy.
+let khsStrandReason: string | null = null
+// True when THIS dev server declined to start a service because another one held the lock. The
+// condition is temporary — the other dev server can exit — so /khs-endpoint re-attempts the
+// claim instead of leaving this instance permanently stranded on a stale owner pid.
+let khsBlockedByDuplicate = false
+
+/** Record why the service is unavailable, flattened to a single line for transport. */
+function recordStrandReason(kind: string, detail: string): void {
+  khsStrandReason = `${kind}: ${detail.replace(/\s+/g, ' ').trim()}`
+}
+
+/**
+ * The /khs-endpoint 503 body. Two very different situations both produce a 503, and telling
+ * them apart is the whole point:
+ *   • transient — still starting or mid-respawn; the browser's retry loop fixes it (`retry`).
+ *   • STRANDED  — we gave up (duplicate dev server, crash-loop). Retrying is futile and the
+ *     body says what to do about it. `curl localhost:5173/khs-endpoint` then explains the
+ *     failure on the spot, rather than leaving a bare "not ready" to be re-diagnosed.
+ */
+function notReadyBody(): string {
+  return khsStrandReason === null
+    ? JSON.stringify({ error: 'service not ready', retry: true })
+    : JSON.stringify({ error: khsStrandReason, retry: false, stranded: true })
+}
+
+/** True when `pid` is a live process. Signal 0 tests existence without touching it. */
+function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+/**
+ * Claim the single-dev-server lock for this process. Returns null on success, or the owner's
+ * pid when another LIVE dev server already holds it. A lock whose owner is gone (crash,
+ * taskkill, reboot) is treated as free and reclaimed — the pid check is what makes this
+ * self-healing rather than a file someone has to delete by hand.
+ */
+function claimDevServerLock(): number | null {
+  try { fs.mkdirSync(path.dirname(KHS_LOCK), { recursive: true }) } catch { /* see below */ }
+
+  // Fast path: create the lock ATOMICALLY ('wx' fails if it already exists). Without this,
+  // two dev servers started within the same moment both read ENOENT, both decide the lock is
+  // free, and both spawn a service — reproducing the exact bug this guard exists to prevent.
+  // Only the EEXIST case needs the read-and-inspect path below.
+  try {
+    fs.writeFileSync(KHS_LOCK, String(process.pid), { encoding: 'utf8', flag: 'wx' })
+    return null
+  } catch { /* exists, or unwritable — fall through */ }
+
+  try {
+    const owner = Number.parseInt(fs.readFileSync(KHS_LOCK, 'utf8').trim(), 10)
+    // Our own pid: a config reload re-evaluates this module in the SAME process, so the lock
+    // we already hold must not read as a conflict with ourselves.
+    if (Number.isFinite(owner) && owner !== process.pid && pidAlive(owner)) return owner
+  } catch { /* unreadable — treat as free and reclaim below */ }
+
+  // Free, ours, or owned by a dead pid → take it.
+  try {
+    fs.writeFileSync(KHS_LOCK, String(process.pid), 'utf8')
+  } catch { /* best effort: an unwritable lock must never block dev */ }
+  return null
+}
+
+/**
+ * Pop a real Windows message box. A console line is easy to miss — dev servers run in a
+ * terminal nobody is watching, and the failures this reports are exactly the ones the user
+ * discovers 20 minutes later as "the service is unresponsive".
+ *
+ * Fire-and-forget by design: MessageBox BLOCKS until dismissed, so it must never be awaited
+ * (that would stall dev startup behind a dialog). Uses the MessageBox Win32 call rather than
+ * WinForms so it works with no desktop session assumptions, and is fully wrapped — a failed
+ * notification must never take the dev server down with it.
+ */
+function notifyBox(title: string, message: string): void {
+  // Record the reason FIRST and unconditionally: it must survive even when the dialog can't be
+  // shown (non-Windows, no desktop session, spawn refused), because it is what /khs-endpoint
+  // reports back to every caller afterwards.
+  recordStrandReason(title, message)
+  if (process.platform !== 'win32') return
+  // MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST = 0x0 | 0x30 | 0x10000 | 0x40000
+  const ps = [
+    'Add-Type -Name W -Namespace N -MemberDefinition \'[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int MessageBox(IntPtr h,string t,string c,uint y);\'',
+    `[N.W]::MessageBox([IntPtr]::Zero, ${psLiteral(message)}, ${psLiteral(title)}, 0x50030) | Out-Null`,
+  ].join('; ')
+  try {
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+    })
+    child.on('error', () => {}) // spawn failure must stay silent
+    child.unref()               // never hold the event loop open on an undismissed dialog
+  } catch { /* notification is best-effort */ }
+}
+
+/** Single-quoted PowerShell literal: the only escape inside one is a doubled quote. */
+function psLiteral(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`
+}
+
+/** Release the lock, but only if it is still OURS — never stomp a newer owner's claim. */
+function releaseDevServerLock(): void {
+  try {
+    if (fs.readFileSync(KHS_LOCK, 'utf8').trim() === String(process.pid)) fs.rmSync(KHS_LOCK)
+  } catch { /* already gone or not ours */ }
+}
+
+let khsProc: ChildProcess | null = null
+// True when this config instance ADOPTED a service left running by the previous instance
+// (config-reload handoff) instead of spawning its own — there is no child handle to supervise,
+// so aliveness is probed over the pipe where it matters (/khs-endpoint).
+let khsReused = false
+// This dev server's own service; `khsReady` gates startup. Module-level so the child's `exit`
+// handler can reassign it when respawning.
+let khsReady: Promise<void> | null = null
+// True while node is intentionally stopping the service (rebuild/dev-close) — suppresses the
+// exit-handler's proactive respawn so we don't race our own (re)start.
+let khsManagedStop = false
+// True once the dev server is closing for good — no respawn from here on.
+let khsShuttingDown = false
+// Crash-loop guard for proactive respawn.
+let khsRespawnStrikes = 0
+let khsLastRespawn = 0
+// OUR instance's loopback HTTP port + bearer token, learned from the service over the private
+// pipe after spawn (0/'' until known). Handed to the browser via the /khs-endpoint dev route.
+// The token is the endpoint's real security boundary: the HTTP host 401s any request without
+// it, so a local port-scanner or a malicious web page can't use the service even if it finds
+// the port. (/khs-endpoint itself is guarded by Vite's default dev CORS — localhost origins
+// only — and its allowedHosts DNS-rebinding protection.)
+let khsHttpPort = 0
+let khsHttpToken = ''
+// Absolute seforim.db path forwarded to the service so it queries the same DB the app uses.
+// Set in configureServer before the service is spawned.
+let khsDbPath: string | undefined
+// Absolute FTS index dir forwarded to the service for full-text search (optional).
+let khsFtsIndexPath: string | undefined
+
+/**
+ * Ask OUR service instance to shut down GRACEFULLY (via the private-pipe `shutdown` op), so it
+ * cancels its background FTS build cleanly (aborts any in-flight merge, releases the index write
+ * lock) and leaves the index resumable — never hard-killed mid-merge, which risks index
+ * corruption. Returns once the service has exited (pipe down) or times out.
+ */
+async function gracefulStopKhs(): Promise<void> {
+  if (!(await khsPipeIsUp())) return
+  console.log('[khs] asking service to shut down gracefully (safe for the FTS index)...')
+  await pipeShutdown()
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (!(await khsPipeIsUp())) { console.log('[khs] service stopped cleanly'); return }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  console.warn('[khs] graceful shutdown timed out — will force-kill')
+}
+
+/**
+ * Force-kill ONLY the service instance THIS dev server spawned (its pid tree) — never a
+ * blanket kill-by-name, which would tear down a concurrent dev server's or app's own instance.
+ * Fallback for when graceful shutdown was ignored. Orphans from a crashed dev server are handled
+ * on the service side by Http/OwnerWatcher (KHS_OWNER_PID), not here.
+ */
+function killOwnKhs(): Promise<void> {
+  const pid = khsProc?.pid
+  if (!pid || process.platform !== 'win32') return Promise.resolve()
+  return new Promise((resolve) => { exec(`taskkill /pid ${pid} /T /F`, () => resolve()) })
+}
+
+/**
+ * Newest mtime (ms) among the service's own source files AND its FtsLib project
+ * reference — everything that, if edited, means the built exe is stale. Walks the
+ * two source trees skipping bin/obj. Returns 0 if nothing is found.
+ */
+function newestSourceMtimeMs(): number {
+  let newest = 0
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[]
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (e.name === 'bin' || e.name === 'obj' || e.name === '.vs') continue
+        walk(path.join(dir, e.name))
+      } else if (/\.(cs|csproj|json|props|targets)$/i.test(e.name)) {
+        try {
+          const m = fs.statSync(path.join(dir, e.name)).mtimeMs
+          if (m > newest) newest = m
+        } catch { /* ignore unreadable */ }
+      }
+    }
+  }
+  walk(KHS_DIR)
+  walk(KHS_FTSLIB_DIR)
+  walk(KHS_CORE_DIR)
+  for (const dir of KHS_FASTDOCVIEW_DIRS) walk(dir)
+  return newest
+}
+
+/**
+ * True when the built Release exe is missing or OLDER than the newest service/FtsLib
+ * source file — i.e. an edit was made and we must rebuild. A pure-mtime check in Node
+ * (a few ms) instead of `dotnet build`'s own up-to-date check (~2.3s even for a no-op),
+ * so an unchanged tree skips the build entirely.
+ */
+function serviceNeedsBuild(): boolean {
+  if (KHS_EXE_OVERRIDE) return false
+  let exeMtime: number
+  try { exeMtime = fs.statSync(KHS_EXE).mtimeMs } catch { return true } // no exe yet → build
+  return newestSourceMtimeMs() > exeMtime
+}
+
+/** Build the service (Release, incremental). Resolves on success, rejects on failure. */
+function buildKhsService(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('[khs] source changed — building service (dotnet build -c Release)...')
+    const t0 = Date.now()
+    const proc = spawn('dotnet', ['build', KHS_PROJECT, '-c', 'Release', '-v', 'q', '--nologo'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    let tail = ''
+    proc.stdout?.on('data', (d: Buffer) => { tail += d.toString(); if (tail.length > 4000) tail = tail.slice(-4000) })
+    proc.stderr?.on('data', (d: Buffer) => { tail += d.toString(); if (tail.length > 4000) tail = tail.slice(-4000) })
+    proc.on('error', reject)
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        console.log(`[khs] build complete (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
+        resolve()
+      } else {
+        console.error(`[khs] build FAILED (exit ${code}):\n${tail}`)
+        reject(new Error(`service build failed (exit ${code})`))
+      }
+    })
+  })
+}
+
+/** Spawn the prebuilt Release exe DIRECTLY (no `dotnet run` host), wait for its private pipe,
+ *  then learn its OS-assigned HTTP port over that pipe.
+ *   • KHS_PIPE_NAME — our unique per-dev-server pipe, so we reach OUR instance.
+ *   • KHS_OWNER_PID — lets the service self-clean if this dev server dies without a graceful
+ *     stop (Http/OwnerWatcher), so no orphaned port is ever left behind. */
+async function spawnKhsExe(): Promise<void> {
+  console.log('[khs] starting service (prebuilt exe)...')
+  const exe = ensureKhsShadowExe()
+  khsProc = spawn(exe, [], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    env: {
+      ...process.env,
+      ...(KHS_EXE_OVERRIDE ? {} : { KHS_DATA_DIR: KHS_BUILD_DIR }),
+      ...(khsDbPath ? { DB_PATH: khsDbPath } : {}),
+      ...(khsFtsIndexPath ? { FTS_INDEX_PATH: khsFtsIndexPath } : {}),
+      KHS_PIPE_NAME: KHS_PIPE_NAME,
+      KHS_OWNER_PID: String(process.pid),
+    },
+  })
+  khsProc.stdout?.on('data', (d: Buffer) => process.stdout.write(`[khs] ${d}`))
+  khsProc.stderr?.on('data', (d: Buffer) => process.stderr.write(`[khs] ${d}`))
+  // A spawn that never started (bad path, or a manifest demanding elevation we don't have —
+  // ERROR_ELEVATION_REQUIRED surfaces as code UNKNOWN / errno -4094). CLEAR khsProc: 'error'
+  // fires INSTEAD OF 'exit' when the process never launched, so leaving the handle set would
+  // make ensureKhsService believe a spawn is still in flight and block on waitForKhsPipe for
+  // the full startup timeout. Rejecting here instead gives the real reason immediately.
+  const spawnFailed = new Promise<never>((_, reject) => {
+    khsProc!.on('error', (err: NodeJS.ErrnoException) => {
+      khsProc = null
+      const elevation = err.code === 'UNKNOWN' || (err as any).errno === -4094
+      console.error(
+        elevation
+          ? '[khs] ERROR: Windows refused to start the service without elevation.\n' +
+            `      The manifest should request asInvoker — check ${path.relative(process.cwd(), path.join(KHS_DIR, 'Properties', 'app.manifest'))}\n` +
+            '      and rebuild (the exe embeds it, so a stale exe keeps the old request).'
+          : `[khs] ERROR: could not start the service: ${err.message}`,
+      )
+      reject(err)
+    })
+  })
+  // If the pipe wins the race below, nobody is awaiting spawnFailed any more — a later 'error'
+  // would surface as an unhandled rejection and take the dev server down. The console.error
+  // above already reported it, so swallow it here.
+  spawnFailed.catch(() => {})
+  khsProc.on('exit', (code) => {
+    console.log(`[khs] service exited (${code})`)
+    khsProc = null
+    khsHttpPort = 0; khsHttpToken = '' // stale — the browser re-discovers via /khs-endpoint
+    // Node isn't in the data path, so it can't lazily restart the service on a failed request.
+    // Supervise it instead: respawn on an UNMANAGED exit — the service's own setSeforimDbPath
+    // self-restart, or a crash — so the host (on a fresh port) comes back.
+    if (khsShuttingDown || khsManagedStop) return
+    // A newer config instance owns the service now (config-reload handoff); it supervises from
+    // here. Checked against the GLOBAL, not our close handler's flag: on a reload that needs a
+    // rebuild, the new instance stops this child before vite closes the old server, so the exit
+    // can land BEFORE our 'close' disarm and we'd respawn a competitor on the same pipe —
+    // locking the exe the new instance is mid-rebuild of.
+    if ((globalThis as any).__khsGen !== khsGen) return
+    const now = Date.now()
+    khsRespawnStrikes = now - khsLastRespawn < 3000 ? khsRespawnStrikes + 1 : 0
+    khsLastRespawn = now
+    if (khsRespawnStrikes >= 5) {
+      console.error('[khs] service is crash-looping — not respawning (fix it, then restart dev)')
+      // Terminal state: nothing will bring the service back, so every data request from here
+      // on fails while vite keeps serving the page. Say so out loud rather than letting it
+      // look like the service went "unresponsive".
+      notifyBox(
+        'KitveiHakodesh service stopped',
+        'The backend service crashed 5 times in a row, so the dev server gave up ' +
+        'restarting it.\n\nThe app will load but anything needing data will fail.\n\n' +
+        'Check the dev-server terminal for the crash, then restart dev.',
+      )
+      return
+    }
+    setTimeout(() => {
+      if (khsShuttingDown || khsManagedStop || khsProc) return
+      if ((globalThis as any).__khsGen !== khsGen) return // handed off while we waited
+      console.log('[khs] service went down — respawning')
+      khsReady = ensureKhsService().catch((e: any) => console.error('[khs] respawn failed:', e?.message))
+    }, 400)
+  })
+  // Race the pipe wait against a hard spawn failure so we surface the real error at once
+  // rather than polling a pipe that can never appear until the 120s timeout expires.
+  await Promise.race([waitForKhsPipe(), spawnFailed])
+  ;({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
+  // A healthy instance clears any stranding reason — otherwise a recovered dev server would
+  // keep reporting a failure that no longer applies.
+  khsStrandReason = null
+  console.log(`[khs] service ready — HTTP host on http://${KHS_HOST}:${khsHttpPort} (endpoint learned over the private pipe)`)
+}
+
+/**
+ * Ensure exactly one, up-to-date service is running — with the minimum work:
+ *   • REUSE   — if a healthy service is already answering and no source changed,
+ *               keep it (near-instant; C# edits force a rebuild+restart instead).
+ *   • REBUILD — only when a service/FtsLib source file is newer than the built exe.
+ *   • RESPAWN — spawn the PREBUILT exe directly (~385ms), never `dotnet run` (~4s).
+ * "Existing" means OUR OWN instance (its private pid-based pipe): another dev server's or
+ * app's service has a different pipe name, so we never see, reuse, or kill it. Any restart
+ * stops our old instance GRACEFULLY first (so its FTS build isn't hard-killed mid-merge).
+ */
+async function ensureKhsService(): Promise<void> {
+  if (khsProc) {
+    // A spawn from this session is already in flight — don't start a second.
+    console.log('[khs] service is already starting — waiting for it')
+    await waitForKhsPipe()
+    if (!khsHttpPort || !khsHttpToken) ({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
+    return
+  }
+
+  const needsBuild = serviceNeedsBuild()
+  const alreadyUp = await khsPipeIsUp()
+
+  // Fast path: OUR instance is already answering and nothing changed → reuse it. The common
+  // case for an in-process config reload; costs a single pipe probe. (Re-learn the port if a
+  // config reload dropped our khsHttpPort but the instance is still up.)
+  if (alreadyUp && !needsBuild) {
+    console.log('[khs] our service instance is up and current — reusing it')
+    khsReused = true
+    if (!khsHttpPort || !khsHttpToken) ({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
+    return
+  }
+
+  // We must (re)start. Mark the stop as MANAGED so the exit handler doesn't also try to
+  // respawn underneath us. Stop OUR existing instance GRACEFULLY first, then force-kill it,
+  // so the new build's instance replaces it (the shadow copy means it never locks bin\Release).
+  try {
+    khsManagedStop = true
+    khsReused = false // spawning our own child below — supervision is handle-based again
+    if (alreadyUp) {
+      console.log('[khs] stopping our existing service instance...')
+      await gracefulStopKhs()
+    }
+    await killOwnKhs()
+
+    if (needsBuild) {
+      await buildKhsService()
+    } else {
+      console.log('[khs] service is up-to-date — skipping build')
+    }
+
+    await spawnKhsExe()
+  } finally {
+    khsManagedStop = false
+  }
+}
+
+/** Stop OUR service instance on dev-server shutdown. */
+function stopKhsService(): void {
+  khsShuttingDown = true // stop the exit handler from respawning
+  const pid = khsProc?.pid
+  khsProc = null
+  // Graceful stop first (so the FTS build isn't hard-killed mid-merge); the service's
+  // OwnerWatcher also self-stops once this process dies, but we ask nicely first. Force-kill
+  // our own pid as a fallback. Best-effort on dev-server close.
+  void gracefulStopKhs().finally(() => { if (pid) exec(`taskkill /pid ${pid} /T /F`, () => {}) })
+}
+
+function devSqlitePlugin(): Plugin {
+  return {
+    name: 'dev-sqlite',
+    apply: 'serve',
+    enforce: 'pre',
+
+    async handleHotUpdate(ctx) {
+      // Ensure the plugin is alive
+      return ctx.modules
+    },
+
+    configureServer(server) {
+      const env = loadEnv('development', process.cwd(), '')
+      const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
+
+      // Forward the resolved (absolute) seforim.db path to the service. The service
+      // derives the user_settings.db path from it ({dbDir}/Settings/user_settings.db).
+      khsDbPath = path.resolve(dbPath)
+
+      // Optional: forward the FTS index dir (built by the app) for full-text search.
+      const ftsIndexPath = process.env.FTS_INDEX_PATH ?? env.FTS_INDEX_PATH ?? ''
+      khsFtsIndexPath = ftsIndexPath ? path.resolve(ftsIndexPath) : undefined
+
+      // Refuse to become a SECOND dev server. Two of them fight over one shared service exe
+      // (locked DLLs on rebuild) and publish rival /khs-endpoints, which strands the browser on
+      // a service nobody will respawn. Fail loudly here instead: vite still serves the app, but
+      // it never spawns a competing service, so the running dev server keeps working.
+      const lockOwner = claimDevServerLock()
+      if (lockOwner !== null) {
+        console.error(
+          `[khs] ANOTHER dev server is already running (pid ${lockOwner}).\n` +
+          '      Not starting a service — two dev servers share one service exe and would\n' +
+          '      break each other (locked DLLs on rebuild, rival /khs-endpoints).\n' +
+          `      Use that dev server, or stop it first:  taskkill /pid ${lockOwner} /T /F`,
+        )
+        notifyBox(
+          'KitveiHakodesh dev server',
+          `A dev server is already running (pid ${lockOwner}).\n\n` +
+          'This one will NOT start a backend service, because two dev servers ' +
+          'break each other (locked DLLs on rebuild, rival endpoints).\n\n' +
+          `Use the existing dev server, or stop it first:\n    taskkill /pid ${lockOwner} /T /F`,
+        )
+        // Blocked, but RECOVERABLE: when the other dev server exits, this one should take over
+        // rather than stay stranded reporting a pid that no longer exists. /khs-endpoint re-tries
+        // the claim (the browser already retries it on a timer), so recovery needs no restart.
+        khsBlockedByDuplicate = true
+        khsReady = Promise.resolve()
+      } else {
+        // Spawn + supervise THIS dev server's own service instance. The browser talks to its
+        // HTTP host directly, so node is NOT in the data path — it only owns the service's
+        // lifecycle + the one-time port handoff. Kicked off (not awaited) so dev comes up now.
+        khsReady = ensureKhsService().catch((err) => {
+          console.error('[khs] failed to start service:', err.message)
+        })
+      }
+
+      server.httpServer?.on('close', () => {
+        // A newer config instance exists (config-reload restart) — it already reused our
+        // service, so leave it running instead of killing it out from under the new server.
+        if ((globalThis as any).__khsGen !== khsGen) {
+          console.log('[khs] config reload — handing the service to the new dev server instance')
+          // Disarm OUR exit-handler supervisor too: it is still attached to the child, and a
+          // later exit (the service's setSeforimDbPath self-restart, or the new instance's own
+          // managed stop for a rebuild) would make THIS stale module respawn a competitor on
+          // the same pipe. The new instance supervises from here — by handle if it spawned,
+          // lazily via /khs-endpoint pipe probes if it adopted.
+          khsShuttingDown = true
+          return
+        }
+        // Real shutdown (not a config-reload handoff): drop the single-dev-server lock so the
+        // next `npm run dev` starts cleanly. A hard kill skips this, which is exactly why
+        // claimDevServerLock treats a dead owner's lock as free.
+        releaseDevServerLock()
+        stopKhsService()
+      })
+
+      server.middlewares.use((req: any, res: any, next: any) => {
+        // Endpoint discovery: the browser asks the dev server (same-origin) where our
+        // service's HTTP host is and for the bearer token every data request must carry.
+        // Both were learned PRIVATELY over the pipe — never a file. This route is shielded
+        // by Vite's default dev CORS (localhost origins only) + allowedHosts (DNS-rebinding
+        // guard), so an external web page can't read it. 503 until the service has reported
+        // its endpoint (the browser client retries).
+        if (req.url === '/khs-endpoint') {
+          res.setHeader('Cache-Control', 'no-store')
+          // Only advertise when OUR service is actually alive — never serve a stale
+          // port/token from a dead instance (e.g. mid-respawn, or after the crash-loop guard
+          // gave up). 503 → the browser client retries until a healthy instance is back.
+          // An ADOPTED instance (config-reload handoff) has no child handle, so aliveness is
+          // a pipe probe; if it died, this is also the respawn trigger — the old instance's
+          // exit-handler supervisor was disarmed at handoff, and the browser's retry loop
+          // lands here anyway, so lazy supervision costs nothing extra.
+          void (async () => {
+            // Stranded by a duplicate dev server? Re-attempt the claim: the other one may have
+            // exited since startup, and this is the retry surface the browser already polls.
+            // Without this, a dev server started second stays dead forever — reporting an owner
+            // pid that no longer exists — until someone restarts it.
+            if (khsBlockedByDuplicate && !khsShuttingDown && khsProc == null) {
+              const stillOwned = claimDevServerLock()
+              if (stillOwned === null) {
+                console.log('[khs] the other dev server exited — taking over and starting the service')
+                khsBlockedByDuplicate = false
+                khsStrandReason = null
+                khsReady = ensureKhsService().catch((e: any) => console.error('[khs] takeover failed:', e?.message))
+              }
+            }
+            let alive = khsProc != null
+            if (!alive && khsReused) {
+              alive = await khsPipeIsUp()
+              // Re-check khsReused AFTER the probe, not just before it: the browser retries
+              // this endpoint on a timer, so two requests can both pass the pre-probe check
+              // and both fail, and khsProc stays null across the whole build+spawn window —
+              // ensureKhsService's own in-flight guard would not catch the second caller, so
+              // both would reach spawnKhsExe and put two children on one pipe name. Whoever
+              // finishes the probe first flips the flag; the rest 503 and retry. Bail on a
+              // real shutdown or a stale module (post-handoff) as well — this supervisor is
+              // the adopted instance's only one, so it needs the same guards the child-exit
+              // supervisor has.
+              if (!alive && khsReused && !khsShuttingDown && (globalThis as any).__khsGen === khsGen) {
+                khsReused = false
+                khsHttpPort = 0; khsHttpToken = ''
+                console.log('[khs] adopted service went down — respawning')
+                khsReady = ensureKhsService().catch((e: any) => console.error('[khs] respawn failed:', e?.message))
+              }
+            }
+            if (alive && khsHttpPort > 0 && khsHttpToken) {
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ base: `http://${KHS_HOST}:${khsHttpPort}`, token: khsHttpToken }))
+            } else {
+              res.statusCode = 503
+              res.end(notReadyBody())
+            }
+          })().catch(() => {
+            // The probe made this handler async, so a client that aborts mid-probe leaves the
+            // socket ended and setHeader/end throw ERR_HTTP_HEADERS_SENT. Unhandled, that kills
+            // the dev server; answer if we still can, otherwise drop it.
+            if (!res.headersSent) { res.statusCode = 503; res.end(notReadyBody()) }
+          })
+          return
+        }
+
+        // SAME-ORIGIN streaming proxy for local files → pdf.js loads them by URL and
+        // range-fetches (progressive; never the whole file in memory). Serving via this vite
+        // route (not the service's cross-origin port directly) keeps the viewer's file URL
+        // same-origin — it passes pdf.js's file-origin check with no viewer patch and no CORS.
+        // Node PIPES the service's response (forwarding Range/206), so it holds no file bytes.
+        // The service's GET /file is capability-gated by the ?h= handle (minted only via the
+        // token-gated openLocalFile op), so no token is needed on this hop.
+        if (req.method === 'GET' && typeof req.url === 'string' && req.url.startsWith('/khs-file/')) {
+          // Handle rides in the PATH (hex, URL-safe) — survives pdf.js's file= param round-trip.
+          // URL form 1: /khs-file/<fileHandle>           — single-file grant (PDF etc.)
+          // URL form 2: /khs-file/<folderHandle>/rel/path — folder grant (HTML + siblings)
+          // In both cases the service path is /file/<rest-of-url-after-/khs-file/>.
+          const rest = req.url.slice('/khs-file/'.length).split('?')[0]
+          if (!khsHttpPort || !rest) { res.writeHead(502); res.end(); return }
+          const headers: Record<string, string> = {}
+          if (req.headers.range) headers.Range = req.headers.range as string
+          const proxy = http.request(
+            { host: KHS_HOST, port: khsHttpPort, path: `/file/${rest}`, method: 'GET', headers },
+            (pres) => {
+              // HTML gets the Otzaria addin SDK stub injected BEFORE the page's own
+              // scripts — the dev twin of hosted mode's document-created injection
+              // (JsBridge.OtzariaAddinBridgeStubScript). Addins that touch
+              // window.Otzaria while their scripts first run need it to already
+              // exist; the post-load injection in useOtzariaAddinBridge is too late
+              // for them. The stub is inert on non-addin pages (the Vue bridge only
+              // answers tabs flagged isOtzariaAddin), so every served HTML page gets
+              // it, exactly like hosted's kitvei-localhtml frames.
+              if (String(pres.headers['content-type'] ?? '').includes('text/html')) {
+                const chunks: Buffer[] = []
+                pres.on('data', (chunk) => chunks.push(chunk))
+                pres.on('end', () => {
+                  const body = injectAddinBridgeStub(Buffer.concat(chunks))
+                  res.writeHead(pres.statusCode || 200, {
+                    ...pres.headers,
+                    'content-length': String(body.length),
+                  })
+                  res.end(body)
+                })
+                return
+              }
+              res.writeHead(pres.statusCode || 502, pres.headers)
+              pres.pipe(res)
+            },
+          )
+          proxy.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end() } })
+          proxy.end()
+          return
+        }
+
+        // Don't cache pdf.js assets. All DATA flows browser → service HTTP host directly.
+        if (req.url?.startsWith('/pdfjs/')) res.setHeader('Cache-Control', 'no-store')
+        next()
+      })
+    },
+  }
+}
+
+// ── Zmanim library data (kleikodesh-zmanim.js submodule) ─────────────────────────
+// The place list ships as small files read on first need (never inlined, never from the
+// internet): dev serves them from the submodule's assets/ folder, the build writes them
+// to zmanim/ beside index.html. src/features/hebrew-calendar/zmanimPlaces.ts points the
+// library at that folder.
+function zmanimAssets(): Plugin {
+  return {
+    name: 'zmanim-assets',
+    configureServer(server) {
+      server.middlewares.use('/zmanim/', (req, res, next) => {
+        const file = (req.url ?? '').split('?')[0]!.replace(/^\//, '')
+        if (!zmanimAssetFiles().includes(file)) return next()
+        res.setHeader('Content-Type', 'application/octet-stream')
+        res.end(fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)))
+      })
+    },
+    generateBundle() {
+      for (const file of zmanimAssetFiles()) {
+        this.emitFile({ type: 'asset', fileName: `zmanim/${file}`, source: fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)) })
+      }
+    },
+  }
+}
+
+export default defineConfig({
+  plugins: [
+    devSqlitePlugin(),
+    websitesDevProxy(),
+    ...vueSingleFilePlugins(),
+    zmanimAssets(),
+  ],
+  resolve: appResolve,
+  server: {
+    warmup: {
+      clientFiles: [
+        './src/main.ts',
+        './src/App.vue',
+        './src/layout/AppTitleBar.vue',
+        './src/layout/AppPageView.vue',
+        './src/layout/AppTitleBarNavDropdown.vue',
+        './src/layout/AddressBar.vue',
+        './src/stores/tabStore.ts',
+        './src/stores/settingsStore.ts',
+        './src/stores/bookViewStore.ts',
+        './src/stores/booksDataStore.ts',
+        './src/stores/workspaceStore.ts',
+        './src/theme/themeStore.ts',
+        './src/utils/persistence.ts',
+        './src/webview-host/seforimDb.ts',
+        './src/features/home/HomePage.vue',
+      ],
+    },
+  },
+  optimizeDeps: {
+    // The @iconify-prerendered/* packages ship as a SINGLE ~12.5MB index.js barrel
+    // (not one-file-per-icon), so EXCLUDING them from pre-bundling does NOT serve
+    // "only the imported symbols" — it makes Vite serve the whole barrel raw, which
+    // its dev transform inflates to ~81MB with `Cache-Control: no-cache`, re-served
+    // and re-parsed on every cold reload (~5s blank screen).
+    // Pre-bundling (include) does NOT tree-shake the barrel down to used icons
+    // (esbuild keeps the full re-export set → ~13.5MB), but it converts it ONCE at
+    // startup into an immutable, long-cached .vite/deps chunk served in ~0.25s and
+    // reused across restarts. Prod (vite build via rollup) DOES tree-shake to the
+    // ~90 icons actually imported, so this only affects dev.
+    include: [
+      '@iconify-prerendered/vue-fluent',
+      '@iconify-prerendered/vue-fluent-color',
+      // tesseract.js v7 is CJS-only (main: src/index.js, no ESM build), and Vite
+      // serves EXCLUDED deps raw — so the browser's import() hit `require is not
+      // defined` and OCR silently returned nothing for every language, in dev only
+      // (rollup converts CJS in prod). Pre-bundling converts it once at startup.
+      // Its wasm core, worker, and traineddata never go through the bundle either
+      // way — createWorker() pins all three to /tesseract/ explicitly.
+      'tesseract.js',
+    ],
+  },
+  build: {
+    assetsInlineLimit: Number.MAX_SAFE_INTEGER,
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+      },
+    },
+  },
+})

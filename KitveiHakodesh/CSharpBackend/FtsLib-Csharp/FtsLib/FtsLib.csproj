@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      ONE engine, two legs. There used to be a second project, FtsLib.Net48, holding a
+      byte-for-byte revert of this library on System.Data.SQLite — so every fix had to be made
+      twice, and the two copies had already drifted. Both legs build from THIS source now.
+
+        net48      — the Word VSTO add-in and anything else .NET Framework reaches Core from.
+        net10.0    — the dev service.
+
+      The net10-only fast paths are kept and guarded with #if, not dropped: a preprocessor
+      branch costs nothing at runtime, because only the taken branch is compiled into each
+      leg's assembly. Today that is TrigramIndex alone (RandomAccess / File.OpenHandle are
+      net6+); everything else here compiles unchanged on both.
+    -->
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <!-- One source tree, two legs: do not let net48 fall back to its C# 7.3 default. -->
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FtsLib</RootNamespace>
+    <AssemblyName>FtsLib</AssemblyName>
+    <!-- Keep the hand-written Properties\AssemblyInfo.cs (holds InternalsVisibleTo("FtsLibTest")). -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+    <!-- CA1416: Microsoft.VisualBasic.Interaction.GetSetting is Windows-only; fine (runs on Windows). -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!-- For SIMD hot-path optimizations (Vector256/512 loads, hardware popcount). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The service publishes native AOT and links this lib: surface AOT/trim hazards here as warnings. -->
+    <IsAotCompatible Condition="'$(TargetFramework)'=='net10.0'">true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict).
+         This is for the engine's OWN index files (FTS5 line table, term dictionaries), not for any content database:
+         the engine reads content only through IFtsCorpus, which the caller supplies. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
+  </ItemGroup>
+
+  <!-- ZstdSharp.Port and the net48 Microsoft.VisualBasic reference used to live here for the
+       built-in seforim reader (ZayitDb + SeforimLineContent). That reader moved to
+       FtsLibTest/Corpus/ when the engine stopped knowing any corpus schema, and the two
+       dependencies moved with it — see FtsLibTest/FtsLibTest.csproj. -->
+
+
+  <!-- The related-forms expansion artifact (research/word-association, FINDINGS
+       26/27). ONE canonical copy shared by every FtsLib flavour lives in
+       FtsLib-Csharp/SearchExpansion/ - updating that file updates all outputs.
+       Copied next to consumers as SearchExpansion/expansion-routed.db and read
+       at runtime relative to the binary (see SearchExpansionService /
+       SearchExpansion).
+       This is the one working copy; built by KleiKodesh/SearchExpansion
+       (see FtsLib-Csharp/SearchExpansion/README.md). -->
+  <ItemGroup>
+    <Content Include="..\SearchExpansion\expansion-routed.db">
+      <Link>SearchExpansion\expansion-routed.db</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app-root rule (the app never writes outside its own folder), shared with Core. -->
+    <Compile Include="..\..\KitveiHakodesh.Core\Common\AppRootFolder.cs" Link="Common\AppRootFolder.cs" />
+  </ItemGroup>
+
+</Project>

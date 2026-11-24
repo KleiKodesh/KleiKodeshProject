@@ -1,0 +1,269 @@
+<script setup lang="ts">
+import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
+import { useDropdownClose } from '@/composables/useDropdownClose'
+import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
+import themesData from '@/theme/themes.json'
+import { useThemeStore } from '@/theme/themeStore'
+import { BACKGROUND_TINT_DEFAULT } from '@/theme/themes'
+import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
+
+const themeStore = useThemeStore()
+const { themePreset, backgroundTint } = storeToRefs(themeStore)
+
+type ThemeKey = keyof typeof themesData
+
+const families = Object.entries(
+  Object.entries(themesData).reduce(
+    (acc, [key, theme]) => {
+      const f = theme.family
+      if (!acc[f]) acc[f] = []
+      acc[f].push({ key: key as ThemeKey, theme })
+      return acc
+    },
+    {} as Record<string, { key: ThemeKey; theme: (typeof themesData)[ThemeKey] }[]>,
+  ),
+)
+
+const { t } = useI18n()
+
+const currentTheme = computed(() => themesData[themePreset.value as ThemeKey])
+const currentName = computed(() =>
+  currentTheme.value
+    ? `${t('settings.themeName.' + currentTheme.value.family)} — ${currentTheme.value.isDark ? t('settings.theme.dark') : t('settings.theme.light')}`
+    : themePreset.value,
+)
+
+const boxRef = ref<HTMLElement | null>(null)
+const dropdownRef = ref<HTMLElement | null>(null)
+const isOpen = ref(false)
+const dropdownStyle = ref<Record<string, string>>({})
+
+useDropdownClose(
+  dropdownRef,
+  () => {
+    isOpen.value = false
+  },
+  { ignore: [boxRef] },
+)
+
+// Hover preview ends whenever the dropdown closes (select, outside click, toggle).
+watch(isOpen, (open) => {
+  if (!open) themeStore.previewTheme(null)
+})
+onBeforeUnmount(() => themeStore.previewTheme(null))
+
+async function toggle() {
+  if (isOpen.value) {
+    isOpen.value = false
+    return
+  }
+  isOpen.value = true
+  await nextTick()
+  if (!boxRef.value || !dropdownRef.value) return
+  const rect = boxRef.value.getBoundingClientRect()
+  const dropH = dropdownRef.value.offsetHeight
+  const spaceBelow = window.innerHeight - rect.bottom - 8
+  const spaceAbove = rect.top - 8
+  const goUp = spaceAbove > spaceBelow && spaceAbove > dropH
+  dropdownStyle.value = {
+    position: 'fixed',
+    left: rect.left + 'px',
+    width: rect.width + 'px',
+    zIndex: '10000',
+    maxHeight: Math.min(320, goUp ? spaceAbove : spaceBelow) + 'px',
+    overflowY: 'auto',
+    ...(goUp
+      ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
+      : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
+  }
+}
+
+// Picking a theme starts it at its own designed tint; the tint slider adjusts from there.
+function select(key: ThemeKey) {
+  themePreset.value = key
+  backgroundTint.value = BACKGROUND_TINT_DEFAULT
+  isOpen.value = false
+}
+</script>
+
+<template>
+  <div ref="boxRef" class="select-box" @click="toggle" tabindex="0">
+    <span
+      class="swatch-inline"
+      :style="{
+        background: currentTheme?.ui.bgSecondary,
+        borderColor: currentTheme?.ui.borderColor,
+      }"
+    >
+      <span class="si-bar" :style="{ background: currentTheme?.ui.bgPrimary }" />
+      <span class="si-accent" :style="{ background: currentTheme?.ui.accentColor }" />
+    </span>
+    <span class="select-display">{{ currentName }}</span>
+    <component
+      :is="isOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
+      class="select-chevron"
+    />
+  </div>
+
+  <Teleport to="body">
+    <div v-if="isOpen" ref="dropdownRef" class="theme-dropdown" :style="dropdownStyle">
+      <div class="theme-grid-header">
+        <span></span>
+        <span class="col-label">{{ $t('settings.theme.light') }}</span>
+        <span class="col-label">{{ $t('settings.theme.dark') }}</span>
+      </div>
+      <div v-for="[family, variants] in families" :key="family" class="theme-row">
+        <span class="family-name">{{ $t('settings.themeName.' + family) }}</span>
+        <template v-for="isDark in [false, true]" :key="String(isDark)">
+          <button
+            v-for="{ key, theme } in variants.filter((v) => v.theme.isDark === isDark)"
+            :key="key"
+            class="theme-btn"
+            :class="{ active: themePreset === key }"
+            :title="$t('settings.themeName.' + theme.family) + ' — ' + (theme.isDark ? $t('settings.theme.dark') : $t('settings.theme.light'))"
+            @click.stop="select(key)"
+            @mouseenter="themeStore.previewTheme(key)"
+            @mouseleave="themeStore.previewTheme(null)"
+          >
+            <span
+              class="swatch"
+              :style="{ background: theme.ui.bgSecondary, borderColor: theme.ui.borderColor }"
+            >
+              <span class="swatch-bar" :style="{ background: theme.ui.bgPrimary }" />
+              <span class="swatch-accent" :style="{ background: theme.ui.accentColor }" />
+              <span class="swatch-text" :style="{ background: theme.ui.textPrimary }" />
+            </span>
+          </button>
+        </template>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+.select-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+.select-box:hover {
+  border-color: var(--accent-color);
+}
+.select-display {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.select-chevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.swatch-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 20px;
+  height: 16px;
+  border-radius: 2px;
+  border: 1px solid;
+  padding: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.si-bar {
+  height: 4px;
+  border-radius: 1px;
+  opacity: 0.6;
+}
+.si-accent {
+  height: 4px;
+  border-radius: 1px;
+}
+</style>
+
+<style>
+.theme-dropdown {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.theme-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 44px 44px;
+  align-items: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
+}
+.col-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.theme-row {
+  display: grid;
+  grid-template-columns: 1fr 44px 44px;
+  align-items: center;
+  gap: 4px;
+}
+.family-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.theme-btn {
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  justify-self: center;
+}
+.theme-btn.active {
+  border-color: var(--accent-color);
+}
+.theme-btn:hover {
+  border-color: var(--text-secondary);
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 32px;
+  height: 26px;
+  border-radius: 2px;
+  border: 1px solid;
+  padding: 3px;
+  overflow: hidden;
+}
+.swatch-bar {
+  height: 5px;
+  border-radius: 1px;
+  opacity: 0.7;
+}
+.swatch-accent {
+  height: 5px;
+  border-radius: 1px;
+}
+.swatch-text {
+  height: 4px;
+  border-radius: 1px;
+  opacity: 0.5;
+}
+</style>

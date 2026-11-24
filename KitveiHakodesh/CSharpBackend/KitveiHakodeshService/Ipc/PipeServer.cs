@@ -1,0 +1,129 @@
+using System.IO.Pipes;
+using KitveiHakodeshService.Hosting;
+
+namespace KitveiHakodeshService.Ipc;
+
+/// <summary>
+/// Hosts the KitveiHakodesh named pipe and serves one RPC request per connection.
+///
+/// Accept loop / one-handler-per-connection model mirrors
+/// DocumentLocator.Service/IndexService.cs. The pipe carries the clean
+/// <see cref="Rpc"/> envelope, framed by <see cref="FrameProtocol"/>.
+///
+/// Every instance is created with the access list in <see cref="WindowsServiceMode.PipeSecurity"/>:
+/// as a Windows service this process is SYSTEM, whose default pipe DACL would admit no
+/// logged-on user; as a console process the list changes nothing for its own user.
+/// </summary>
+public sealed class PipeServer(
+    Dispatcher dispatcher,
+    IHostApplicationLifetime lifetime,
+    ILogger<PipeServer> logger) : BackgroundService
+{
+    public const string DefaultPipeName = "KitveiHakodesh";
+
+    // Per-spawn pipe name: a spawner (the Vite dev plugin, or any app) passes a UNIQUE name via
+    // KHS_PIPE_NAME so each spawned instance has its own private pipe — that's how a client
+    // reaches ITS instance's HTTP port (getHttpPort) instead of some other instance sharing a
+    // fixed name. Falls back to the fixed default for the installed-service / standalone case.
+    public static string ResolvePipeName() =>
+        Environment.GetEnvironmentVariable("KHS_PIPE_NAME") is { Length: > 0 } n ? n : DefaultPipeName;
+
+    private readonly string _pipeName = ResolvePipeName();
+
+    // Keep several listener instances armed at once. A single serial acceptor has a
+    // brief window with NO listening instance — between accepting one client and
+    // creating the next — during which a concurrent connect gets ENOENT ("all pipe
+    // instances are busy"). The frontend fires a burst of requests on load (warmup +
+    // catalog + page data), so run a small pool of independent acceptor loops: there
+    // is always a ready instance and bursts don't race into ENOENT.
+    private const int AcceptorCount = 4;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation(
+            @"KitveiHakodesh pipe server listening on \\.\pipe\{Pipe} ({N} acceptors)", _pipeName, AcceptorCount);
+
+        var acceptors = new Task[AcceptorCount];
+        for (int i = 0; i < AcceptorCount; i++)
+            acceptors[i] = AcceptLoopAsync(stoppingToken);
+        // Second sweep, now that the pipe is ours: see SingleInstanceInstalledServiceWins.
+        if (WindowsServiceMode.IsWindowsService) SingleInstanceInstalledServiceWins.EndOtherCopies();
+        await Task.WhenAll(acceptors);
+    }
+
+    /// <summary>One independent accept loop: wait for a client, hand it to a detached
+    /// handler, immediately loop to wait for the next. N of these run concurrently.</summary>
+    private async Task AcceptLoopAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            NamedPipeServerStream? pipe = null;
+            try
+            {
+                pipe = WindowsServiceMode.CreatePipe(_pipeName);
+                await pipe.WaitForConnectionAsync(stoppingToken);
+
+                // Hand off to a detached task so this loop can immediately accept the
+                // next client. Each connection serves exactly one request/response.
+                var connected = pipe;
+                pipe = null;
+                _ = HandleClientAsync(connected, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                pipe?.Dispose();
+                break;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Another instance owns this pipe name - typically the installed SYSTEM service,
+                // whose pipe access list lets users connect but not add instances. Retrying can
+                // never succeed and would only keep this copy's databases open next to the real
+                // owner's, so this copy steps aside.
+                pipe?.Dispose();
+                logger.LogError(ex, @"\\.\pipe\{Pipe} is owned by another instance; stopping", _pipeName);
+                lifetime.StopApplication();
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Pipe accept error");
+                pipe?.Dispose();
+                // Back off before re-arming, but NOT under stoppingToken: a cancel here would
+                // throw straight out of the accept loop, fault Task.WhenAll in ExecuteAsync, and
+                // turn an ordinary shutdown into a host-level failure. The while-condition
+                // already ends the loop on the next pass.
+                try { await Task.Delay(200, CancellationToken.None); } catch { /* nothing to do */ }
+            }
+        }
+    }
+
+    private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    {
+        using (pipe)
+        {
+            try
+            {
+                byte[]? request = await FrameProtocol.ReadFrameAsync(pipe, ct);
+                if (request is null) return; // client closed without sending
+
+                // Streaming ops push MANY frames over this one connection (the connection
+                // IS the stream); everything else stays one request → one response.
+                if (await dispatcher.TryDispatchStreamAsync(
+                        request, resp => FrameProtocol.WriteFrameAsync(pipe, resp, ct), ct))
+                    return;
+
+                byte[] response = await dispatcher.DispatchAsync(request, ct);
+                await FrameProtocol.WriteFrameAsync(pipe, response, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // service stopping — ignore
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Pipe client handler error");
+            }
+        }
+    }
+}

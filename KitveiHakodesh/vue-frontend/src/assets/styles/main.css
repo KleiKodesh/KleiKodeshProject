@@ -1,0 +1,648 @@
+@import '../../theme/theme.css';
+
+/* ── Bundled fonts ──────────────────────────────────────────
+   Shipped in public/fonts/ so the reading defaults do not depend on what the
+   machine happens to have installed.
+
+   Culmus fonts (Taamey Frank CLM, Hadasim CLM, Simple CLM, Stam Ashkenaz CLM,
+   Stam Sefarad CLM) carry GPL-2.0 WITH the font-embedding exception.
+   LICENSE-CulmusCLM.txt covers them.
+
+   Frank Ruehl Libre is a permissively-licensed OFL-1.1 revival of the classic
+   Frank Ruehl typeface. All weights are included (Light, Regular, Medium,
+   SemiBold, Bold, ExtraBold, Black).
+
+   Noto Rashi Hebrew is an OFL-1.1 semi-cursive font based on 15th-century
+   Sephardic writing, designed for religious commentary. All weights are
+   included (Thin through Black).
+
+   Heebo is an OFL-1.1 variable font used for headings. */
+
+/* Taamey Frank CLM – all available weights */
+@font-face {
+  font-family: 'Taamey Frank CLM';
+  src: url('/fonts/TaameyFrankCLM-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Taamey Frank CLM';
+  src: url('/fonts/TaameyFrankCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Hadasim CLM – regular, bold, and oblique variants */
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-RegularOblique.woff2') format('woff2');
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-BoldOblique.woff2') format('woff2');
+  font-weight: 700;
+  font-style: oblique;
+  font-display: swap;
+}
+
+/* Simple CLM – medium, bold, and oblique variants */
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-Medium.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-MediumOblique.woff2') format('woff2');
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-BoldOblique.woff2') format('woff2');
+  font-weight: 700;
+  font-style: oblique;
+  font-display: swap;
+}
+
+/* Stam Ashkenaz CLM – scribal face, single weight */
+@font-face {
+  font-family: 'Stam Ashkenaz CLM';
+  src: url('/fonts/StamAshkenazCLM.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Stam Sefarad CLM – scribal face, single weight */
+@font-face {
+  font-family: 'Stam Sefarad CLM';
+  src: url('/fonts/StamSefaradCLM.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Frank Ruehl Libre – all available weights */
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Black.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Heebo – variable font, headings only */
+@font-face {
+  font-family: 'Heebo';
+  src: url('/fonts/Heebo-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Noto Rashi Hebrew – all available weights */
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Thin.woff2') format('woff2');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-ExtraLight.woff2') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Black.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+* { user-select: none; }
+/* Text-bearing surfaces opt back in. .word-link-tooltip is Teleported to body, so
+   it sits outside every other selector here and needs its own entry. */
+.lines-content *, .commentary-view *, .word-page *, .txt-content *,
+.fast-doc-view-content *, .fast-doc-view-notes-pane *,
+.word-link-tooltip, .word-link-tooltip * { user-select: text; }
+
+/* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
+   Per-commentary visibility is a stylesheet injected by settingsStore — one
+   display:none rule per hidden commentary book, keyed on the marker's data-wl
+   prefix — driven by the toolbar's marker dropdown. The markers hold no text
+   content (label is a ::before), so hiding them cannot shift annotation offsets.
+
+/* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
+   Per-commentary visibility is a stylesheet injected by settingsStore — one
+   display:none rule per hidden commentary book, keyed on the marker's data-wl
+   prefix — driven by the toolbar's marker dropdown. The markers hold no text
+   content (label is a ::before), so hiding them cannot shift annotation offsets.
+
+   Per-commentary marker treatments: plain, underlined, then enclosures with glyphs.
+   All use the same color (--text-secondary) and font-weight 300 (Heebo Light). Custom
+   delimiters (labels with their own signs) get no treatment — they're clear on their
+   own. Delimiters already present in the book's labels are excluded from the enclosure
+   pool, so an app-assigned wrapper can never imitate a sign the source edition uses. */
+.word-link-marker[data-wl-c='0'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='1'] { --wl-marker-weight: 300; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='2'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='3'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='4'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='5'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='6'] { --wl-marker-weight: 300; }
+.word-link-marker[data-wl-c='7'] { --wl-marker-weight: 300; }
+
+/* Adjacent markers (different commentaries anchored at the same words) get a gap
+   so they never fuse into one blob. */
+.word-link-marker + .word-link-marker { margin-inline-start: 3px; }
+
+html, body, #app { height: 100%; width: 100%; }
+
+/* App-shell: the viewport itself must never scroll or rubber-band — inner panes own
+   their own scrolling. overscroll-behavior:none disables the Chromium/WebView2
+   two-finger horizontal swipe-navigation gesture that otherwise slides the whole
+   shell sideways and snaps it back on release, swallowing tab-switch swipes. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+
+#app { display: flex; flex-direction: column; }
+
+body {
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* Compact chrome dimensions — matches PDF.js toolbar dimensions */
+:root {
+  --title-bar-height: 32px;
+  --title-bar-padding: 0 1px;
+  --title-bar-button-size: 28px;
+  --toolbar-horizontal-height: 28px;
+  --toolbar-vertical-width: 32px;
+  --toolbar-horizontal-padding: 2px 4px;
+  --toolbar-vertical-padding: 2px 2px;
+  --toolbar-button-size: 28px;
+  --catalog-row-height: 32px;
+}
+
+/* Item sizes for the home page AND the book catalog, every view mode.
+   RULE: a home item and a catalog item must always be the same size in the same
+   mode (list / cards / tiles) — change sizes here only, never per page. */
+:root {
+  --item-radius: 4px;
+  --item-gap: 10px;
+  /* 12px: lines the icons up under the search pill's text (pill padding 12 + 1px border). */
+  --item-padding-inline: 12px;
+  /* Small icon: list and tree. Row height is --catalog-row-height. */
+  --item-icon: 20px;
+  --item-title: 13px;
+  /* Large icon: cards and tiles share it. */
+  --item-large-icon: 28px;
+  --item-card-path: 11px;
+  --item-tile-label: 11px;
+  /* Three lines, then "…"; the selected item shows the whole name — measured on
+     a Windows 11 Explorer screenshot (icon view). The full title is also in the tooltip. */
+  --item-tile-lines: 3;
+  /* Selected item, measured on the same dark-mode screenshot: fill #505050 and a
+     1px #A6A6A6 border on the #191919 page, square corners. Expressed as text-color
+     mixes so light mode follows (light mode not measured). Toned down from the
+     measured 24% / 61% — that read too dark in the app. Opaque, so a focused
+     tile's overflowing label can sit on it. */
+  /* Light: a softer mix — the dark-mode strength reads as a heavy gray box on white. */
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 8%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 22%, var(--bg-primary));
+}
+:root.dark {
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 14%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 40%, var(--bg-primary));
+}
+
+/* Global icon-button defaults — applies to all toolbar/bar buttons app-wide */
+button {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+button:hover { background: var(--hover-bg); color: var(--text-primary); }
+/* Press feedback is a dip, not a squeeze. Fluent (and Material) barely scale a
+   button at all — the tint carries the press — so this stays at the smallest
+   scale that still registers, and eases out instead of snapping back. */
+button:active { transform: scale(0.98); transition: transform 80ms cubic-bezier(0.2, 0, 0, 1); }
+
+/* THE app's icon button — the square, centred, 16px-icon button the title bar is
+   built from, and the default for any new icon button anywhere in the app. It
+   lives here rather than in AppTitleBar because it was never really that bar's:
+   the theme toggle already borrowed it by rendering inside that scope, and the
+   history button and the search bar each had to re-declare it by hand. Global,
+   so a component only needs the class.
+   `.bar-btn.active` is the pressed/selected state (accent tint + ring). */
+.bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--title-bar-button-size);
+  height: var(--title-bar-button-size);
+  padding: 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.bar-btn svg { width: 16px; height: 16px; }
+/* Pressed tint. The generic `button:active` only scales, so without this a
+   .bar-btn had no press feedback beyond the dip — which is what the title bar and
+   the search bar both had before this rule was shared. */
+.bar-btn:not(:disabled):active { background: color-mix(in srgb, var(--text-primary) 14%, transparent); }
+.bar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.bar-btn:disabled:hover { background: transparent; color: var(--text-secondary); }
+.bar-btn:disabled:active { transform: none; }
+.bar-btn.active {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+.c-pointer { cursor: pointer; }
+
+/* Keyboard nav highlight — used by useInputListNavigation / useListKeys */
+[data-nav-item].is-focused { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.tiles-grid [data-nav-item].is-focused { border-radius: 6px; }
+
+/* No default browser focus ring anywhere — focus is shown via .is-focused / component styles instead */
+:focus { outline: none; }
+:focus-visible { outline: none; }
+
+/* Search inputs never change background on focus — background is always inherited from the container */
+input:focus { background: none !important; }
+
+/* Global search input container — shared shape, color, border */
+.search-inner {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+.search-inner input { background: none; border: none; outline: none; color: var(--text-primary); font-family: inherit; }
+.search-inner input::placeholder { color: var(--text-secondary); }
+.search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); cursor: pointer; }
+.search-inner input::-webkit-search-cancel-button:hover { filter: grayscale(1) opacity(0.8); }
+.hover-bg { transition: background 120ms, color 120ms; }
+/* Set by applyTheme for one frame so a theme switch repaints at once instead of fading. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after { transition: none !important; }
+.hover-bg:hover { background: var(--hover-bg); }
+
+/* ── Static separators ───────────────────────────────────────────────────────
+   The app's separator line: always a 1px hairline in --border-color, never
+   thicker. `.rule-v` divides items in a row (toolbar groups, search-bar button
+   clusters), `.rule-h` divides rows in a stack (menu sections, cards).
+
+   Height/width along the line and the surrounding margin stay at the call site,
+   because those are spacing decisions specific to each strip. Only the thickness
+   and the colour are shared - those are what must never drift.
+
+   For a DRAGGABLE separator use `.sash` below instead; it is a different object
+   (hairline at rest, but with a grab band and a hover state). */
+.rule-v,
+.rule-h {
+  flex-shrink: 0;
+  background: var(--border-color);
+}
+.rule-v { width: 1px; }
+.rule-h { height: 1px; }
+
+/* ── Resize separators (VS Code sash model) ──────────────────────────────────
+   The app's ONE separator style. Every draggable divider uses it: add `.sash`
+   plus `.sash-v` (a vertical line between columns) or `.sash-h` (a horizontal
+   line between rows), and set the cursor at the call site.
+
+   Three parts, which is what makes it feel like VS Code's:
+     - the element itself is a 1px TRANSPARENT track, so it takes almost no
+       layout and the visible line can grow without shifting anything;
+     - ::before is a wide invisible grab band, so the hit target is finger-sized
+       even though the line is a hairline;
+     - ::after is the visible line: a hairline at rest, thickening to 3px in the
+       accent colour while hovered or dragged, delayed on the way in so sweeping
+       the pointer across a sash does not flash it, instant on the way out and
+       instant while dragging.
+
+   z-index keeps a sash above neighbouring panel content: the grab band overlaps
+   that content by design, and an opaque background there (a commentary panel's
+   static header, which butts right up against the sash above it) would otherwise
+   win the paint order and kill the handle. Both orientations must clear that
+   content, so both are positive; vertical sits one above horizontal so a vertical
+   sash runs unbroken through a crossing. */
+.sash {
+  position: relative;
+  flex-shrink: 0;
+  background: transparent;
+  touch-action: none;
+}
+/* The cursor lives here too, so every sash of the same orientation shows the same
+   glyph. The custom images are two-headed arrows with an outline, which stay legible
+   over both the light and dark themes where the OS resize cursors wash out; the
+   keyword after the comma is the fallback. */
+.sash-v {
+  width: 1px;
+  z-index: 2;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 12 L7 8 L7 10 L11 10 L11 14 L7 14 L7 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M21 12 L17 8 L17 10 L13 10 L13 14 L17 14 L17 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
+      12 12,
+    col-resize;
+}
+.sash-h {
+  height: 1px;
+  z-index: 1;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 L8 7 L10 7 L10 11 L14 11 L14 7 L16 7 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M12 21 L8 17 L10 17 L10 13 L14 13 L14 17 L16 17 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
+      12 12,
+    row-resize;
+}
+
+.sash::before {
+  content: '';
+  position: absolute;
+}
+/* Band width matches VS Code's default sash hover size (8px). Any wider and the
+   invisible overlap starts stealing clicks from what sits against the sash - a
+   commentary panel's static header buttons, a pane's scrollbar. */
+.sash-v::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+}
+.sash-h::before {
+  inset-inline-end: 0;
+  inset-inline-start: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+}
+
+.sash::after {
+  content: '';
+  position: absolute;
+  background: var(--border-color);
+  transition: width 120ms, height 120ms, background 120ms;
+}
+/* Pinned to an edge rather than centred - see .sash-h::after for the reason. */
+.sash-v::after {
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 1px;
+}
+/* Pinned to an edge rather than centred. A 1px line inside a 1px track centred with
+   `top: 50%; translateY(-50%)` lands on a half-pixel boundary, so the browser
+   antialiases it across two device rows and it renders as a soft ~2px line - visibly
+   thicker than the 1px borders it sits next to. Anchoring it removes the fractional
+   offset; the hover/drag rules grow it from that edge, which is imperceptible at 3px. */
+.sash-h::after {
+  inset-inline-end: 0;
+  inset-inline-start: 0;
+  top: 0;
+  height: 1px;
+}
+
+.sash:hover::after { transition-delay: 300ms; }
+.sash:active::after { transition-delay: 0ms; }
+
+.sash-v:hover::after,
+.sash-v:active::after {
+  width: 3px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
+.sash-h:hover::after,
+.sash-h:active::after {
+  height: 3px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
+
+h1, h2, h3, h4, h5, h6 { opacity: 0.95; }
+
+h1 {
+  position: relative;
+  padding-bottom: 4px;
+}
+h1::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  height: 1px;
+  background: var(--border-color);
+}
+
+/* Hidden scrollbars — Ctrl+Shift+H or the settings-page control: bars are
+   COMPLETELY invisible except while actually scrolling.
+   `useUiChromeVisibility` owns the classes — `scrollbars-hidden` is the mode
+   (on <html>), `scrollbars-scrolling` sits on the ONE element that actually
+   scrolled, so only its bar is revealed, never every scrollbar in the app at
+   once. Only colors change, never the gutter, so toggling causes zero layout
+   shift. !important so no component-scoped scrollbar-color rule can outweigh
+   the transparency, whatever its specificity or injection order; the reveal is
+   unaffected because the scrolling element is excluded by :not() and falls
+   back to the theme tint. Same approach as the styles injected into iframes
+   by useIframeScrollbarsHidden / the C# IframeScrollScript. */
+:root.scrollbars-hidden:not(.scrollbars-scrolling),
+:root.scrollbars-hidden :not(.scrollbars-scrolling) {
+  scrollbar-color: transparent transparent !important;
+}
+/* The WindowedScroller draws its own bar beside its viewport; it follows the same
+   rule, keyed on the viewport that `scrollbars-scrolling` lands on. */
+:root.scrollbars-hidden
+  .windowed-scroller:not(:has(> .windowed-scroller-viewport.scrollbars-scrolling))
+  .windowed-scroller-bar {
+  opacity: 0;
+}
+
+/* Thin scrollbars — opt-in via the .toc-thin-scroll class. Named for the TOC, which
+   was the first caller; the setup-wizard step cards use it too. Standard properties
+   only — ::-webkit-scrollbar-* rules are dead since Chrome 121 when these are
+   set, and would defeat the hidden-scrollbars tinting above for their element. */
+.toc-thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
+}
+
+/* English UI chrome is LTR, but users type Hebrew queries: each text field takes its
+   direction from its own content (and placeholder), so Hebrew input reads RTL. */
+:root[dir='ltr'] input:not([type]),
+:root[dir='ltr'] input[type='text'],
+:root[dir='ltr'] input[type='search'],
+:root[dir='ltr'] textarea {
+  unicode-bidi: plaintext;
+}
+
+/* Direction-meaning icons (prev/next, back/forward, submenu and tree chevrons) are
+   drawn for the RTL layout; the LTR layout is its mirror, so they mirror too - except
+   inside an explicit dir="rtl" subtree (the catalog page, RTL content), which stays RTL. */
+:root[dir='ltr'] .dir-icon:not([dir='rtl'] *) {
+  transform: scaleX(-1);
+}
+/* An LTR chrome island (e.g. a commentary panel header) inside an always-RTL area mirrors again. */
+:root[dir='ltr'] [dir='rtl'] [dir='ltr'] .dir-icon {
+  transform: scaleX(-1);
+}
+/* The opposite case: an icon drawn for LTR (the tree-view icon, whose branches hang
+   off a left-hand trunk) mirrors whenever the app is in Hebrew. */
+:root[dir='rtl'] .dir-icon-ltr {
+  transform: scaleX(-1);
+}
+
+/* UI labels (empty states, section headers) that sit inside a dir="rtl" content
+   container follow the UI direction, not the content's. */
+:root[dir='ltr'] .ui-chrome {
+  direction: ltr;
+}
+
+/* English UI: what's typed into any text box is usually Hebrew - let the typed text pick its
+   own direction (Hebrew runs RTL, an English placeholder stays LTR). */
+:root[dir='ltr'] input[type='search'],
+:root[dir='ltr'] input[type='text'],
+:root[dir='ltr'] input:not([type]),
+:root[dir='ltr'] textarea {
+  unicode-bidi: plaintext;
+}
+
+/* A folder being reordered (useFolderReorder): a closed hand everywhere until it is dropped. */
+html.is-reorder-dragging,
+html.is-reorder-dragging * {
+  cursor: grabbing !important;
+}
+
+/* Every dialog and every widget (window or tab, and anything inside) scrolls with a thin scrollbar. */
+[role='dialog'],
+[role='dialog'] *,
+[data-widget],
+[data-widget] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
+}

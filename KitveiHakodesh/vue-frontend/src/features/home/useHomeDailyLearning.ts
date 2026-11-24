@@ -1,0 +1,222 @@
+import { computed, inject, shallowRef, watch, type InjectionKey } from 'vue'
+import { documentIcon } from '@/utils/documentIcons'
+import { useNow } from '@vueuse/core'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { dbReady } from '@/webview-host/seforimDb'
+import { computeHomeDailyLearningItems } from './homeDailyLearningItems'
+import { resolveHomeDailyLearningTarget, type HomeDailyLearningResolvedTarget } from './homeDailyLearningResolver'
+import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
+import type { HomeSuggestionCard } from './homeSuggestionCard'
+import { bookResumePath } from './homeResumePath'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import type { Tab } from '@/stores/tabStore'
+
+const DROPDOWN_ONLY_KEYS = new Set<HomeDailyLearningItem['key']>([
+  'rambam-1',
+  'rambam-3',
+  'kitzur-shulchan-aruch',
+  'perek-yomi',
+  'pirkei-avot',
+  'daf-weekly',
+])
+
+interface ResolvedDailyLearningItem extends HomeDailyLearningItem {
+  resolved: HomeDailyLearningResolvedTarget
+}
+
+/** One of today's cycles; `open` is null when its book is not in the library. */
+export interface HomeDailyLearningEntry {
+  key: string
+  label: string
+  location: string
+  open: ((openInNewTab: boolean) => void) | null
+}
+
+/**
+ * Today's learning cards (see homeDailyLearningItems.ts for the list),
+ * each resolved BY NAME against the library catalog. Items whose book is not in
+ * the library are left out, so the home collection just shows fewer cards.
+ */
+export function useHomeDailyLearning() {
+  const { cards, settled } = useDailyLearningState()
+  return { cards, settled }
+}
+
+/** Every cycle for today, including ones whose book is missing (not navigable). */
+export function useHomeDailyLearningEntries() {
+  return useDailyLearningState().entries
+}
+
+/** Opens one cycle's reading for a date. */
+export type DailyLearningOpener = (date: Date, key: HomeDailyLearningItem['key'], openInNewTab: boolean) => void
+
+/**
+ * Overrides how a cycle opens. The standalone calendar (no library of its own) provides
+ * one that hands a daily-learning link to the app; inside the app nothing is provided.
+ */
+export const DAILY_LEARNING_OPENER_KEY: InjectionKey<DailyLearningOpener> = Symbol('dailyLearningOpener')
+
+/** The book tab for one cycle's reading on a date; null when its book is not in the library. */
+export async function dailyLearningTab(date: Date, key: HomeDailyLearningItem['key']): Promise<Omit<Tab, 'id'> | null> {
+  if (!dbReady.value) return null
+  const item = (await computeHomeDailyLearningItems(date)).find((i) => i.key === key)
+  if (!item) return null
+  const resolved = await resolveHomeDailyLearningTarget(item.target).catch(() => null)
+  if (!resolved) return null
+  return {
+    route: '/book-view',
+    title: resolved.bookTitle,
+    bookId: resolved.bookId,
+    openTocEntryId: resolved.tocEntryId,
+    openTocLineIndex: resolved.tocLineIndex,
+  }
+}
+
+/** Opens one cycle's reading for any date (calendar page); no-op when its book is not in the library. */
+export function useDailyLearningOpener(): DailyLearningOpener {
+  const provided = inject(DAILY_LEARNING_OPENER_KEY, null)
+  if (provided) return provided
+  const paneNavigation = usePaneNavigation()
+  return (date, key, openInNewTab) => {
+    void dailyLearningTab(date, key).then((tab) => tab && paneNavigation.openOrUpdateActiveTab(tab, openInNewTab))
+  }
+}
+
+// resolved: null = book not in the library; 'failed' = the lookup errored (service/library
+// not answering) — not cached, and resolved again when opened.
+type DailyLearningItemWithTarget = HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null | 'failed' }
+
+// Today's resolved items, shared by the date bar and the cards and kept across home remounts.
+let todayItems: { dateKey: string; items: DailyLearningItemWithTarget[] } | null = null
+let todayItemsPending: { dateKey: string; promise: Promise<DailyLearningItemWithTarget[]> } | null = null
+// Bumped when the library goes away, so a load still in flight can't cache its stale ids.
+let libraryEpoch = 0
+
+function loadTodayItems(dateKey: string): Promise<DailyLearningItemWithTarget[]> {
+  if (todayItemsPending?.dateKey === dateKey) return todayItemsPending.promise
+  const epoch = libraryEpoch
+  const promise = (async () => {
+    const items = await computeHomeDailyLearningItems(new Date())
+    // All cycles in parallel: each one is several service round-trips.
+    const withTargets = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        resolved: await resolveHomeDailyLearningTarget(item.target).catch(() => 'failed' as const),
+      })),
+    )
+    // Cleared meanwhile (library went away): don't put the old library's ids back. A failed
+    // lookup isn't "not in the library": leave today uncached so the next visit asks again.
+    const anyFailed = withTargets.some((item) => item.resolved === 'failed')
+    if (epoch === libraryEpoch && !anyFailed) todayItems = { dateKey, items: withTargets }
+    return withTargets
+  })()
+  todayItemsPending = { dateKey, promise }
+  const forgetPending = () => {
+    if (todayItemsPending?.promise === promise && todayItems?.dateKey !== dateKey) todayItemsPending = null
+  }
+  promise.then(forgetPending, forgetPending)
+  return promise
+}
+
+function useDailyLearningState() {
+  const paneNavigation = usePaneNavigation()
+  const booksDataStore = useBooksDataStore()
+  const now = useNow({ interval: 60_000 })
+  // Recompute only when the civil date changes, not every minute tick.
+  const todayKey = computed(() => now.value.toDateString())
+  const allItems = shallowRef<DailyLearningItemWithTarget[]>(
+    todayItems?.dateKey === todayKey.value ? todayItems.items : [],
+  )
+  const resolvedItems = computed(() =>
+    allItems.value.filter(
+      (item): item is ResolvedDailyLearningItem => item.resolved !== null && item.resolved !== 'failed',
+    ),
+  )
+  // True once today's items are known (or there is no library to resolve them in).
+  const settled = shallowRef(todayItems?.dateKey === todayKey.value)
+  let generation = 0
+
+  watch(
+    [todayKey, dbReady],
+    async () => {
+      const currentGeneration = ++generation
+      if (!dbReady.value) {
+        // Library going away (swap/update): its book ids may not survive it.
+        todayItems = null
+        todayItemsPending = null
+        libraryEpoch++
+        allItems.value = []
+        settled.value = true
+        return
+      }
+      const cached = todayItems?.dateKey === todayKey.value ? todayItems.items : null
+      if (cached) {
+        allItems.value = cached
+        settled.value = true
+        return
+      }
+      const items = await loadTodayItems(todayKey.value).catch(() => [])
+      if (currentGeneration !== generation) return
+      allItems.value = items
+      settled.value = true
+    },
+    { immediate: true },
+  )
+
+  function open(item: ResolvedDailyLearningItem, openInNewTab: boolean) {
+    openResolved(item.resolved, openInNewTab)
+  }
+
+  function openResolved(resolved: HomeDailyLearningResolvedTarget, openInNewTab: boolean) {
+    paneNavigation.openOrUpdateActiveTab(
+      {
+        route: '/book-view',
+        title: resolved.bookTitle,
+        bookId: resolved.bookId,
+        openTocEntryId: resolved.tocEntryId,
+        openTocLineIndex: resolved.tocLineIndex,
+      },
+      openInNewTab,
+    )
+  }
+
+  const icon = documentIcon('book')
+  const entries = computed<HomeDailyLearningEntry[]>(() =>
+    allItems.value.map((item) => {
+      const { resolved } = item
+      return {
+        key: item.key,
+        label: item.label,
+        location: item.location,
+        open:
+          resolved === 'failed'
+            ? (openInNewTab: boolean) => {
+                void resolveHomeDailyLearningTarget(item.target)
+                  .then((retried) => retried && openResolved(retried, openInNewTab))
+                  .catch(() => {})
+              }
+            : resolved
+              ? (openInNewTab: boolean) => openResolved(resolved, openInNewTab)
+              : null,
+      }
+    }),
+  )
+
+  // Cycles added for the date-bar dropdown only; the home cards keep their original set.
+  const cards = computed<HomeSuggestionCard[]>(() =>
+    resolvedItems.value.filter((item) => !DROPDOWN_ONLY_KEYS.has(item.key)).map((item) => ({
+      key: `daily:${item.key}`,
+      // Shown exactly like a history card: no cycle label, just book + path.
+      title: item.resolved.bookTitle,
+      path: bookResumePath(
+        booksDataStore.allBooksMap.get(item.resolved.bookId),
+        item.resolved.bookTitle,
+        item.location,
+      ),
+      icon: icon.icon24,
+      color: icon.color,
+      open: (openInNewTab) => open(item, openInNewTab),
+    })),
+  )
+  return { cards, entries, settled }
+}

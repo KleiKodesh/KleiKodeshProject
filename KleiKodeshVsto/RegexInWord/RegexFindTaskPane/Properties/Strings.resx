@@ -1,0 +1,262 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Undo_ReplaceAll" xml:space="preserve">
+    <value>החלפה מרובה</value>
+  </data>
+  <data name="Replace" xml:space="preserve">
+    <value>החלפה</value>
+  </data>
+  <data name="RegexPalette" xml:space="preserve">
+    <value>לוח תווי רג'קס</value>
+  </data>
+  <data name="WordBuiltInSearch" xml:space="preserve">
+    <value>חיפוש מובנה של Word</value>
+  </data>
+  <data name="SearchDirection" xml:space="preserve">
+    <value>כיוון החיפוש</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>חיפוש</value>
+  </data>
+  <data name="SearchHistory" xml:space="preserve">
+    <value>היסטוריית חיפוש</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>חיפוש...</value>
+  </data>
+  <data name="FindTip_Next" xml:space="preserve">
+    <value>Enter — תוצאה הבאה</value>
+  </data>
+  <data name="FindTip_Previous" xml:space="preserve">
+    <value>Shift+Enter — תוצאה הקודמת</value>
+  </data>
+  <data name="ChooseStyle" xml:space="preserve">
+    <value>בחר סגנון</value>
+  </data>
+  <data name="ChooseFont" xml:space="preserve">
+    <value>בחר גופן</value>
+  </data>
+  <data name="ReplaceOne" xml:space="preserve">
+    <value>החלף</value>
+  </data>
+  <data name="ReplaceAllButton" xml:space="preserve">
+    <value>החלף הכל</value>
+  </data>
+  <data name="ReplaceHistory" xml:space="preserve">
+    <value>היסטוריית החלפה</value>
+  </data>
+  <data name="ReplaceWithPlaceholder" xml:space="preserve">
+    <value>החלף ב...</value>
+  </data>
+  <data name="NoResults" xml:space="preserve">
+    <value>לא נמצאו תוצאות התואמות לחיפוש</value>
+  </data>
+  <data name="Mode_All" xml:space="preserve">
+    <value>הכל</value>
+  </data>
+  <data name="Mode_Down" xml:space="preserve">
+    <value>כלפי מטה</value>
+  </data>
+  <data name="Mode_Up" xml:space="preserve">
+    <value>כלפי מעלה</value>
+  </data>
+  <data name="Mode_Selection" xml:space="preserve">
+    <value>לפי בחירה</value>
+  </data>
+  <data name="UseWordWildcards" xml:space="preserve">
+    <value>השתמש בתווים כלליים של Word</value>
+  </data>
+  <data name="UseRegex" xml:space="preserve">
+    <value>השתמש בביטויים רגולריים</value>
+  </data>
+  <data name="Color_Automatic" xml:space="preserve">
+    <value>אוטומטי</value>
+  </data>
+  <data name="Color_None" xml:space="preserve">
+    <value>ללא צבע</value>
+  </data>
+  <data name="Color_Theme" xml:space="preserve">
+    <value>צבעי ערכת נושא</value>
+  </data>
+  <data name="Color_Standard" xml:space="preserve">
+    <value>צבעים רגילים</value>
+  </data>
+  <data name="Color_More" xml:space="preserve">
+    <value>צבעים נוספים...</value>
+  </data>
+  <data name="FontSizePoints" xml:space="preserve">
+    <value>גודל גופן (נקודות)</value>
+  </data>
+  <data name="Bold" xml:space="preserve">
+    <value>מודגש</value>
+  </data>
+  <data name="Italic" xml:space="preserve">
+    <value>נטוי</value>
+  </data>
+  <data name="Underline" xml:space="preserve">
+    <value>קו תחתון</value>
+  </data>
+  <data name="Superscript" xml:space="preserve">
+    <value>כתב עילי</value>
+  </data>
+  <data name="Subscript" xml:space="preserve">
+    <value>כתב תחתי</value>
+  </data>
+  <data name="FontColor" xml:space="preserve">
+    <value>צבע גופן</value>
+  </data>
+  <data name="ClearFormatting" xml:space="preserve">
+    <value>נקה הגדרות עיצוב</value>
+  </data>
+  <data name="PickFormatting" xml:space="preserve">
+    <value>שאב הגדרות עיצוב</value>
+  </data>
+  <data name="Tip_ReplaceOnly" xml:space="preserve">
+    <value>החלפה בלבד</value>
+  </data>
+  <data name="Tip_AnyChar" xml:space="preserve">
+    <value>כל תו בודד</value>
+  </data>
+  <data name="Tip_ZeroOrMore" xml:space="preserve">
+    <value>אפס או יותר מהקודם</value>
+  </data>
+  <data name="Tip_OneOrMore" xml:space="preserve">
+    <value>אחד או יותר מהקודם</value>
+  </data>
+  <data name="Tip_ZeroOrOne" xml:space="preserve">
+    <value>אפס או אחד מהקודם</value>
+  </data>
+  <data name="Tip_Digit" xml:space="preserve">
+    <value>ספרה (0-9)</value>
+  </data>
+  <data name="Tip_WordChar" xml:space="preserve">
+    <value>תו מילה (אות/ספרה/_)</value>
+  </data>
+  <data name="Tip_Whitespace" xml:space="preserve">
+    <value>רווח לבן</value>
+  </data>
+  <data name="Tip_CharSet" xml:space="preserve">
+    <value>קבוצת תווים</value>
+  </data>
+  <data name="Tip_NegatedSet" xml:space="preserve">
+    <value>שלילת קבוצה</value>
+  </data>
+  <data name="Tip_CharRange" xml:space="preserve">
+    <value>טווח תווים</value>
+  </data>
+  <data name="Tip_LineStart" xml:space="preserve">
+    <value>תחילת שורה</value>
+  </data>
+  <data name="Tip_LineEnd" xml:space="preserve">
+    <value>סוף שורה</value>
+  </data>
+  <data name="Tip_Or" xml:space="preserve">
+    <value>או</value>
+  </data>
+  <data name="Tip_CaptureGroup" xml:space="preserve">
+    <value>קבוצת לכידה</value>
+  </data>
+  <data name="Tip_NonCaptureGroup" xml:space="preserve">
+    <value>קבוצה ללא לכידה</value>
+  </data>
+  <data name="Tip_WordBoundary" xml:space="preserve">
+    <value>גבול מילה</value>
+  </data>
+  <data name="Tip_PositiveLookahead" xml:space="preserve">
+    <value>ציפייה חיובית</value>
+  </data>
+  <data name="Tip_NegativeLookahead" xml:space="preserve">
+    <value>ציפייה שלילית</value>
+  </data>
+  <data name="Tip_ExactlyN" xml:space="preserve">
+    <value>בדיוק n חזרות</value>
+  </data>
+  <data name="Tip_NtoM" xml:space="preserve">
+    <value>בין n ל-m חזרות</value>
+  </data>
+  <data name="Tip_Lazy" xml:space="preserve">
+    <value>התאמה עצלה</value>
+  </data>
+  <data name="Tip_WholeMatch" xml:space="preserve">
+    <value>כל הטקסט שנמצא</value>
+  </data>
+  <data name="Tip_Group1" xml:space="preserve">
+    <value>קבוצה ראשונה</value>
+  </data>
+  <data name="Tip_Group2" xml:space="preserve">
+    <value>קבוצה שנייה</value>
+  </data>
+  <data name="Tip_NamedGroup" xml:space="preserve">
+    <value>קבוצה בשם</value>
+  </data>
+  <data name="Tip_BeforeMatch" xml:space="preserve">
+    <value>טקסט לפני ההתאמה</value>
+  </data>
+  <data name="Tip_AfterMatch" xml:space="preserve">
+    <value>טקסט אחרי ההתאמה</value>
+  </data>
+  <data name="Tip_Paragraph" xml:space="preserve">
+    <value>סימן פסקה</value>
+  </data>
+  <data name="Tip_Tab" xml:space="preserve">
+    <value>טאב</value>
+  </data>
+  <data name="Tip_LineBreakShift" xml:space="preserve">
+    <value>מעבר שורה (Shift+Enter)</value>
+  </data>
+  <data name="Tip_LineBreak" xml:space="preserve">
+    <value>מעבר שורה</value>
+  </data>
+  <data name="Tip_PageBreak" xml:space="preserve">
+    <value>מעבר עמוד ידני</value>
+  </data>
+  <data name="Tip_ColumnBreak" xml:space="preserve">
+    <value>מעבר עמודה</value>
+  </data>
+  <data name="Tip_NbSpace" xml:space="preserve">
+    <value>רווח שאינו נשבר</value>
+  </data>
+  <data name="Tip_NbHyphen" xml:space="preserve">
+    <value>מקף שאינו נשבר</value>
+  </data>
+  <data name="Tip_OptHyphen" xml:space="preserve">
+    <value>מקף אופציונלי</value>
+  </data>
+  <data name="Tip_Caret" xml:space="preserve">
+    <value>תו ^</value>
+  </data>
+  <data name="Tip_AnyDigit" xml:space="preserve">
+    <value>כל ספרה</value>
+  </data>
+  <data name="Tip_AnyLetter" xml:space="preserve">
+    <value>כל אות</value>
+  </data>
+  <data name="Tip_AnyWhitespace" xml:space="preserve">
+    <value>כל רווח לבן</value>
+  </data>
+  <data name="Tip_FoundText" xml:space="preserve">
+    <value>הטקסט שנמצא</value>
+  </data>
+  <data name="Tip_Clipboard" xml:space="preserve">
+    <value>תוכן הלוח</value>
+  </data>
+  <data name="Tip_ZeroOrMoreChars" xml:space="preserve">
+    <value>אפס תווים או יותר</value>
+  </data>
+  <data name="Tip_WordStart" xml:space="preserve">
+    <value>תחילת מילה</value>
+  </data>
+  <data name="Tip_WordEnd" xml:space="preserve">
+    <value>סוף מילה</value>
+  </data>
+  <data name="Status_Replaced" xml:space="preserve">
+    <value>הוחלפו {0} תוצאות</value>
+  </data>
+  <data name="Status_Found" xml:space="preserve">
+    <value>נמצאו {0} תוצאות</value>
+  </data>
+</root>

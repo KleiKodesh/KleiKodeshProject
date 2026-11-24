@@ -1,0 +1,433 @@
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
+import { useLocalFileStore } from '@/stores/localFileStore'
+import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { syncPdfViewerTheme } from '@/theme/themes'
+import ConversionActionButton from '@/components/ConversionActionButton.vue'
+import LoadingAnimation from '@/components/LoadingAnimation.vue'
+import ContextMenu from '@/components/ContextMenu.vue'
+import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
+import { usePdfOcrSelection } from './usePdfOcrSelection'
+import { usePdfOcrStoreSync } from './usePdfOcrStoreSync'
+import PdfOcrToolbar from './PdfOcrToolbar.vue'
+import { buildPdfViewerSrc, outlineJumpHash } from './buildPdfViewerSrc'
+import { usePdfContextMenu } from './usePdfContextMenu'
+import { usePdfPrintShortcut } from './usePdfPrintShortcut'
+import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
+
+import { usePdfOcrStore } from '@/stores/pdfOcrStore'
+import { usePdfViewPageTracking } from './usePdfViewPageTracking'
+import { attachPdfLoadErrorReporting } from './usePdfLoadErrorReporting'
+import { useSettingsStore } from '@/stores/settingsStore'
+
+const localFileStore = useLocalFileStore()
+const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
+const pdfOcrStore = usePdfOcrStore()
+const pageTracking = usePdfViewPageTracking()
+// The PDF canvas is grey like the chrome, so beside the nav rail it needs a line to separate them.
+const settingsStore = useSettingsStore()
+const isNavSidebarVisible = computed(() => settingsStore.getNavSidebarVisible())
+
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+const ocr = usePdfOcrSelection(() => iframeRef.value)
+usePdfPrintShortcut(() => iframeRef.value)
+const iframeScrollbars = useIframeScrollbarsHidden(() => iframeRef.value)
+
+// ── Custom right-click menu (copy / copy into Word / copy page as image) ──────
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+function showToast(message: string) {
+  toast.value = message
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2400)
+}
+const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, {
+  // OCR mode has its own selection overlay — don't shadow it with our menu.
+  isBlocked: () => pdfOcrStore.isActive,
+  notify: showToast,
+  searchInLibrary: (query) => paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query }),
+  searchInCatalog: (query) => useHostSearchStore().openCatalogSearch(query),
+})
+import { useHostSearchStore } from '@/stores/hostSearchStore'
+
+import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
+import { useSwipe } from '@vueuse/core'
+import { shallowRef } from 'vue'
+
+// ── Touch swipe relay ────────────────────────────────────────────────────────
+// The PDF.js iframe captures pointer focus, so touch events fire on the
+// iframe's contentWindow and never bubble to the parent document. We set
+// iframeContentWindow to the iframe's contentWindow after load so that
+// useSwipe (VueUse) attaches its listeners there directly — the proper API,
+// not a manual touchstart/touchend hack.
+
+const RELAY_TOUCH_THRESHOLD_PX = 60
+
+const iframeContentWindow = shallowRef<Window | null>(null)
+
+function fireSwipe(direction: 'next' | 'previous') {
+  window.dispatchEvent(
+    new CustomEvent<TabSwipeGestureEventDetail>(TAB_SWIPE_EVENT, {
+      detail: { direction },
+    }),
+  )
+}
+
+// A sideways gesture over a page that can still scroll that way (zoomed in, horizontal
+// scroll mode) is panning, not a tab switch. sign > 0 means toward a larger scrollLeft.
+// Chromium's RTL scrollLeft runs from -(scrollWidth - clientWidth) to 0.
+function viewerCanScrollX(sign: number): boolean {
+  const el = iframeRef.value?.contentDocument?.getElementById('viewerContainer')
+  if (!el) return false
+  const range = el.scrollWidth - el.clientWidth
+  if (range <= 1) return false
+  const rtl = getComputedStyle(el).direction === 'rtl'
+  const min = rtl ? -range : 0
+  const max = rtl ? 0 : range
+  return sign > 0 ? el.scrollLeft < max - 1 : el.scrollLeft > min + 1
+}
+
+useSwipe(iframeContentWindow, {
+  threshold: RELAY_TOUCH_THRESHOLD_PX,
+  onSwipeEnd(_event, direction) {
+    // Finger moving right scrolls the content toward a smaller scrollLeft.
+    if (direction === 'right' && !viewerCanScrollX(-1)) fireSwipe('next')
+    else if (direction === 'left' && !viewerCanScrollX(1)) fireSwipe('previous')
+  },
+})
+
+// Trackpad horizontal scroll — wheel events also stay inside the iframe.
+// useSwipe only handles touch, so we still need a wheel relay. The shared handler
+// carries the RTL direction convention and one-switch-per-gesture debounce.
+let iframeWheelCleanup: (() => void) | null = null
+
+function attachIframeWheelRelay() {
+  detachIframeWheelRelay()
+  const contentWindow = iframeRef.value?.contentWindow
+  if (!contentWindow) return
+
+  const swipeHandler = createWheelSwipeHandler(fireSwipe)
+  const onWheel = (event: WheelEvent) => {
+    // Ctrl+wheel is zoom (a trackpad pinch arrives with ctrlKey), and a page that can
+    // still scroll sideways is being panned; neither should switch tabs.
+    if (event.ctrlKey) return
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY) && viewerCanScrollX(Math.sign(event.deltaX))) return
+    swipeHandler(event)
+  }
+  contentWindow.addEventListener('wheel', onWheel, { passive: true })
+  iframeWheelCleanup = () => contentWindow.removeEventListener('wheel', onWheel)
+}
+
+function detachIframeWheelRelay() {
+  iframeWheelCleanup?.()
+  iframeWheelCleanup = null
+}
+
+// Aggressively tear down the iframe when this tab unmounts so the PDF.js worker,
+// all rendered canvases, and the WebView2 sub-frame are released immediately
+// rather than waiting for the browser's garbage collector.
+onBeforeUnmount(() => {
+  pdfContextMenu.detach(iframeRef.value?.contentWindow ?? null)
+  if (toastTimer) clearTimeout(toastTimer)
+  iframeContentWindow.value = null
+  detachIframeWheelRelay()
+  pageTracking.detach()
+  // Clear the TOC path so it doesn't bleed into other tabs or after navigation.
+  paneNavigation.updateActiveTab({ tocPath: undefined })
+  if (iframeRef.value) {
+    iframeRef.value.src = 'about:blank'
+    iframeRef.value.remove()
+    iframeRef.value = null
+  }
+})
+
+usePdfOcrStoreSync(ocr)
+
+// Update PDF.js toolbar visibility when the setting changes
+watch(
+  () => paneNavigation.activeTab?.pdfViewerTitleBarVisible,
+  (visible) => {
+    setPdfToolbarVisible(visible !== false)
+  },
+)
+
+function setPdfToolbarVisible(visible: boolean) {
+  if (!iframeRef.value?.contentWindow) return
+  const doc = iframeRef.value.contentWindow.document
+  const toolbarEl = doc.querySelector('.toolbar') as HTMLElement | null
+  const viewerContainerEl = doc.getElementById('viewerContainer') as HTMLElement | null
+
+  if (toolbarEl) {
+    toolbarEl.style.display = visible ? '' : 'none'
+  }
+
+  // #viewerContainer has inset: var(--toolbar-height) 0 0 in PDF.js CSS.
+  // When the toolbar is hidden that gap must collapse to 0; restore to '' to
+  // let PDF.js's own CSS take over when the toolbar is visible again.
+  if (viewerContainerEl) {
+    viewerContainerEl.style.insetBlockStart = visible ? '' : '0'
+  }
+}
+
+function onIframeLoad() {
+  // The viewer has read the outline target off its hash — consumed.
+  if (paneNavigation.activeTab.pdfInitialOutlineTarget) {
+    paneNavigation.updateActiveTab({ pdfInitialOutlineTarget: undefined })
+  }
+  const contentWindow = iframeRef.value?.contentWindow ?? null
+  iframeContentWindow.value = contentWindow
+  attachIframeWheelRelay()
+  if (contentWindow) {
+    attachPdfLoadErrorReporting(contentWindow, paneNavigation.activeTab.localFileVirtualUrl ?? null)
+    pageTracking.attach(contentWindow)
+    pdfContextMenu.attach(contentWindow)
+  }
+  iframeScrollbars.apply()
+  setTimeout(() => {
+    syncPdfViewerTheme()
+    // Apply toolbar visibility based on current setting
+    setPdfToolbarVisible(paneNavigation.activeTab?.pdfViewerTitleBarVisible !== false)
+  }, 100)
+}
+
+// The one-shot outline jump (tab.pdfInitialOutlineTarget) rides the src as #khOutline=
+// for the first load of that file only; viewer.mjs strips it and jumps once the outline is
+// in. onIframeLoad clears the tab field, and the hash is remembered against the file url so
+// that clearing it does not change the src (which would reload the viewer). Any other url
+// - another tab, another file - drops it, so a later visit restores the reading position
+// instead of jumping again.
+let outlineHash: { url: string; hash: string } | null = null
+
+const iframeSrc = computed(() => {
+  const url = paneNavigation.activeTab.localFileVirtualUrl
+  if (!url) return null
+  const outlineTarget = paneNavigation.activeTab.pdfInitialOutlineTarget
+  if (outlineTarget) outlineHash = { url, hash: outlineJumpHash(outlineTarget) }
+  else if (outlineHash?.url !== url) outlineHash = null
+  return buildPdfViewerSrc(url, paneNavigation.activeTab.localFileName, outlineHash?.hash)
+})
+
+// A reactive :src change (switching between two PDF tabs, or another file
+// replacing this tab's PDF) NAVIGATES the iframe — and a dirty viewer would
+// pop the browser's native beforeunload prompt mid-switch, desyncing the
+// iframe from the already-switched tab state. The viewer pushes its edits out
+// eagerly after every change (parked per tab in bookViewStore), so the prompt
+// protects nothing here — silence it on the OLD document before the patch
+// applies. flush:'pre' runs before the render effect that updates :src, so
+// contentWindow still belongs to the outgoing document. The unmount path needs
+// no equivalent: pageTracking.detach() sets the same flag before the
+// about:blank navigation in onBeforeUnmount.
+watch(iframeSrc, (next) => {
+  const w = iframeRef.value?.contentWindow as
+    | (Window & { __khSuppressUnloadPrompt?: boolean })
+    | null
+    | undefined
+  if (w) {
+    try {
+      w.__khSuppressUnloadPrompt = true
+    } catch {
+      // cross-origin or already-dead window — nothing to silence
+    }
+  }
+  // iframeSrc going null removes the iframe via v-else-if WITHOUT unmounting
+  // this component — detach explicitly so the bridge doesn't linger as a
+  // dead-realm entry (a stale bridge can phantom-block beforeunload).
+  if (!next) pageTracking.detach()
+}, { flush: 'pre' })
+
+// Same reason: flipping into the converting state replaces the iframe branch.
+// (Getter form — `converting` is declared further down in this file.)
+watch(() => paneNavigation.activeTab.localFileConverting ?? false, (isConverting) => {
+  if (isConverting) pageTracking.detach()
+})
+
+// This tab's converting state, read from the tab itself
+const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
+const loadingType = computed(() => paneNavigation.activeTab.localFileLoadingType ?? 'converting')
+const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
+// Live HebrewBooks download progress text (e.g. "6.2 / 13.2 MB · 47%"), when available.
+const downloadProgress = computed(() => paneNavigation.activeTab.localFileDownloadProgress ?? null)
+const loadingSubText = computed(() => {
+  if (loadingType.value !== 'downloading') return t('pdfViewer.loading.converting')
+  return downloadProgress.value
+    ? t('pdfViewer.loading.downloadingProgress', { progress: downloadProgress.value })
+    : t('pdfViewer.loading.downloadingWait')
+})
+
+function cancelConversion() {
+  localFileStore.cancelConversion(paneNavigation.activeTabId)
+}
+
+</script>
+
+<template>
+  <div class="pdf-page" :class="{ 'pdf-page--beside-nav-sidebar': isNavSidebarVisible }">
+    <div v-if="converting" class="converting">
+      <div class="converting-card">
+        <LoadingAnimation />
+        <div class="converting-name">{{ fileName }}</div>
+        <div class="converting-sub">{{ loadingSubText }}</div>
+        <ConversionActionButton
+          class="cancel-btn"
+          state="busy"
+          :idle-title="$t('pdfViewer.cancel')"
+          :busy-title="$t('pdfViewer.cancel')"
+          :label="$t('pdfViewer.cancel')"
+          @cancel="cancelConversion"
+        />
+      </div>
+    </div>
+
+    <template v-else-if="iframeSrc">
+      <div class="iframe-wrap">
+        <iframe
+          ref="iframeRef"
+          :src="iframeSrc"
+          class="pdf-iframe"
+          allowfullscreen
+          @load="onIframeLoad"
+        />
+        <PdfOcrToolbar :ocr="ocr" />
+      </div>
+    </template>
+
+    <div v-else class="pdf-empty">{{ $t('pdfViewer.noFile') }}</div>
+
+    <PdfOcrResultPopup
+      v-if="ocr.result.value"
+      :result="ocr.result.value"
+      :script="pdfOcrStore.script"
+      :is-processing="ocr.isProcessing.value"
+      :processing-progress="ocr.processingProgress.value"
+      @dismiss="ocr.dismissResult"
+      @update:script="pdfOcrStore.setScript"
+    />
+
+    <ContextMenu ref="contextMenuRef" :items="pdfContextMenu.items.value" />
+
+    <Transition name="pdf-toast-fade">
+      <div v-if="toast" class="pdf-toast">{{ toast }}</div>
+    </Transition>
+  </div>
+</template>
+
+<style scoped>
+.pdf-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* The rail is the shell's first flex child, so it touches the page's inline-start edge.
+   The line runs alongside the document area only, starting below PDF.js's toolbar: 32px
+   mirrors --toolbar-height in public/pdfjs/web/viewer.css (default density). */
+.pdf-page--beside-nav-sidebar {
+  position: relative;
+}
+.pdf-page--beside-nav-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--border-color);
+  z-index: 1;
+  pointer-events: none;
+}
+.iframe-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+.pdf-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.pdf-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  max-width: 80%;
+  text-align: center;
+  pointer-events: none;
+}
+.pdf-toast-fade-enter-active,
+.pdf-toast-fade-leave-active {
+  transition: opacity 150ms ease;
+}
+.pdf-toast-fade-enter-from,
+.pdf-toast-fade-leave-to {
+  opacity: 0;
+}
+.converting {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+.converting-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 48px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  min-width: 260px;
+  text-align: center;
+}
+.converting-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.converting-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+.cancel-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+</style>

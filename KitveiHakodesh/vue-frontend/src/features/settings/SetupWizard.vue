@@ -1,0 +1,477 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { dbReady } from '@/webview-host/seforimDb'
+import { resetting } from './appResetState'
+import { useSettings } from './useSettingsPage'
+import PageCard from '@/components/PageCard.vue'
+import SetupWizardStepDb from './SetupWizardStepDb.vue'
+import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
+import SetupWizardStepQuickSettings from './SetupWizardStepQuickSettings.vue'
+import SetupWizardStepBookDisplay from './SetupWizardStepBookDisplay.vue'
+import SetupWizardStepCommentaryDisplay from './SetupWizardStepCommentaryDisplay.vue'
+import SetupWizardStepDivineNames from './SetupWizardStepDivineNames.vue'
+import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
+import SetupWizardStepTerms from './SetupWizardStepTerms.vue'
+import UiLanguageToggle from './UiLanguageToggle.vue'
+
+const settings = useSettingsStore()
+
+/**
+ * Wires the commentary-mirror watcher: while 'same as book' is selected, the commentary
+ * font fields track the book's.
+ *
+ * It belongs HERE and not in the commentary step, even though that is the step the
+ * setting lives on. Steps are unmounted on every navigation (the Transition below is
+ * keyed on the step), so a watcher registered by a step only runs while that step is
+ * on screen — and the book fonts are chosen on the PREVIOUS step, with the commentary
+ * step unmounted. Registered here it lives for the whole flow, so a book font picked
+ * on one step is mirrored by the time the next one renders.
+ */
+useSettings()
+
+type Step =
+  | 'terms'
+  | 'welcome'
+  | 'db'
+  | 'theme'
+  | 'quick-settings'
+  | 'book-display'
+  | 'commentary-display'
+  | 'divine-names'
+  | 'shortcuts'
+
+// The db step is shown when the service reports that the resolved seforim DB does
+// not exist on disk (dbReady is the same probe, kept current by seforimDb).
+// The terms step is mandatory and is the LAST step, so Skip jumps straight to it. A user who already finished (or
+// skipped) the wizard before the terms existed sees ONLY the terms step. Captured
+// once at mount so accepting the terms does not reshape the flow mid-way.
+const termsOnly = settings.setupDone && !settings.termsAccepted
+// An unsubmitted terms tick survives the language reload (cleared with the step key).
+const TERMS_KEY = 'setupWizardTermsTick'
+function readTermsTick(): boolean {
+  try { return sessionStorage.getItem(TERMS_KEY) === '1' } catch { return false }
+}
+const termsAgreed = ref(settings.termsAccepted || readTermsTick())
+watch(termsAgreed, v => {
+  try { sessionStorage.setItem(TERMS_KEY, v ? '1' : '0') } catch { /* ignore */ }
+})
+
+const steps = computed<Step[]>(() => {
+  if (termsOnly) return ['terms']
+  const s: Step[] = ['welcome']
+  if (!dbReady.value) s.push('db')
+  s.push('theme', 'quick-settings', 'book-display', 'commentary-display', 'divine-names', 'shortcuts')
+  s.push('terms')
+  return s
+})
+
+/**
+ * The wizard owns ONE card — header, scrolling body, nav footer — and only the body's
+ * content changes from step to step. So the heading text lives here beside the
+ * component rather than inside it: the header is part of the frame, and a step that
+ * rendered its own would be rendering a piece of the thing that stays put.
+ *
+ * `welcome` has no entry — its content is inline in the template below (a logo and a
+ * footnote, not a settings list), but it renders through the same card.
+ */
+const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }> = {
+  terms: {
+    title: 'settings.wizard.terms.title',
+    desc: 'settings.wizard.terms.desc',
+    component: SetupWizardStepTerms,
+  },
+  welcome: {
+    title: 'settings.wizard.welcome.title',
+    desc: 'settings.wizard.welcome.desc',
+  },
+  db: {
+    title: 'settings.wizard.db.title',
+    desc: 'settings.wizard.db.desc',
+    component: SetupWizardStepDb,
+  },
+  theme: {
+    title: 'settings.wizard.theme.title',
+    desc: 'settings.wizard.theme.desc',
+    component: SetupWizardStepTheme,
+  },
+  'quick-settings': {
+    title: 'settings.wizard.quickSettings.title',
+    desc: 'settings.wizard.quickSettings.desc',
+    component: SetupWizardStepQuickSettings,
+  },
+  'book-display': {
+    title: 'settings.wizard.bookDisplay.title',
+    desc: 'settings.wizard.bookDisplay.desc',
+    component: SetupWizardStepBookDisplay,
+  },
+  'commentary-display': {
+    title: 'settings.wizard.commentaryDisplay.title',
+    desc: 'settings.wizard.commentaryDisplay.desc',
+    component: SetupWizardStepCommentaryDisplay,
+  },
+  'divine-names': {
+    title: 'settings.wizard.divineNames.title',
+    desc: 'settings.wizard.divineNames.desc',
+    component: SetupWizardStepDivineNames,
+  },
+  shortcuts: {
+    title: 'settings.wizard.shortcuts.title',
+    desc: 'settings.wizard.shortcuts.desc',
+    component: SetupWizardStepShortcuts,
+  },
+}
+
+// Changing the UI language reloads the page; the current step is kept in
+// sessionStorage (by name, since the step list can differ) so the reload resumes there.
+const STEP_KEY = 'setupWizardStep'
+function readSavedStep(): number {
+  try {
+    const i = steps.value.indexOf(sessionStorage.getItem(STEP_KEY) as Step)
+    return i > 0 ? i : 0
+  } catch {
+    return 0
+  }
+}
+const stepIndex = ref(readSavedStep())
+watch(stepIndex, () => {
+  try { sessionStorage.setItem(STEP_KEY, steps.value[stepIndex.value] ?? '') } catch { /* ignore */ }
+})
+// `steps` is never empty (it always starts with 'welcome') and stepIndex only ever
+// moves within it, so the fallback is unreachable — it is here to keep the type
+// non-optional rather than to handle a real case.
+const currentStep = computed<Step>(() => steps.value[stepIndex.value] ?? 'welcome')
+const currentStepMeta = computed(() => STEPS[currentStep.value])
+const isLast = computed(() => stepIndex.value === steps.value.length - 1)
+const dismissed = ref(false)
+watch(dismissed, d => {
+  if (d) try {
+    sessionStorage.removeItem(STEP_KEY)
+    sessionStorage.removeItem(TERMS_KEY)
+  } catch { /* ignore */ }
+})
+
+const progressPct = computed(() =>
+  steps.value.length > 1 ? Math.round((stepIndex.value / (steps.value.length - 1)) * 100) : 100,
+)
+
+const termsBlocking = computed(() => currentStep.value === 'terms' && !termsAgreed.value)
+
+function next() {
+  if (currentStep.value === 'terms') {
+    if (!termsAgreed.value) return
+    settings.acceptTerms()
+  }
+  if (!isLast.value) {
+    stepIndex.value++
+  } else {
+    settings.completeSetup()
+    dismissed.value = true
+  }
+}
+
+function back() {
+  stepIndex.value--
+}
+
+function skip() {
+  if (resetting.value) return
+  // Skip jumps to the terms (last step) until they are accepted.
+  if (!settings.termsAccepted) {
+    stepIndex.value = steps.value.indexOf('terms')
+    return
+  }
+  settings.completeSetup()
+  dismissed.value = true
+}
+</script>
+
+
+<template>
+  <div v-if="!dismissed" class="wizard-root">
+    <!-- Progress bar -->
+    <div class="progress-track">
+      <div class="progress-fill" :style="{ width: progressPct + '%' }" />
+    </div>
+
+    <!-- ── The card. It is the static frame: title, body, nav. Only what sits in the
+         body changes between steps, so the nav never moves and the card never
+         resizes to its content. ── -->
+    <PageCard>
+        <!-- Header and body fade together as one unit, so the title changes with the
+             content instead of snapping ahead of it. The nav footer is deliberately
+             OUTSIDE this transition: it is the same on every step, and fading it would
+             make the buttons flicker under the pointer. -->
+        <Transition name="step-fade" mode="out-in">
+          <div :key="currentStep" class="step-pane">
+            <!-- The header strip is for the settings steps. The welcome step is a
+                 hero: its title runs in the flow of its own content below, so it
+                 renders no strip and the card is one uninterrupted section. -->
+            <div v-if="currentStep !== 'welcome'" class="wizard-card-header">
+              <h2 class="step-title">{{ $t(currentStepMeta.title) }}</h2>
+              <p v-if="currentStepMeta.desc" class="step-desc">{{ $t(currentStepMeta.desc) }}</p>
+            </div>
+
+            <div class="wizard-card-body toc-thin-scroll">
+              <div class="step-body" :class="{ 'step-body--fill': currentStep === 'terms' }">
+                <!-- Welcome: a hero, not a settings list — logo, title and body copy
+                     as one centered column. Inline here rather than in a step
+                     component because it is the only step whose title is part of its
+                     content. -->
+                <div v-if="currentStep === 'welcome'" class="step-welcome">
+                  <img src="/images/KitveiHakodesh.png" class="welcome-logo" alt="" />
+                  <h1 class="welcome-title">{{ $t(currentStepMeta.title) }}</h1>
+                  <p class="welcome-body">{{ currentStepMeta.desc && $t(currentStepMeta.desc) }}</p>
+                </div>
+                <SetupWizardStepTerms v-else-if="currentStep === 'terms'" v-model="termsAgreed" />
+                <component v-else :is="currentStepMeta.component" />
+              </div>
+            </div>
+          </div>
+        </Transition>
+
+        <template #footer>
+        <div class="wizard-card-footer">
+          <div class="footer-start">
+            <UiLanguageToggle compact />
+            <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
+          </div>
+          <div class="nav-btns">
+            <button v-if="stepIndex > 0" class="back-btn" @click="back">{{ $t('settings.wizard.back') }}</button>
+            <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
+              {{ currentStep === 'welcome' ? $t('settings.wizard.start') : isLast ? $t('settings.wizard.finish') : $t('settings.wizard.next') }}
+            </button>
+          </div>
+        </div>
+        </template>
+    </PageCard>
+  </div>
+</template>
+
+<style scoped>
+.wizard-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+/* ── Progress bar ── */
+.progress-track {
+  flex-shrink: 0;
+  height: 3px;
+  background: var(--border-color);
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.35s ease;
+}
+
+/* ── The card ── The frame (centred max-width, gutter, border, edge-to-edge below
+   600px) is components/PageCard.vue, shared with the FTS and calendar pages. */
+.wizard-card-header {
+  flex-shrink: 0;
+  padding: 18px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.step-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.step-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* The faded unit: header + scroller. It is the flex child that fills the card above
+   the footer, and a column itself so the scroller can take the remaining height. */
+.step-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The scroller. min-height:0 is what lets a flex child shrink below its content
+   height and actually scroll instead of pushing the footer off the card. */
+.wizard-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  /* Column so .step-body becomes a flex item and can be given real height with
+     `flex: 1` below. A percentage (`min-height: 100%`) does NOT work here: this
+     element's own height comes from `flex: 1`, which is a resolved height, not a
+     specified one, so it is not a definite basis for a child's percentage — measured,
+     the hero collapsed to its content height and sat near the top of the card. */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Padding lives here, not on the scroller: on a scroller the bottom padding
+   collapses against the scroll extent in some engines, and the scrollbar would
+   otherwise sit inside the padding rather than against the card edge. */
+.step-body {
+  padding: 16px 20px;
+  box-sizing: border-box;
+  /* At least the scroller's height, so a step that wants to centre itself in the card
+     can (the welcome hero, below); taller content grows past it and scrolls. Block
+     flow inside — a grid or a centred flex column here would stretch and spread the
+     settings rows of every OTHER step. */
+  flex: 1 0 auto;
+}
+
+/* Terms: the step body fills the card exactly (no outer scroll) so the text box can
+   take all remaining height and scroll itself. */
+.step-body--fill {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wizard-card-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+}
+
+/* ── Step transitions ──
+   A plain cross-fade, deliberately understated: `mode="out-in"` means the two steps
+   never overlap, so nothing needs absolute positioning and a step taller than the card
+   keeps its natural height and scrolls.
+
+   out-in runs the halves in SEQUENCE, so the felt duration is both added together —
+   measured end to end, not the number below. The out half is the quicker of the two:
+   leaving should not hold up the advance, and the incoming step is what the eye
+   follows. */
+.step-fade-leave-active {
+  transition: opacity 0.14s ease-in;
+}
+.step-fade-enter-active {
+  transition: opacity 0.26s ease-out;
+}
+.step-fade-enter-from,
+.step-fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Welcome step ── One centered column filling the card: the title sits in the
+   flow between the logo and the body copy, with no header strip above it. */
+.step-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 14px;
+  padding: 24px 8px;
+  box-sizing: border-box;
+  /* Centres itself over the card's full height — .step-body is sized by flex, so this
+     percentage has a definite basis. The ONLY step that centres, which is why the rule
+     sits here and not on the shared .step-body. */
+  min-height: 100%;
+}
+
+.welcome-logo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+.welcome-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.welcome-body {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 300px;
+}
+
+.footer-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.next-btn {
+  height: 28px;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+}
+.next-btn:hover {
+  background: color-mix(in srgb, var(--accent-color) 82%, #000);
+}
+.next-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.back-btn {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+.back-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.skip-btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 4px;
+}
+.skip-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.skip-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+
+</style>

@@ -1,0 +1,23 @@
+{
+  "tabs": {
+    "length": "Length",
+    "area": "Area",
+    "volume": "Volume",
+    "weight": "Weight",
+    "coins": "Coins",
+    "time": "Time"
+  },
+  "disclaimer": {
+    "title": "Please note",
+    "body1": "The measures shown here are based on various sources and on the methods of different poskim. There may be inaccuracies, disputes and differing interpretations among the poskim.",
+    "body2": "Use of this tool is solely at your own responsibility.",
+    "body3": "For any halachic question, consult a qualified rabbi.",
+    "accept": "I understand, continue"
+  },
+  "options": {
+    "roundedTitle": "Rounded values (as in the books)",
+    "exactTitle": "Exact values",
+    "rounded": "Rounded",
+    "exact": "Exact"
+  }
+}

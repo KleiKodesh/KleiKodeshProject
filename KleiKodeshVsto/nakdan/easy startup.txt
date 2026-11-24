@@ -1,0 +1,18 @@
+// ThisAddIn.cs
+public NakdanApi Nakdan;
+private void ThisAddIn_Startup(object sender, EventArgs e)
+    => Nakdan = new NakdanApi(this.Application);
+
+// Your task pane / ribbon
+var api = Globals.ThisAddIn.Nakdan;
+
+btnAll.Click       += (s, e) => api.RunSafe(api.VowelizeDocumentAsync);
+btnSelection.Click += (s, e) => api.RunSafe(api.VowelizeSelectionAsync);
+btnFootnotes.Click += (s, e) => api.RunSafe(api.VowelizeFootnotesAsync);
+
+// Genre combo
+comboGenre.SelectedIndexChanged += (s, e) =>
+    api.SetGenre((DictaGenre)comboGenre.SelectedIndex);
+
+// Ignored styles — whenever your style list changes
+api.SetIgnoredStyles("כותרת 1", "כותרת 2");

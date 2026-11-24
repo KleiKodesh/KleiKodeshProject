@@ -1,0 +1,215 @@
+import type { Component } from 'vue'
+import {
+  IconDocumentPdf20Regular,
+  IconDocumentText20Regular,
+  IconDocumentGlobe20Regular,
+  IconDocument20Regular,
+  IconPuzzlePiece20Regular,
+  IconHome20Regular,
+  IconLibrary20Filled,
+  IconBookOpen20Filled,
+  IconBookLetter20Filled,
+  IconCalendarRtl20Filled,
+  IconRuler20Filled,
+  IconApps20Filled,
+  IconFolder20Filled,
+  IconGlobe20Filled,
+  IconGlobe24Filled,
+  IconDocumentPdf24Regular,
+  IconDocumentText24Regular,
+  IconDocumentGlobe24Regular,
+  IconDocument24Regular,
+  IconPuzzlePiece24Regular,
+  IconHome24Regular,
+  IconLibrary24Filled,
+  IconBookOpen24Filled,
+  IconBookLetter24Filled,
+  IconCalendarRtl24Filled,
+  IconRuler24Filled,
+  IconApps24Filled,
+  IconFolder24Filled,
+  IconFolderPerson20Filled,
+  IconFolderPerson24Filled,
+  IconDocumentSearch20Filled,
+  IconDocumentSearch24Filled,
+} from '@iconify-prerendered/vue-fluent'
+import { IconSearchSparkle24, IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import IconBookRtl24 from '@/components/IconBookRtl24.vue'
+import IconWordDocument20 from '@/components/IconWordDocument20.vue'
+import IconWordDocument24 from '@/components/IconWordDocument24.vue'
+import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
+
+/**
+ * The one document-icon mapping — favicon-style glyph + brand color per kind of
+ * document. Every surface that labels a document uses it: the home tiles, the
+ * address-bar dropdown (tab rows AND search results), and the native chrome tab
+ * strip. There used to be four near-copies of this table that had already drifted
+ * apart (the tab rows showed uncolored outline glyphs while the tiles showed
+ * filled colored ones); keep it to this one.
+ *
+ * Sizes are explicit rather than scaled: Fluent ships each icon drawn for its own
+ * size, so a 20px icon is not a shrunken 24px one. Ask for the size you need.
+ */
+
+/** Stable identifier per icon — also the cache key when rasterizing for the native strip. */
+export type DocumentIconKey =
+  | 'book'
+  | 'pdf'
+  | 'html'
+  | 'txt'
+  | 'word'
+  | 'addin'
+  | 'document'
+  | 'library'
+  | 'hbooks'
+  | 'dict'
+  | 'calendar'
+  | 'ruler'
+  | 'apps'
+  | 'folder'
+  | 'fileSearch'
+  | 'userSpace'
+  | 'userSpaceSearch'
+  | 'globe'
+  | 'settings'
+  | 'home'
+  | 'search'
+
+export interface DocumentIcon {
+  key: DocumentIconKey
+  /** Empty string means "no explicit color" — inherit the surrounding text color. */
+  color: string
+  icon20: Component
+  icon24: Component
+}
+
+const ICONS: Record<DocumentIconKey, DocumentIcon> = {
+  book:     { key: 'book',     color: '#c1440e', icon20: IconBookRtl20,             icon24: IconBookRtl24 },
+  pdf:      { key: 'pdf',      color: '#F2564F', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
+  html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Regular, icon24: IconDocumentGlobe24Regular },
+  txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Regular,  icon24: IconDocumentText24Regular },
+  // Lighter Office blue (the dark #2B579A vanished on dark backgrounds); Fluent's outline page with a W.
+  word:     { key: 'word',     color: '#2F7DE1', icon20: IconWordDocument20,       icon24: IconWordDocument24 },
+  addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
+  document: { key: 'document', color: '#3478f6', icon20: IconDocument20Regular,      icon24: IconDocument24Regular },
+  // Destination routes. These mirror the home page's navigation cards
+  // (useHomeNavCards) glyph-for-glyph and colour-for-colour, so a tab for one of them
+  // is recognisably the same thing as its card.
+  library:  { key: 'library',  color: '#B5451B', icon20: IconLibrary20Filled,       icon24: IconLibrary24Filled },
+  hbooks:   { key: 'hbooks',   color: '#D94F1E', icon20: IconBookOpen20Filled,      icon24: IconBookOpen24Filled },
+  dict:     { key: 'dict',     color: '#7b5ea7', icon20: IconBookLetter20Filled,    icon24: IconBookLetter24Filled },
+  calendar: { key: 'calendar', color: '#2e7d32', icon20: IconCalendarRtl20Filled,   icon24: IconCalendarRtl24Filled },
+  ruler:    { key: 'ruler',    color: '#8b6914', icon20: IconRuler20Filled,         icon24: IconRuler24Filled },
+  apps:     { key: 'apps',     color: '#6b7fc4', icon20: IconApps20Filled,          icon24: IconApps24Filled },
+  // Exactly what the tile uses. The CSS var resolves in the page; the rasterizer
+  // resolves it against the live document before baking it into a PNG.
+  folder:   { key: 'folder',   color: 'var(--status-warning)', icon20: IconFolder20Filled, icon24: IconFolder24Filled },
+  userSpace: { key: 'userSpace', color: '#2b8a7e', icon20: IconFolderPerson20Filled, icon24: IconFolderPerson24Filled },
+  // UserSpace's colour, so the two read as one family.
+  userSpaceSearch: { key: 'userSpaceSearch', color: '#2b8a7e', icon20: IconDocumentSearch20Filled, icon24: IconDocumentSearch24Filled },
+  // Self-contained multi-colour icons: they carry their own fills (gradients for
+  // the sparkle, a hardcoded orange for Everything), so they are used exactly as the
+  // tiles use them and take no colour of their own.
+  search:   { key: 'search',   color: '',        icon20: IconSearchSparkle24,       icon24: IconSearchSparkle24 },
+  fileSearch: { key: 'fileSearch', color: '',    icon20: IconEverythingSearch,      icon24: IconEverythingSearch },
+  // Torah websites (the Websites page and a site's tab before its own favicon loads).
+  globe:    { key: 'globe',    color: '#2b88d8', icon20: IconGlobe20Filled,          icon24: IconGlobe24Filled },
+  settings: { key: 'settings', color: '',        icon20: IconSettings24,            icon24: IconSettings24 },
+  // Home has no tile of its own — it IS the tile grid — so it keeps a plain
+  // theme-coloured glyph.
+  home:     { key: 'home',     color: '',        icon20: IconHome20Regular,         icon24: IconHome24Regular },
+}
+
+export function documentIcon(key: DocumentIconKey): DocumentIcon {
+  return ICONS[key]
+}
+
+/** Every icon, for callers that need to enumerate (e.g. rasterizing the whole set). */
+/** Whether a string is one of the document icon keys. */
+export function isDocumentIconKey(key: string): key is DocumentIconKey {
+  return Object.prototype.hasOwnProperty.call(ICONS, key)
+}
+
+export function allDocumentIcons(): DocumentIcon[] {
+  return Object.values(ICONS)
+}
+
+/** Route (+ addin flag) → icon key. Shared by tabs, recently-opened entries, and tiles. */
+export function iconKeyForRoute(route: string, isOtzariaAddin = false): DocumentIconKey {
+  if (route === '/html-view' && isOtzariaAddin) return 'addin'
+  switch (route) {
+    case '/book-view':
+      return 'book'
+    case '/pdf-view':
+      return 'pdf'
+    case '/html-view':
+      return 'html'
+    case '/fast-doc-view':
+      return 'document'
+    case '/':
+      return 'home'
+    case '/search':
+      return 'search'
+    // Destination routes, matched to their home-page tile.
+    case '/books':
+      return 'library'
+    case '/hebrewbooks':
+      return 'hbooks'
+    case '/websites':
+    case '/web-view':
+      return 'globe'
+    case '/file-search':
+      return 'fileSearch'
+    case '/user-space':
+      return 'userSpace'
+    case '/user-space-search':
+      return 'userSpaceSearch'
+    case '/settings':
+      return 'settings'
+    default:
+      return 'document'
+  }
+}
+
+/**
+ * A tab / recents entry's icon: a computer file shows its file type's icon (txt, Word, ...),
+ * anything else its route's. One rule for home cards, history list and the tab strip.
+ */
+export function iconKeyForEntry(
+  entry: { route: string; isOtzariaAddin?: boolean; localFileName?: string; localFilePath?: string },
+): DocumentIconKey {
+  const fileName = entry.localFileName || entry.localFilePath
+  if (entry.route !== '/book-view' && fileName && !entry.isOtzariaAddin) return iconKeyForFileName(fileName)
+  return iconKeyForRoute(entry.route, entry.isOtzariaAddin)
+}
+
+/** File name (+ addin flag) → icon key, for file-search results. */
+export function iconKeyForFileName(fileName: string, isAddin = false): DocumentIconKey {
+  if (isAddin) return 'addin'
+  switch (fileName.toLowerCase().split('.').pop()) {
+    case 'pdf':
+      return 'pdf'
+    case 'html':
+    case 'htm':
+    case 'mht':
+    case 'mhtml':
+      return 'html'
+    case 'txt':
+      return 'txt'
+    // Every file Word opens: its own types, plus rtf and the OpenDocument text types.
+    case 'rtf':
+    case 'odt':
+    case 'ott':
+    case 'fodt':
+    case 'doc':
+    case 'docx':
+    case 'docm':
+    case 'dot':
+    case 'dotx':
+    case 'dotm':
+      return 'word'
+    default:
+      return 'document'
+  }
+}

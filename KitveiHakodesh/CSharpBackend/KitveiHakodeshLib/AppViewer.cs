@@ -1,0 +1,943 @@
+﻿using Dark.Net;
+using KitveiHakodeshLib.Bridge;
+using KitveiHakodeshLib.Diagnostics;
+using KitveiHakodeshLib.Dictionary;
+using KitveiHakodeshLib.HebrewBooks;
+using KitveiHakodeshLib.LocalFile;
+using KitveiHakodesh.Core.Settings;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+using System;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace KitveiHakodeshLib
+{
+    // Core AppViewer partial — WebView2 environment setup, initialisation, suspension,
+    // and public API surface.
+    //
+    // Split across partial classes by concern:
+    //   AppViewerSplash.cs          — splash screen show/hide
+    //   AppViewerTheme.cs           — DarkNet title-bar theme wiring and setTheme handler
+    //   AppViewerNavigation.cs      — navigation guard (allowlist) and reload logic
+    //   AppViewerMessageHandlers.cs — bridge message dispatch and all Handle* methods
+    public partial class AppViewer : UserControl
+    {
+        private static readonly string AppDir =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh");
+
+        // Shared across all AppViewer instances in this process — one browser process,
+        // one localStorage origin. The folder name is fixed per process (set via
+        // WebCacheFolder before the first instance initialises).
+        private static Task<CoreWebView2Environment> _sharedEnvTask;
+
+        /// <summary>
+        /// Starts the shared browser environment for <paramref name="webCacheFolder"/> now,
+        /// before any AppViewer exists. The browser process takes over a second to come up;
+        /// a host that calls this first thing in Main gets that second in parallel with its own
+        /// startup (assembly loads, the form) instead of after it. Call on the UI thread, with
+        /// the same folder the AppViewer will be given; the AppViewer then reuses this one.
+        /// </summary>
+        public static void StartSharedEnvironment(string webCacheFolder)
+            => GetSharedEnv(UserDataFolderFor(webCacheFolder));
+
+        // Test mode (HostTestMode): the rig's own profile folder, never the user's.
+        private static string UserDataFolderFor(string webCacheFolder)
+            => Path.Combine(HostTestMode.ProfileDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh"), webCacheFolder);
+
+        private static Task<CoreWebView2Environment> GetSharedEnv(string userDataFolder)
+        {
+            if (_sharedEnvTask == null)
+            {
+                var options = new CoreWebView2EnvironmentOptions
+                {
+                    // Disable background features that are irrelevant for a local book reader
+                    // and consume memory/CPU unnecessarily.
+                    //
+                    // --disable-background-networking   — no background sync, prefetch, or
+                    //                                     safe-browsing pings
+                    // --disable-client-side-phishing-detection — no ML phishing model loaded
+                    // --disable-default-apps            — no default app installation checks
+                    // --disable-extensions              — no browser extension support
+                    // --disable-sync                    — no Edge/Chrome profile sync
+                    // --disable-translate               — no translation bar or model download
+                    // --no-first-run                    — skip first-run experience dialogs
+                    // --no-default-browser-check        — skip default browser prompt
+                    //
+                    // V8 heap limits:
+                    // --js-flags=--max_old_space_size=512
+                    //   Caps the V8 old-generation (long-lived objects) heap at 512 MB.
+                    //   Default is ~4 GB on 64-bit. A book reader does not need gigabytes
+                    //   of JS heap; capping it forces V8 to run GC more aggressively and
+                    //   prevents runaway memory growth from accumulated closures, caches,
+                    //   and PDF.js decoded page data.
+                    // --js-flags=--max_semi_space_size=4
+                    //   Caps the young-generation (short-lived objects) semi-space at 4 MB.
+                    //   Default is ~8 MB. Smaller semi-space = more frequent minor GCs,
+                    //   which keeps short-lived allocations (render frames, event objects)
+                    //   from accumulating before collection.
+                    //
+                    // --disable-features=CalculateNativeWinOcclusion
+                    //   Disables Windows occlusion tracking (detecting when the window is
+                    //   covered by another window). We handle our own suspension via
+                    //   TrySuspendAsync on VisibleChanged; the native occlusion tracker
+                    //   adds background thread overhead with no benefit here.
+                    AdditionalBrowserArguments =
+                        "--disable-background-networking " +
+                        "--disable-client-side-phishing-detection " +
+                        "--disable-default-apps " +
+                        "--disable-extensions " +
+                        "--disable-sync " +
+                        "--disable-translate " +
+                        "--no-first-run " +
+                        "--no-default-browser-check " +
+                        "--js-flags=\"--max_old_space_size=512 --max_semi_space_size=4\" " +
+                        "--disable-features=CalculateNativeWinOcclusion " +
+                        // The app page is served from http://kitveihakodesh-app, which Chromium does
+                        // not count as a secure context, and a frame inside a non-secure page never
+                        // is one either - so the Kiwix reader (Websites page, https://kiwix-app) lost
+                        // navigator.serviceWorker and fell back to its restricted mode. Treating the
+                        // app's own local origin as secure restores it; nothing on the web is affected.
+                        "--unsafely-treat-insecure-origin-as-secure=http://kitveihakodesh-app" +
+                        // Hosted e2e rig only (HostTestMode, off unless KH_TEST_CDP_PORT is set).
+                        (HostTestMode.IsOn ? " --remote-debugging-port=" + HostTestMode.CdpPort : ""),
+
+                    // Disable tracking prevention — all content is local or from a single
+                    // trusted domain; the feature adds overhead with no benefit here.
+                    EnableTrackingPrevention = false,
+                };
+
+                // Keep the webcache alongside the other cache folders under the app's
+                // install directory (AppDomain.CurrentDomain.BaseDirectory), consistent
+                // with LocalFileHandler and HebrewBooksHandler.
+                _sharedEnvTask = CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: userDataFolder,
+                    options: options);
+            }
+            return _sharedEnvTask;
+        }
+
+        // ── Fields ──────────────────────────────────────────────────────────────────
+
+        private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
+        private WebBridge _bridge;
+        // Seforim and dictionary data: the page calls the KitveiHakodesh service itself through
+        // this relay (serviceClient.ts -> http://kitvei-service -> the service pipe). Nothing in
+        // this process answers a data op any more.
+        private ServiceRpcRelay _serviceRelay;
+        // Installs, repairs or starts the service when it is not there (see the launcher).
+        private KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher _serviceLauncher;
+        private LocalFileHandler _localFile;
+        private HebrewBooksHandler _hb;
+        private KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper _webSites;
+        private string _dbInjectionScriptId;
+        // The one-shot script carrying the launch files' open events (InjectStartupOpenEventsAsync).
+        private string _startupEventsScriptId;
+
+        // File paths queued before the Vue app has finished mounting.
+        // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
+        // event listeners (localFileStore) are live before the push event fires.
+        // A list, not one slot: Explorer opens a multi-file selection as one launch
+        // per file, so several can arrive before the app is ready.
+        private readonly System.Collections.Generic.List<string> _pendingFilePaths = new System.Collections.Generic.List<string>();
+        // A search request queued before the Vue app has finished mounting, dispatched
+        // on 'appReady' just like _pendingFilePaths. Only the last request is kept.
+        private (string text, string target)? _pendingSearch;
+        // An open-book (deep link) request queued before the Vue app is ready. Same
+        // dispatch-on-'appReady' pattern; only the last request is kept.
+        private HostLink _pendingOpenBook;
+        // A daily-learning link (standalone calendar) waiting for 'appReady'; only the last is kept.
+        private DailyLearningLink _pendingDailyLearning;
+        // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
+        private bool _appReady;
+        // Completed by the page's 'persistenceFlushed' message while FlushPersistenceAsync
+        // is waiting for it; null the rest of the time.
+        private TaskCompletionSource<bool> _persistenceFlushAck;
+        // CloseAfterPersistenceFlush has already run for the host form: the next close
+        // goes straight through.
+        private bool _hostCloseFlushDone;
+
+
+        // ── Public API ──────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// True when hosted in the Word task pane. Tells the page (window.__webviewIsVsto) that it runs in
+        /// the add-in - split view is disabled there. Must be set before the WebView2 finishes initialising
+        /// (i.e. before <see cref="InitAsyncCore"/> injects the startup script).
+        /// </summary>
+        public bool IsVstoHost { get; set; } = false;
+
+        /// <summary>
+        /// Which desktop-app window this viewer fills: "" for the first window (and every other
+        /// host), else a short id. The page keeps each window's tabs under its own storage keys
+        /// (window.__webviewWindowId, vue-frontend/src/stores/windowScope.ts). Set before the
+        /// WebView2 finishes initialising, like <see cref="IsVstoHost"/>.
+        /// </summary>
+        public string WindowId { get; set; } = "";
+
+        /// <summary>
+        /// Set by a host whose pane is not a window (the Word task pane): asked to put this viewer into a
+        /// full-screen window when the page requests fullscreen. Once in a window, fullscreen toggles that window.
+        /// </summary>
+        public Action RequestFullscreenWindow { get; set; }
+
+        /// <summary>
+        /// Called by TaskPaneManager via reflection: makes a window.open popup an owned
+        /// window of Word. Null in standalone hosts, which own it by the app's root window.
+        /// </summary>
+        public Action<IntPtr> SetPopupOwner { get; private set; }
+
+        public void SetPopupOwnerAction(Action<IntPtr> action)
+        {
+            SetPopupOwner = action;
+        }
+
+        /// <summary>
+        /// Opens a file by path, as if the user had picked it via the file picker.
+        /// Safe to call immediately after construction — if the Vue app is not yet
+        /// ready the path is queued and opened as soon as 'appReady' is received.
+        /// </summary>
+        public void OpenFileFromPath(string filePath)
+        {
+            if (!_appReady)
+            {
+                // Vue event listeners not live yet — queue until appReady fires.
+                _pendingFilePaths.Add(filePath);
+            }
+            else
+            {
+                _ = _localFile.OpenFileFromPathAsync(filePath);
+            }
+        }
+
+        // Intra-word marks that sit ON or BETWEEN letters and must be DELETED (no
+        // space), otherwise the surrounding word splits apart:
+        //   • gershayim/geresh + straight/typographic quotes ("'׳״‘’“”) — Hebrew
+        //     acronym/abbreviation marks, e.g. רשב"א → רשבא (not רשב א)
+        //   • Hebrew niqqud + cantillation (U+0591–U+05C7), e.g. שְׁמוֹת֙ → שמות
+        //     (the FTS/catalog indexes are unpointed, so pointed text must match them)
+        private static readonly Regex _intraWordMarks =
+            new Regex("[\"'׳״‘’“”֑-ׇ]", RegexOptions.Compiled);
+
+        // Anything else outside the keep-set (Hebrew letters, Latin letters, digits) —
+        // remaining punctuation, whitespace, newlines — collapses to a single space so
+        // real word boundaries are preserved.
+        private static readonly Regex _nonWordRun =
+            new Regex(@"[^א-תa-zA-Z0-9]+", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Strips a Word selection down to searchable words. Hebrew acronym marks and
+        /// quotes are removed in place (רשב"א → רשבא); every other non-word run
+        /// (punctuation, niqqud/cantillation, newlines, whitespace) collapses to a
+        /// single space. Returns null/empty when nothing searchable remains.
+        /// </summary>
+        private static string StripToSearchText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            // Delete intra-word marks FIRST (no space), then collapse the rest to spaces.
+            string cleaned = _intraWordMarks.Replace(raw, "");
+            cleaned = _nonWordRun.Replace(cleaned, " ").Trim();
+            return cleaned.Length == 0 ? null : cleaned;
+        }
+
+        /// <summary>
+        /// Runs a search inside the app from the VSTO host (right-click context menu).
+        /// <paramref name="target"/> is "fts" (full-text search page) or "catalog"
+        /// (book catalog page). The selection text is stripped of all non-word
+        /// characters before being pushed to Vue. Safe to call immediately after the
+        /// pane is shown — if Vue is not yet mounted the request is queued and fired
+        /// on 'appReady', mirroring <see cref="OpenFileFromPath"/>.
+        /// </summary>
+        public void SearchFromHost(string text, string target)
+        {
+            string cleaned = StripToSearchText(text);
+            if (cleaned == null) return;
+
+            if (!_appReady)
+                _pendingSearch = (cleaned, target);
+            else
+                _bridge.PushEvent(new { @event = "hostSearch", target, text = cleaned });
+        }
+
+        /// <summary>
+        /// The text currently selected inside the web app, read live from the browser
+        /// at the moment of the call. A browser keeps its selection when the window
+        /// loses focus (it just greys out), so this works from a Word context-menu
+        /// click while the pane is unfocused. Returns "" when nothing is selected or
+        /// the view is not ready.
+        /// </summary>
+        public async Task<string> GetSelectedTextAsync()
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null)
+                return string.Empty;
+
+            // ExecuteScriptAsync returns the result JSON-encoded (a quoted, escaped
+            // string for a string result), so it round-trips newlines and quotes in
+            // the selection safely.
+            string json = await _webView.CoreWebView2.ExecuteScriptAsync(
+                "window.getSelection().toString()");
+            // Reader only: the serializer's metadata machinery is not loaded for one string.
+            using (var doc = JsonDocument.Parse(json))
+                return doc.RootElement.ValueKind == JsonValueKind.String ? doc.RootElement.GetString() ?? string.Empty : string.Empty;
+        }
+
+        /// <summary>
+        /// Asks the page to write out everything it still owes to storage (coalesced tab
+        /// list and recents writes, the open book's reading position) and waits for its
+        /// ack. Call before disposing the control: closing a WinForms window fires none
+        /// of the page's unload events, so a write still sitting in its trailing timer
+        /// would be lost. Bounded by <paramref name="timeoutMs"/>; normally a few ms.
+        /// Never throws; returns at once when the page is gone or not loaded.
+        /// UI thread only (ExecuteScriptAsync).
+        /// </summary>
+        public Task FlushPersistenceAsync(int timeoutMs = 500)
+            => RunPersistenceScriptAsync("__khsFlushPersistence", timeoutMs);
+
+        /// <summary>
+        /// Like <see cref="FlushPersistenceAsync"/>, but for a desktop window closing while
+        /// other windows stay open: the page deletes everything this window saved (its tabs,
+        /// per-tab state and recents) instead of writing it out. Bounded the same way; the
+        /// deletes are IndexedDB prefix scans, hence the longer default.
+        /// </summary>
+        public Task DiscardWindowDataAsync(int timeoutMs = 2000)
+            => RunPersistenceScriptAsync("__khsDiscardWindowData", timeoutMs);
+
+        private async Task RunPersistenceScriptAsync(string pageFunction, int timeoutMs)
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
+
+            var ack = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _persistenceFlushAck = ack;
+            try
+            {
+                var deadline = Task.Delay(timeoutMs);
+                // The page answers 'pending' synchronously and posts 'persistenceFlushed'
+                // once its IndexedDB puts have landed. Anything else (no such function:
+                // a page that never mounted, or a navigation away from the app) means
+                // there is nothing to wait for.
+                Task<string> script = _webView.CoreWebView2.ExecuteScriptAsync(
+                    "typeof window." + pageFunction + "==='function'?window." + pageFunction + "():'none'");
+                Task first = await Task.WhenAny(script, ack.Task, deadline);
+                if (first == script && script.Status == TaskStatus.RanToCompletion && script.Result == "\"pending\"")
+                    await Task.WhenAny(ack.Task, deadline);
+            }
+            catch (Exception) { /* WebView2 torn down mid-flight: nothing left to flush */ }
+            finally
+            {
+                _persistenceFlushAck = null;
+            }
+        }
+
+        /// <summary>
+        /// Call from the host form's FormClosing (after any other work the handler does).
+        /// The first close is cancelled, <see cref="FlushPersistenceAsync"/> runs, and the
+        /// form is closed again once the page has acked (or the bound has passed); that
+        /// second close goes straight through. No message pumping: the wait is an ordinary
+        /// await on the UI thread, so the close is delayed by the ack and nothing else.
+        /// A Windows shutdown is never held - the flush is fired and the close proceeds.
+        /// </summary>
+        /// <param name="discardWindowData">
+        /// Asked once the close is under way: true when this window closes for good while
+        /// others stay open, so its saved data is deleted (<see cref="DiscardWindowDataAsync"/>)
+        /// rather than flushed. Null = always flush (the only window, the Word task pane).
+        /// </param>
+        public async void CloseAfterPersistenceFlush(Form form, FormClosingEventArgs e, Func<Task<bool>> discardWindowData = null)
+        {
+            if (form == null || e == null || e.Cancel || _hostCloseFlushDone) return;
+            _hostCloseFlushDone = true;
+            if (e.CloseReason == CloseReason.WindowsShutDown)
+            {
+                _ = FlushPersistenceAsync();
+                return;
+            }
+
+            e.Cancel = true;
+            if (discardWindowData != null && await discardWindowData())
+            {
+                // No snapshot either: the startup snapshot shows the window that comes back.
+                await DiscardWindowDataAsync();
+            }
+            else
+            {
+                if (form.WindowState != FormWindowState.Minimized) await SaveSnapshotAsync();
+                await FlushPersistenceAsync();
+            }
+            try
+            {
+                // Closed by the user again while we waited: nothing left to do.
+                if (!form.IsDisposed) form.Close();
+            }
+            catch (Exception) { /* the form went away during the wait */ }
+        }
+
+        /// <summary>
+        /// Opens a book at a specific line inside the app from the VSTO host — driven
+        /// by an otzaria://, kitveihakodeshapp:// or zayit:// deep link found in the Word
+        /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and this app's own
+        /// links carry a positional line index that the frontend uses directly; Zayit
+        /// links carry a DB line row-id the frontend converts to an index. Queued and
+        /// flushed on 'appReady' if Vue is not yet mounted, mirroring
+        /// <see cref="OpenFileFromPath"/>.
+        /// </summary>
+        public void OpenBookFromHost(HostLink link)
+        {
+            if (link == null) return;
+
+            if (!_appReady)
+                _pendingOpenBook = link;
+            else
+                PushOpenBook(link);
+        }
+
+        /// <summary>
+        /// Opens one daily-learning cycle's reading (a link from the standalone calendar, see
+        /// <see cref="DailyLearningLink"/>); the frontend finds the book and place. Queued until
+        /// 'appReady' like <see cref="OpenBookFromHost"/>.
+        /// </summary>
+        public void OpenDailyLearningFromHost(DailyLearningLink link)
+        {
+            if (link == null) return;
+            if (!_appReady)
+                _pendingDailyLearning = link;
+            else
+                PushOpenDailyLearning(link);
+        }
+
+        private void PushOpenDailyLearning(DailyLearningLink link)
+        {
+            _bridge.PushEvent(new { @event = "hostOpenDailyLearning", cycle = link.Cycle, date = link.Date });
+        }
+
+        private void PushOpenBook(HostLink link)
+        {
+            // Switch, not a ternary: a `x == Zayit ? "zayit" : "otzaria"` shape silently
+            // mislabels every scheme added later as "otzaria".
+            string scheme;
+            switch (link.Scheme)
+            {
+                case HostLink.LinkScheme.Zayit: scheme = "zayit"; break;
+                case HostLink.LinkScheme.KitveiHakodesh: scheme = HostLink.AppScheme; break;
+                default: scheme = "otzaria"; break;
+            }
+
+            _bridge.PushEvent(new
+            {
+                @event = "hostOpenBook",
+                scheme,
+                bookId = link.BookId,    // null when the link names the book by title or by a line id
+                title = link.Title,      // Otzaria book:// / inline-link: the book's title (null when by id)
+                headings = link.Headings, // book://title#heading: a TOC path to open at (null when absent)
+                index = link.Index,      // positional line index (null when absent)
+                lineId = link.LineId,    // Zayit DB line row-id (null otherwise)
+                otherLibrary = link.OtherLibrary, // Otzaria ?source=user|db: - not a book of this library
+                mark = link.Mark,        // highlight the whole line
+                markText = link.MarkText // highlight a specific span (null when absent)
+            });
+        }
+
+        // ── Constructor ─────────────────────────────────────────────────────────────
+
+        // Subfolder name under KitveiHakodesh\ used as the WebView2 user-data folder.
+        // Stored as a readonly field so it is captured before InitAsync runs.
+        private readonly string _webCacheFolder;
+
+        /// <param name="snapshotSplash">
+        /// Show the page as it looked when the window last closed instead of the logo
+        /// splash (see AppViewerSplash). Off for the VSTO pane.
+        /// </param>
+        public AppViewer(string webCacheFolder = "webcache", bool snapshotSplash = false)
+        {
+            _webCacheFolder = webCacheFolder;
+            _snapshotSplash = snapshotSplash;
+            RightToLeft = RightToLeft.No;
+            AutoScaleMode = AutoScaleMode.None;
+            BackColorChanged += (_, __) => _SyncSplashBackColor();
+            VisibleChanged += OnVisibleChanged;
+            // SetCurrentProcessTheme(Auto) must be called before any window in this
+            // process is shown — do it here unconditionally so it runs in both the
+            // standalone desktop app and the VSTO (Word) process.
+            DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
+            ParentChanged += OnParentChanged;
+            Controls.Add(_webView);
+            _InitSplash();
+            _ = InitAsync();
+        }
+
+        // ── Visibility / suspension ─────────────────────────────────────────────────
+
+        // Suspend the WebView2 renderer when the control is hidden (e.g. the host
+        // task pane is collapsed or the window is minimised) to free CPU and allow
+        // the OS to reclaim the renderer's memory pages.
+        // WebView2 resumes automatically when Visible becomes true again, so we
+        // only need to handle the hide direction explicitly.
+        private async void OnVisibleChanged(object sender, EventArgs e)
+        {
+            if (Visible)
+            {
+                // Restore the inner WebView2 control visibility so the resumed
+                // renderer can paint. WebView2 auto-resumes internally when its
+                // control becomes visible, but we hid _webView explicitly on
+                // suspend so we must un-hide it here.
+                _webView.Visible = true;
+
+                // Restore normal memory target so the renderer can use full resources
+                // now that the app is active again.
+                if (_webView.CoreWebView2 != null)
+                    _webView.CoreWebView2.MemoryUsageTargetLevel =
+                        CoreWebView2MemoryUsageTargetLevel.Normal;
+                return;
+            }
+
+            if (_webView.CoreWebView2 == null) return;    // not yet initialised
+            if (_webView.CoreWebView2.IsSuspended) return; // already suspended
+
+            // Signal the browser engine to drop cached data and swap memory to disk
+            // before suspending. This is the two-step pattern recommended by the
+            // WebView2 performance article: set Low first, then TrySuspendAsync.
+            _webView.CoreWebView2.MemoryUsageTargetLevel =
+                CoreWebView2MemoryUsageTargetLevel.Low;
+
+            // The API requires the WebView2 control's own Visible to be false.
+            // Our _webView fills the UserControl (Dock = Fill), so hiding the
+            // UserControl also hides _webView — but we set it explicitly to be safe.
+            _webView.Visible = false;
+            try
+            {
+                await _webView.CoreWebView2.TrySuspendAsync();
+                // Shown again while that was running (a quick switch away and back): the show branch above ran
+                // before the suspend finished, so undo it here or the view stays blank.
+                if (Visible && !IsDisposed)
+                {
+                    _webView.Visible = true;
+                    if (_webView.CoreWebView2 != null)
+                    {
+                        if (_webView.CoreWebView2.IsSuspended) _webView.CoreWebView2.Resume();
+                        _webView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal — suspension is best-effort. Log and continue.
+                System.Diagnostics.Debug.WriteLine("[AppViewer] TrySuspendAsync failed: " + ex.Message);
+            }
+        }
+
+        // ── Initialisation ──────────────────────────────────────────────────────────
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            _handleReady.TrySetResult(true);
+            // Title bar theme is applied via OnHostFormHandleCreated (host Form's
+            // HandleCreated event), which fires before the form is visible — the
+            // correct moment for DarkNet. Nothing to do here.
+        }
+
+        // Completed once this control has its window; InitAsyncCore waits on it.
+        private readonly TaskCompletionSource<bool> _handleReady = new TaskCompletionSource<bool>();
+
+        /// <summary>
+        /// Creates the WebView2's window as a child of this control's window, in this
+        /// window's DPI awareness context. Creating it any earlier puts it on WinForms'
+        /// hidden parking window instead, and Windows then refuses to move it under a
+        /// parent of a different DPI context (SetParent fails with ERROR_INVALID_STATE,
+        /// 5023): Word hosts a task pane in a system-DPI window, while a macro-launched
+        /// command runs under the thread's per-monitor context. The pane was then
+        /// shown with the page loaded, but the browser sat invisible on the parking
+        /// window (issue #331, the white pane).
+        /// </summary>
+        private void CreateWebViewWindowUnderThis()
+        {
+            if (_webView.IsHandleCreated) return;
+            IntPtr previous = IntPtr.Zero;
+            try { previous = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(Handle)); }
+            catch (EntryPointNotFoundException) { /* before Windows 10 1607: one context per process */ }
+            try { var _ = _webView.Handle; }
+            finally { if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous); }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetWindowDpiAwarenessContext(IntPtr h);
+
+        private async Task InitAsync()
+        {
+            try
+            {
+                await InitAsyncCore();
+            }
+            catch (Exception ex)
+            {
+                // InitAsync is fire-and-forget — swallowed exceptions leave the splash up forever.
+                // Hide the splash and surface the error so the user isn't stuck on a blank screen.
+                _HideSplash();
+                if (InvokeRequired) Invoke(new Action(() => ShowInitError(ex)));
+                else ShowInitError(ex);
+            }
+        }
+
+        private void ShowInitError(Exception ex)
+        {
+            // This Word is the elevated one and the host can reopen the document in a
+            // normal Word, where the pane works: offer that instead of a dead end.
+            if (IsElevationClash(ex) && _reopenUnelevated != null && ProcessIsElevated())
+            {
+                var answer = MessageBox.Show(
+                    HostText.ThisWordIsAdminReopen, HostText.ErrorBoxTitle,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (answer == DialogResult.Yes && _reopenUnelevated()) return;
+                if (answer == DialogResult.Yes)
+                    MessageBox.Show(HostText.OtherWordDifferentElevation, HostText.ErrorBoxTitle,
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            MessageBox.Show(BuildErrorMessage(ex), HostText.ErrorBoxTitle,
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        // Set by the Word host: reopens the pane's document in a normal (non-admin) Word
+        // and closes it here. Returns false when it could not (no saved file, user
+        // cancelled Word's save prompt).
+        private Func<bool> _reopenUnelevated;
+        public void SetReopenUnelevatedAction(Func<bool> reopen) => _reopenUnelevated = reopen;
+
+        /// <summary>
+        /// 0x8007139F (ERROR_INVALID_STATE) anywhere in the exception chain. WebView2
+        /// refuses a data folder already in use by a process of different elevation; the
+        /// code can arrive wrapped (AggregateException / TargetInvocation), and checking
+        /// only the outer exception showed users the raw error instead of the explanation.
+        /// </summary>
+        private static bool IsElevationClash(Exception ex)
+        {
+            const int ErrorInvalidState = unchecked((int)0x8007139F);
+            for (var e = ex; e != null; e = e.InnerException)
+            {
+                if (e.HResult == ErrorInvalidState) return true;
+                if (e is AggregateException agg)
+                    foreach (var inner in agg.InnerExceptions)
+                        if (IsElevationClash(inner)) return true;
+            }
+            return false;
+        }
+
+        private static bool ProcessIsElevated()
+        {
+            try
+            {
+                using (var id = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    return new System.Security.Principal.WindowsPrincipal(id)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Builds the error message for InitAsync failures.
+        /// For SQLite interop errors, appends environment diagnostics so users
+        /// can include the full context in a bug report.
+        /// </summary>
+        private static string BuildErrorMessage(Exception ex)
+        {
+            // 0x8007139F (ERROR_INVALID_STATE): another Word with a different elevation
+            // (admin vs. normal) already holds the shared WebView2 data folder.
+            if (IsElevationClash(ex))
+                return HostText.OtherWordDifferentElevation;
+
+            string baseMessage = HostText.InitFailed + "\n" + ex.Message;
+
+            // Detect SQLite native interop failures — these are the hardest to
+            // diagnose remotely because they depend on process bitness, Word bitness,
+            // and what other SQLite copies exist on the machine.
+            bool isSqliteError =
+                ex is System.EntryPointNotFoundException ||
+                ex is System.DllNotFoundException ||
+                ex is System.BadImageFormatException ||
+                (ex.Message != null && ex.Message.IndexOf("SQLite", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                (ex.Message != null && ex.Message.IndexOf("Interop", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!isSqliteError) return baseMessage;
+
+            try
+            {
+                var diagnostics = EnvironmentDiagnostics.Collect();
+                var sb = new StringBuilder();
+                sb.AppendLine(baseMessage);
+                sb.AppendLine();
+                sb.AppendLine(HostText.EnvironmentDetails);
+
+                // The most relevant fields for this error class.
+                var keys = new[]
+                {
+                    "process.bitness",
+                    "process.executable",
+                    "office.wordBitness",
+                    "office.installType",
+                    "office.winwordPeBitness",
+                    "sqlite.baseDir.assembly",
+                    "sqlite.baseDir.appDomain",
+                    "sqlite.baseDir.envVar",
+                    "sqlite.interop.appDomain.x86.present",
+                    "sqlite.interop.appDomain.x86.path",
+                    "sqlite.interop.appDomain.x86.peMachine",
+                    "sqlite.interop.appDomain.x64.present",
+                    "sqlite.interop.appDomain.x64.path",
+                    "sqlite.interop.appDomain.x64.peMachine",
+                    "sqlite.interop.appDomain.flat.present",
+                    "sqlite.interop.assembly.x86.present",
+                    "sqlite.interop.assembly.x64.present",
+                    "sqlite.managed.appDomain.present",
+                    "sqlite.managed.appDomain.version",
+                    "assembly.appDomainBase",
+                    "assembly.executingLocation",
+                };
+
+                foreach (string key in keys)
+                {
+                    if (diagnostics.TryGetValue(key, out string val))
+                        sb.AppendLine($"  {key}: {val}");
+                }
+
+                return sb.ToString();
+            }
+            catch
+            {
+                // Diagnostics collection failed — just return the base message.
+                return baseMessage;
+            }
+        }
+
+        private async Task InitAsyncCore()
+        {
+            var env = await GetSharedEnv(UserDataFolderFor(_webCacheFolder));
+
+            // The browser window must be born under ours - see CreateWebViewWindowUnderThis.
+            if (!IsHandleCreated) await _handleReady.Task;
+            CreateWebViewWindowUnderThis();
+
+            await _webView.EnsureCoreWebView2Async(env);
+
+            // ── Disable WebView2 features the app does not use ────────────────────────
+            // These are set once after EnsureCoreWebView2Async and before the first
+            // navigation so they take effect for the entire session.
+            var settings = _webView.CoreWebView2.Settings;
+
+            // Browser-DRAWN UI (context menus, autofill/datalist popups) follows the
+            // profile color scheme, not the page's CSS color-scheme; its default is
+            // the Windows app-mode setting, which can contradict the app theme
+            // (light app, dark datalist popups). Seed from the persisted preference;
+            // live theme toggles update it in HandleSetTheme (AppViewerTheme.cs).
+            ApplyBrowserUiColorScheme(AppSettingsRegistry.GetDarkMode());
+
+            // The app has its own zoom controls (Ctrl+±, pinch) — block the browser's
+            // built-in zoom so the two systems don't fight each other.
+            settings.IsZoomControlEnabled = false;
+
+            // No swipe-to-navigate — the app is a single-page reader, not a browser.
+            settings.IsSwipeNavigationEnabled = false;
+
+            // No autofill or password saving — the app has no login forms.
+            settings.IsPasswordAutosaveEnabled = false;
+
+            // No status bar — the hover-URL tooltip at the bottom left is irrelevant
+            // in a native app and wastes a few pixels.
+            settings.IsStatusBarEnabled = false;
+
+            // Disable SmartScreen reputation checks — all content is served from local
+            // virtual hosts or trusted origins (HebrewBooks download). SmartScreen adds
+            // network round-trips and is meaningless for a local book reader.
+            //
+            // This property lives on ICoreWebView2Settings8 (Runtime 1.0.1587.40+).
+            // The wrapper QIs the live runtime for that interface on the property
+            // setter, so on an older installed Runtime the assignment throws and takes
+            // the whole startup down. It is a pure optimization — skipping it costs
+            // nothing but a SmartScreen round-trip — so swallow the version mismatch.
+            try
+            {
+                settings.IsReputationCheckingRequired = false;
+            }
+            catch (InvalidCastException) { }      // interface missing from this Runtime
+            catch (NotImplementedException) { }   // some Runtime builds report it this way
+
+            // Disable the default right-click context menu — the app provides its own
+            // context menus where needed. The browser menu exposes irrelevant items
+            // (Save image, Inspect, etc.) and is confusing in a native app context.
+            settings.AreDefaultContextMenusEnabled = false;
+
+            // Disable DevTools in production — users cannot open the inspector via
+            // F12 or right-click. This also prevents accidental exposure of internals.
+            // Remove this line (or set to true) during development if needed.
+            //settings.AreDevToolsEnabled = false;
+
+            // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
+            // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
+            // via its own keyboard handling; the browser defaults would interfere.
+            //settings.AreBrowserAcceleratorKeysEnabled = false;
+
+            // Show a blank page on navigation failure instead of the browser's styled
+            // error page. The app is a local reader — navigation errors are internal
+            // bugs, not user-facing web errors, so the browser error page is noise.
+            //settings.IsBuiltInErrorPageEnabled = false;
+
+            _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                "kitveihakodesh-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+            MapKiwixIfInstalled();
+
+            // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
+            // each call is a browser-process round-trip, so one call is faster than two.
+            // Only HOST facts are injected; the database path and folder settings are the
+            // service's and the page asks it for them.
+            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                JsBridge.ForAppFramesOnly(JsBridge.Script + "\n" + HostFactsScript()));
+
+            // IframeScrollScript runs in every frame including local file iframes.
+            // It is registered separately because it must not share the same document-created
+            // slot as the bridge script — the bridge script references window.chrome.webview
+            // which is only available in the top frame.
+            //
+            // OtzariaAddinBridgeStubScript shares this call (one browser round-trip): it
+            // no-ops everywhere except child frames on kitvei-localhtml-* hosts, where the
+            // window.Otzaria stub must exist BEFORE the addin's own scripts run. Those
+            // frames are cross-origin from the Vue app, so the Vue side cannot inject it —
+            // document-created injection is the only path that reaches them.
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
+
+            _bridge = new WebBridge(_webView, this);
+            // The service is a hard dependency: the channel starts it when no instance is
+            // listening (KitveiHakodeshServiceLauncher) and retries the call once. A short
+            // connect timeout: when the pipe is absent, net48's Connect spins for the whole
+            // timeout before failing, and the page's client retries several times.
+            _serviceLauncher = new KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher();
+            var serviceLauncher = _serviceLauncher;
+            _serviceRelay = new ServiceRpcRelay(
+                _webView.CoreWebView2, _bridge,
+                new KitveiHakodeshLib.Service.KitveiHakodeshServiceSelfStartingChannel(
+                    new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
+                    serviceLauncher));
+            // The first thing this window does: bring the service up, so the page's first requests
+            // find it listening instead of paying the start on the hot path. Every window, every
+            // time - the service stops itself when nobody uses it, so "already running" is never
+            // assumed; a second Word pane finds it listening and returns at once. This is also the
+            // one place that may raise the "install the service?" UAC prompt unasked, on the first
+            // launch that finds the product installed but unregistered (the launcher's per-user
+            // flag); it runs here, after the window exists, so the prompt has an owner window
+            // instead of opening behind as a flashing taskbar button.
+            // A console instance of the service (dev, portable) lives as long as some program uses
+            // it: this window counts until it closes (Service/KitveiHakodeshServiceOwnership). The
+            // plain pipe channel, not the self-starting one: a heartbeat must not revive a
+            // service nobody is using.
+            KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowOpened(
+                new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500));
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None);
+                    KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.RegisterNow();
+                }
+                catch { /* the page's first request reports it */ }
+            });
+
+            _localFile = new LocalFileHandler(_bridge, _webView);
+            _hb = new HebrewBooksHandler(_bridge, _webView, this);
+            _webSites = KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.Attach(_webView.CoreWebView2, AppDir);
+            AttachSiteFrameShortcuts();
+            AttachSiteFrameNavigation();
+
+            await InjectStartupOpenEventsAsync();
+
+            _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
+            _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
+            _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            _webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            _webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
+            _webView.CoreWebView2.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
+
+            _webView.Source = new Uri("http://kitveihakodesh-app/index.html");
+
+            // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
+            // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
+            _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
+        }
+
+        /// <summary>
+        /// Hands the files the host was launched with to the page AT BOOT, as the open events it
+        /// would otherwise get pushed after 'appReady': main.ts applies them before the app
+        /// mounts, so the file's tab is the one drawn first and the restored session's view
+        /// never renders ahead of it. A one-shot script - HandleAppReady removes it, so a later
+        /// reload does not open the files again. A file this cannot prepare stays queued for
+        /// the normal open on 'appReady', which reports the error.
+        /// </summary>
+        private async Task InjectStartupOpenEventsAsync()
+        {
+            var events = new System.Collections.Generic.List<object>();
+            for (int i = 0; i < _pendingFilePaths.Count;)
+            {
+                object openEvent = _localFile.StartupOpenEvent(_pendingFilePaths[i]);
+                if (openEvent == null) { i++; continue; }
+                events.Add(openEvent);
+                _pendingFilePaths.RemoveAt(i);
+            }
+            if (events.Count == 0) return;
+            _startupEventsScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "if(window===window.top)window.__webviewStartupEvents=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(events) + ";");
+        }
+
+        /// <summary>
+        /// The facts only the host knows, injected before the page loads: whether it runs in the
+        /// Word task pane (VSTO), and the persisted dark mode so Vue can
+        /// sync its theme to the title bar on startup, whichever host last saved it.
+        /// </summary>
+        private string HostFactsScript() =>
+            "window.__webviewIsVsto=" + (IsVstoHost ? "true" : "false") + ";" +
+            (string.IsNullOrEmpty(WindowId) ? "" : "window.__webviewWindowId=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(WindowId) + ";") +
+            "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";" +
+            KiwixHostFact();
+
+        // ── Dispose ─────────────────────────────────────────────────────────────────
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                UninstallHorizontalWheelFilter();
+
+                // Unsubscribe all CoreWebView2 event handlers before the control is
+                // torn down. Leaving them attached creates reference cycles that prevent
+                // the renderer process from being released (per the WebView2 performance
+                // article: "Remove native event handlers before disposing WebView2 objects").
+                if (_webView.CoreWebView2 != null)
+                {
+                    _webView.CoreWebView2.WebMessageReceived -= OnMessageReceived;
+                    // Must be OUR OnDownloadStarting, not _hb's: `-=` matches on delegate
+                    // target, and we subscribed this class's method (which forwards to _hb).
+                    // Unsubscribing _hb's was a silent no-op that left the handler attached.
+                    _webView.CoreWebView2.DownloadStarting -= OnDownloadStarting;
+                    _webView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                    _webView.CoreWebView2.NewWindowRequested -= OnNewWindowRequested;
+                    _webView.CoreWebView2.LaunchingExternalUriScheme -= OnLaunchingExternalUriScheme;
+                    // OnNavigationCompleted stays subscribed for the WebView2's whole lifetime —
+                    // it is what restores the app shell when a navigation off it fails — so this
+                    // is the only place it comes off.
+                    _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                }
+
+                // Release all virtual host mappings so WebView2 does not hold folder
+                // handles after the process exits.
+                _localFile?.DisposeAllHosts();
+                _serviceRelay?.Detach();
+                _webSites?.Detach();
+                StopWatchingLowMemory();
+                if (_serviceRelay != null) KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowClosed();
+
+            }
+            base.Dispose(disposing);
+        }
+    }
+}

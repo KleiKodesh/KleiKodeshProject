@@ -1,0 +1,207 @@
+/**
+ * Abbreviation tooltip for the book view.
+ *
+ * When the user selects a single complete word that looks like a Hebrew
+ * abbreviation — gershayim in the middle (רשב"א) or a geresh at the end (מת') —
+ * it is looked up in the dictionary DB (dictionary senses only, never the
+ * seforim DB) and the expansions are shown in a compact tooltip anchored to
+ * the selection. Attached prefix letters are handled by also trying stripped
+ * candidates (מהשי"ת → השי"ת → שי"ת): exact headword matches for all
+ * candidates first, then %candidate% LIKE fallbacks. No match → no tooltip.
+ *
+ * Trigger rules:
+ *   - Left-button mouseup inside the scroller with a non-collapsed selection.
+ *   - The selection must cover exactly one word: surrounding non-word chars
+ *     are stripped, but the remaining core must contain no whitespace and the
+ *     characters adjacent to the selection boundaries must not be Hebrew
+ *     letters (partial-word selections are rejected).
+ *   - ״/curly quotes are normalized to ASCII "/' — the dictionary stores
+ *     abbreviation headwords with ASCII quote characters only.
+ *
+ * Dismissal: selection collapses or leaves, or the scroller scrolls
+ * (the anchor rect goes stale).
+ */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { ref, type Ref } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { dictAbbrevSenses } from '@/webview-host/dictionaryDb'
+
+export interface AbbrevTooltipData {
+  /** Unique per lookup — used as component key so a new selection remounts/re-measures. */
+  id: number
+  /** Display-ready sense labels (headword-prefixed when it differs from the matched term). */
+  senses: string[]
+  anchorRect: DOMRect
+}
+
+// U+0591–U+05C7 — nikud + cantillation marks
+const HEBREW_MARKS = /[\u0591-\u05C7]/g
+// Zero-width and bidi formatting characters. They survive trim() and are not
+// matched by \s, so they would otherwise fail the pattern test silently.
+const INVISIBLE_CHARS = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g
+const WORD_CHAR = /[א-ת\u0591-\u05C7]/
+// Gershayim in the middle (רשב"א) or geresh at the end (מת').
+const ABBREV_PATTERN = /^(?:[א-ת]+"[א-ת]+|[א-ת]+')$/
+
+/**
+ * Normalizes the raw selection string and returns the abbreviation term,
+ * or null when the selection is not a single abbreviation-shaped word.
+ */
+export function extractAbbrevTerm(raw: string): string | null {
+  let text = raw
+    .replace(HEBREW_MARKS, '')
+    .replace(INVISIBLE_CHARS, '')
+    .replace(/[״”“]/g, '"')
+    .replace(/[׳’‘]/g, "'")
+    .trim()
+  if (!text || /\s/.test(text)) return null
+  // Strip surrounding non-word chars; trailing '/" are kept so the pattern
+  // itself decides whether they are part of the abbreviation.
+  text = text.replace(/^[^א-ת]+/, '').replace(/[^א-ת'"]+$/, '')
+  return ABBREV_PATTERN.test(text) ? text : null
+}
+
+// Single-letter prepositions/conjunctions that attach to the following word.
+const PREFIX_LETTERS = new Set(['ו', 'ה', 'ב', 'כ', 'ל', 'מ', 'ש', 'ד'])
+
+/** The term plus prefix-stripped variants (מהשי"ת → השי"ת → שי"ת), fewest-stripped first. */
+export function abbrevCandidates(term: string): string[] {
+  const candidates = [term]
+  let current = term
+  for (let i = 0; i < 3; i++) {
+    if (!PREFIX_LETTERS.has(current[0]!)) break
+    current = current.slice(1)
+    if (!ABBREV_PATTERN.test(current)) break
+    candidates.push(current)
+  }
+  return candidates
+}
+
+function isBoundaryChar(ch: string | undefined): boolean {
+  return ch === undefined || !WORD_CHAR.test(ch)
+}
+
+/** The characters adjacent to the selection must not be word characters. */
+function isFullWordSelection(range: Range): boolean {
+  const { startContainer, startOffset, endContainer, endOffset } = range
+  let before: string | undefined
+  if (startContainer.nodeType === Node.TEXT_NODE && startOffset > 0) {
+    before = startContainer.textContent?.[startOffset - 1]
+  }
+  let after: string | undefined
+  if (endContainer.nodeType === Node.TEXT_NODE) {
+    after = endContainer.textContent?.[endOffset]
+  }
+  return isBoundaryChar(before) && isBoundaryChar(after)
+}
+
+/**
+ * A copy of the range with leading/trailing whitespace excluded, so a selection
+ * that swept up surrounding spaces still anchors the tooltip to the word itself.
+ * Falls back to the original range when the edges are not plain text nodes.
+ */
+function trimmedRange(range: Range): Range {
+  const trimmed = range.cloneRange()
+  const { startContainer, endContainer } = trimmed
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const text = startContainer.textContent ?? ''
+    let start = trimmed.startOffset
+    while (start < text.length && /\s/.test(text[start]!)) start++
+    if (start !== trimmed.startOffset) trimmed.setStart(startContainer, start)
+  }
+  if (endContainer.nodeType === Node.TEXT_NODE) {
+    let end = trimmed.endOffset
+    const text = endContainer.textContent ?? ''
+    while (end > 0 && /\s/.test(text[end - 1]!)) end--
+    if (end !== trimmed.endOffset && end >= trimmed.startOffset) {
+      trimmed.setEnd(endContainer, end)
+    }
+  }
+  return trimmed.collapsed ? range : trimmed
+}
+
+/**
+ * @param ignoreWithin CSS selector for nested regions that mount their own
+ *   instance. Without it a selection inside a nested scroller satisfies the
+ *   outer contains() check too and both instances would look the term up.
+ */
+export function useBookViewAbbrevTooltip(
+  scrollerEl: Ref<HTMLElement | null>,
+  options?: { ignoreWithin?: string },
+) {
+  const hostWindow = useHostWindow()
+  const abbrevTooltip = ref<AbbrevTooltipData | null>(null)
+  let lookupToken = 0
+
+  function closeAbbrevTooltip() {
+    lookupToken++
+    abbrevTooltip.value = null
+  }
+
+  function isInsideIgnored(node: Node): boolean {
+    // commonAncestorContainer is usually a text node; closest() needs an Element.
+    const el = node.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : node.parentElement
+    return !!el?.closest(options!.ignoreWithin!)
+  }
+
+  async function onSelectionSettled() {
+    const sel = hostWindow.getSelection()
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) { closeAbbrevTooltip(); return }
+    const range = sel.getRangeAt(0)
+    const root = scrollerEl.value
+    if (!root || !root.contains(range.commonAncestorContainer)) { closeAbbrevTooltip(); return }
+    if (options?.ignoreWithin && isInsideIgnored(range.commonAncestorContainer)) {
+      closeAbbrevTooltip()
+      return
+    }
+
+    // Cheapest test first: a pure string check rejects ordinary selections
+    // before we allocate a Range for the whitespace-trimmed word.
+    const term = extractAbbrevTerm(sel.toString())
+    if (!term) { closeAbbrevTooltip(); return }
+    // The user may have swept up the spaces around the word; the boundary
+    // check and the anchor both need the range narrowed to the word itself.
+    const wordRange = trimmedRange(range)
+    if (!isFullWordSelection(wordRange)) { closeAbbrevTooltip(); return }
+
+    const token = ++lookupToken
+    let result
+    try {
+      result = await dictAbbrevSenses(abbrevCandidates(term))
+    } catch {
+      return
+    }
+    if (token !== lookupToken) return
+    if (!result) { abbrevTooltip.value = null; return }
+
+    const seen = new Set<string>()
+    const senses: string[] = []
+    for (const row of result.rows) {
+      // Headword prefix only when a LIKE fallback matched a different entry.
+      const label = row.headword === result.matched ? row.text : `${row.headword} — ${row.text}`
+      if (seen.has(label)) continue
+      seen.add(label)
+      senses.push(label)
+    }
+    if (!senses.length) { abbrevTooltip.value = null; return }
+
+    abbrevTooltip.value = { id: token, senses, anchorRect: wordRange.getBoundingClientRect() }
+  }
+
+  function onMouseUp(event: MouseEvent) {
+    if (event.button !== 0) return
+    // Defer — the selection is not final until after mouseup's default action.
+    setTimeout(onSelectionSettled, 0)
+  }
+
+  useEventListener(scrollerEl, 'mouseup', onMouseUp)
+  useEventListener(scrollerEl, 'scroll', closeAbbrevTooltip, { passive: true })
+  useEventListener(hostWindow.document, 'selectionchange', () => {
+    const sel = hostWindow.getSelection()
+    if (!sel || sel.isCollapsed) closeAbbrevTooltip()
+  })
+
+  return { abbrevTooltip, closeAbbrevTooltip }
+}

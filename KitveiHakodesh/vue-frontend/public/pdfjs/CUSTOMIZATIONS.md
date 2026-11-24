@@ -1,0 +1,1930 @@
+# PDF.js Customizations
+
+Base version: **5.7.284**
+Applied to: `vue-frontend/public/pdfjs/`
+
+When upgrading to a new PDF.js release, re-apply every item in this file.
+Search for the surrounding code shown under each patch — line numbers shift between releases but the surrounding code is stable.
+
+---
+
+## Added Files
+
+These files do not exist in the vanilla PDF.js dist and must be created fresh each upgrade.
+
+### `web/pixel-ratio-override.js`
+
+Forces a minimum `devicePixelRatio` for sharp PDF rendering on low-DPI displays.
+Must be loaded **before** `viewer.mjs`.
+
+Why 1.5× and not 2×: each canvas uses `width × height × devicePixelRatio²` bytes. At 2× every canvas is 4× larger than at 1×; at 1.5× canvases are 2.25× larger — still noticeably sharper than 1×, but using only 56% of the memory that 2× would require. On displays already at ≥1.5× (125%+ Windows scaling, retina) this script is a no-op.
+
+**Old-Chromium blur fix (floor rises to 2.0 when CSS `round()` is missing).** PDF.js's `setLayerDimensions` (in `pdf.mjs`) snaps each page's CSS box down to a whole multiple of device pixels via CSS `round()`, so the integer-pixel canvas maps 1:1 to the screen and stays crisp:
+
+```js
+const useRound = FeatureTest.isCSSRoundSupported;   // CSS.supports("width: round(1.5px, 1px)")
+const widthStr = useRound ? `round(down, ${w}, var(--scale-round-x))` : `calc(${w})`;
+```
+
+CSS `round()` only shipped in Chromium 111. On older builds `useRound` is false and the page box becomes a fractional `calc()` size — the canvas is then scaled by a non-integer factor and pages look **slightly blurry**. `round()` can't be polyfilled live (the box is recomputed by CSS on every zoom), so instead the override raises the pixel-ratio floor to 2.0 on those builds; the browser downscales the higher-resolution canvas (supersampling), which hides the sub-pixel misalignment. The support test uses the **same expression PDF.js uses**, so the bump kicks in precisely when PDF.js takes the blurry `calc()` path. Modern Chromium keeps the leaner 1.5×.
+
+```js
+(function () {
+  const original = window.devicePixelRatio || 1;
+
+  let cssRoundSupported = false;
+  try {
+    cssRoundSupported = !!(window.CSS && CSS.supports && CSS.supports("width: round(1.5px, 1px)"));
+  } catch (e) {
+    cssRoundSupported = false;
+  }
+
+  const floor = cssRoundSupported ? 1.5 : 2.0;
+  const enhanced = Math.max(original, floor);
+
+  if (enhanced !== original) {
+    try {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        get: function () { return enhanced; },
+        configurable: true,
+      });
+    } catch (e) {
+      // Some engines may refuse to redefine devicePixelRatio; keep the native value.
+    }
+  }
+})();
+```
+
+### `web/images/toolbarButton-rowMenu.svg`
+
+A 16×16 three-dot (`⋯`) glyph for the outline row-actions button, drawn in PDF.js's own
+icon idiom (solid `fill`, 16×16 viewBox) — **not** Fluent. See "Outline EDITING" below.
+
+### `web/viewer-custom.css`
+
+Theme variable hooks and PDF page filter support. The Vue app's `syncPdfViewerTheme()` injects `--*-custom` CSS variables into the iframe; this file maps them onto PDF.js's own CSS variables so the viewer adopts the app's theme automatically.
+
+The page filter (`--pdf-filter-custom`) is applied only when the `data-pdf-filters="true"` attribute is set on the iframe's `<html>` element, which `settingsStore.togglePdfPageFilters()` controls.
+
+```css
+:root {
+  --toolbar-bg-color: var(--bg-primary-custom, light-dark(rgb(249 249 250), rgb(56 56 61)));
+  --toolbar-border-color: var(--border-color-custom, light-dark(rgb(184 184 184), rgb(92 92 97)));
+  --main-color: var(--text-primary-custom, light-dark(rgb(12 12 13), rgb(249 249 250)));
+  --body-bg-color: var(--bg-secondary-custom, light-dark(rgb(212 212 215), rgb(35 35 39)));
+  --progressBar-color: var(--accent-color-custom, #0a84ff);
+  --doorhanger-bg-color: var(--bg-primary-custom, light-dark(rgb(255 255 255), rgb(56 56 61)));
+  --doorhanger-border-color: var(--border-color-custom, light-dark(rgb(184 184 184), rgb(92 92 97)));
+  --button-hover-color: var(--hover-bg-custom, light-dark(rgba(0 0 0 / 0.08), rgba(255 255 255 / 0.08)));
+  --toggled-btn-bg-color: var(--active-bg-custom, light-dark(rgba(0 0 0 / 0.12), rgba(255 255 255 / 0.12)));
+  --field-bg-color: var(--bg-primary-custom, light-dark(rgb(255 255 255), rgb(56 56 61)));
+  --field-border-color: var(--border-color-custom, light-dark(rgb(187 187 188), rgb(115 115 115)));
+  --separator-color: var(--border-color-custom, light-dark(rgba(0 0 0 / 0.08), rgba(255 255 255 / 0.08)));
+}
+
+:root[data-pdf-filters="true"] #viewerContainer .page canvas {
+  filter: var(--pdf-filter-custom, none);
+}
+
+:root {
+  --scrollbar-color: var(--border-color-custom, auto);
+  --scrollbar-bg-color: transparent;
+}
+```
+
+---
+
+## `build/pdf.worker.mjs` — Patches
+
+### Map.prototype.getOrInsertComputed polyfill (old WebView2 compatibility)
+
+`Map.prototype.getOrInsertComputed` was added in Chromium 136. PDF.js uses it heavily throughout `pdf.worker.mjs`, `pdf.mjs`, and `viewer.mjs` — for `intentStates`, `methodPromises`, `_cachedBitmapsMap`, and many more internal maps. Users on WebView2 builds older than Chromium 136 get `"TypeError: this[methodPromises].getOrInsertComputed is not a function"` and no PDF loads at all. A secondary symptom is `"ReferenceError: Cannot access '_firstPagePromise' before initialization"` — that is a consequence of the first crash, not an independent bug.
+
+The polyfill is needed in **two places**:
+
+1. **`build/pdf.worker.mjs`** — covers the Worker thread (`pdf.worker.mjs` runs in a Web Worker, not the main window). Insert immediately after the `Uint8Array.prototype.toHex` polyfill block.
+
+2. **`web/viewer.html`** — covers the main thread (`pdf.mjs` and `viewer.mjs` run in the page window). Add as an inline `<script>` block immediately before `<script src="viewer.mjs" type="module">`.
+
+The polyfill itself:
+```js
+if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+  Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+    if (!this.has(key)) {
+      this.set(key, callbackFn(key));
+    }
+    return this.get(key);
+  };
+}
+```
+
+If a future PDF.js version drops the `.getOrInsertComputed()` calls (because Chromium 136 is no longer a supported baseline), this patch can be dropped from both files.
+
+---
+
+### Uint8Array.prototype.toHex polyfill (old WebView2 compatibility)
+
+`Uint8Array.prototype.toHex` was added in Chromium 136. PDF.js calls `.toHex()` on `Uint8Array` values in the `fingerprints` getter (converting MD5 bytes and PDF trailer ID bytes to hex strings). Users on WebView2 builds older than Chromium 136 get `"UnknownErrorException: hashOriginal.toHex is not a function"` and no PDF loads at all.
+
+Insert the polyfill block immediately after the version/build comment at the top of the file (the `pdfjsVersion` / `pdfjsBuild` block). Search for the end of that comment followed by the webpack runtime comment — the exact build hash will differ on upgrade, but the pattern is stable:
+
+```js
+ * pdfjsBuild = <hash>
+ */
+/******/ // The require scope
+```
+
+Replace with:
+
+```js
+ * pdfjsBuild = <hash>
+ */
+
+// PATCH: Uint8Array.prototype.toHex polyfill for WebView2 builds on Chromium < 136.
+// PDF.js calls .toHex() on Uint8Array values returned by calculateMD5() and on raw
+// bytes from the PDF trailer ID array. Chromium 136 introduced this method natively;
+// older WebView2 builds don't have it and throw
+// "UnknownErrorException: hashOriginal.toHex is not a function" when loading any PDF.
+if (typeof Uint8Array.prototype.toHex !== 'function') {
+  Uint8Array.prototype.toHex = function () {
+    return Array.from(this, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  };
+}
+
+/******/ // The require scope
+```
+
+If a future PDF.js version removes the `.toHex()` call entirely (because Chromium 136 is no longer a supported baseline), this patch can be dropped.
+
+---
+
+## `web/viewer.html` — Added Tags
+
+Add these two lines immediately after `<link rel="stylesheet" href="viewer.css" />`:
+
+```html
+<link rel="stylesheet" href="viewer-custom.css" />
+<script src="pixel-ratio-override.js"></script>
+```
+
+Then add this inline polyfill script immediately before `<script src="viewer.mjs" type="module">`:
+
+```html
+<script>
+  // PATCH: Map.prototype.getOrInsertComputed polyfill for Chromium < 136.
+  // pdf.mjs and viewer.mjs use this Map method extensively on the main thread.
+  // Without it, PDF loading fails entirely on older WebView2 / Chrome builds.
+  if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+    Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+      if (!this.has(key)) {
+        this.set(key, callbackFn(key));
+      }
+      return this.get(key);
+    };
+  }
+</script>
+```
+
+The `pixel-ratio-override.js` script tag must appear **before** `<script src="viewer.mjs" type="module">`.
+
+---
+
+## `web/viewer.mjs` — Patches
+
+### Spread modes in presentation mode
+
+By default PDF.js forces `SpreadMode.NONE` when entering presentation mode and only restores the previous spread if pages had unequal sizes. This blocks the user from changing spread modes while in presentation mode.
+
+Three changes remove this restriction:
+
+**1. `request()` — always save spreadMode in `#args`**
+
+Search for:
+```
+    this.#args = {
+      pageNumber: pdfViewer.currentPageNumber,
+      scaleValue: pdfViewer.currentScaleValue,
+      scrollMode: pdfViewer.scrollMode,
+      spreadMode: null,
+      annotationEditorMode: null
+    };
+    if (pdfViewer.spreadMode !== SpreadMode.NONE && !(pdfViewer.pageViewsReady && pdfViewer.hasEqualPageSizes)) {
+      console.warn("Ignoring Spread modes when entering PresentationMode, " + "since the document may contain varying page sizes.");
+      this.#args.spreadMode = pdfViewer.spreadMode;
+    }
+```
+Replace with:
+```
+    this.#args = {
+      pageNumber: pdfViewer.currentPageNumber,
+      scaleValue: pdfViewer.currentScaleValue,
+      scrollMode: pdfViewer.scrollMode,
+      // PATCH: always save spreadMode so it can be restored on exit, regardless of page sizes
+      spreadMode: pdfViewer.spreadMode,
+      annotationEditorMode: null
+    };
+    if (pdfViewer.spreadMode !== SpreadMode.NONE && !(pdfViewer.pageViewsReady && pdfViewer.hasEqualPageSizes)) {
+      // PATCH: removed the hard reset to SpreadMode.NONE — we now allow spread modes in presentation mode.
+      console.warn("Spread modes are active in PresentationMode. " + "Document may contain varying page sizes — layout may be imperfect.");
+    }
+```
+
+**2. `#enter()` — remove the forced reset to `SpreadMode.NONE`**
+
+Search for:
+```
+      this.pdfViewer.scrollMode = ScrollMode.PAGE;
+      if (this.#args.spreadMode !== null) {
+        this.pdfViewer.spreadMode = SpreadMode.NONE;
+      }
+      this.pdfViewer.currentPageNumber = this.#args.pageNumber;
+```
+Replace with:
+```
+      this.pdfViewer.scrollMode = ScrollMode.PAGE;
+      // PATCH: removed forced SpreadMode.NONE — spread modes are now allowed in presentation mode
+      this.pdfViewer.currentPageNumber = this.#args.pageNumber;
+```
+
+**3. `#exit()` — always restore spreadMode (it is now always saved)**
+
+Search for:
+```
+      this.pdfViewer.scrollMode = this.#args.scrollMode;
+      if (this.#args.spreadMode !== null) {
+        this.pdfViewer.spreadMode = this.#args.spreadMode;
+      }
+      this.pdfViewer.currentScaleValue = this.#args.scaleValue;
+```
+Replace with:
+```
+      this.pdfViewer.scrollMode = this.#args.scrollMode;
+      // PATCH: always restore spreadMode (it is now always saved in #args)
+      this.pdfViewer.spreadMode = this.#args.spreadMode;
+      this.pdfViewer.currentScaleValue = this.#args.scaleValue;
+```
+
+---
+
+### Presentation mode zoom (Ctrl+scroll, pinch, keyboard)
+
+By default PDF.js blocks all zoom in presentation mode. These four changes re-enable it.
+
+**1. `#mouseWheel` in `PDFPresentationMode`** — the presentation mode wheel listener calls `evt.preventDefault()` on every wheel event, consuming it before the main `onWheel` handler can see it. Add an early return for `Ctrl`/`Meta` so those events are not consumed here and fall through to the zoom handler.
+
+Search for:
+```
+  #mouseWheel(evt) {
+    if (!this.active) {
+      return;
+    }
+    evt.preventDefault();
+    const delta = normalizeWheelEventDelta(evt);
+```
+Replace with:
+```
+  #mouseWheel(evt) {
+    if (!this.active) {
+      return;
+    }
+    // PATCH: allow Ctrl+wheel to pass through for zoom — do not intercept it here.
+    if (evt.ctrlKey || evt.metaKey) {
+      return;
+    }
+    evt.preventDefault();
+    const delta = normalizeWheelEventDelta(evt);
+```
+
+**2. `onWheel` function** — remove the early return that skips all wheel handling when in presentation mode. Search for (inside `function onWheel`, before `const deltaMode`):
+```
+  if (pdfViewer.isInPresentationMode) {
+    return;
+  }
+  const deltaMode = evt.deltaMode;
+```
+Replace with:
+```
+  // PATCH: removed early return for isInPresentationMode — allow Ctrl+scroll zoom in presentation mode
+  const deltaMode = evt.deltaMode;
+```
+
+**3. `updateZoom`** — remove the guard that blocks all zoom calls when in presentation mode:
+```
+  updateZoom(steps, scaleFactor, origin) {
+    if (this.pdfViewer.isInPresentationMode) {
+      return;
+    }
+    this.pdfViewer.updateScale({
+```
+Replace with:
+```
+  updateZoom(steps, scaleFactor, origin) {
+    // PATCH: removed isInPresentationMode guard — allow zoom in presentation mode
+    this.pdfViewer.updateScale({
+```
+
+**4. `isPinchingDisabled`** — remove the presentation mode check that disables pinch-to-zoom:
+```
+      isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+```
+Replace with:
+```
+      isPinchingDisabled: () => false, // PATCH: allow pinch zoom in presentation mode
+```
+
+Keyboard zoom (`Ctrl++`/`Ctrl+-`) needs no change — those keycodes call `zoomIn()`/`zoomOut()` without a presentation mode guard; once `updateZoom` is unblocked they work automatically.
+
+---
+
+### 0y. Ignore document-baked destination zoom (stock option, not a code patch)
+
+Our Hebrew, ABBYY-produced PDFs bake a `/Fit` (fit-page) zoom into their
+OpenAction and every outline destination. PDF.js honors that zoom on each
+destination jump, so the view snapped to **page-fit** on reload and on
+TOC/outline clicks, discarding the user's chosen zoom.
+
+The remedy is PDF.js's own `ignoreDestinationZoom` option — set to `true` in
+the `AppOptions.setAll` block in `webViewerLoad` (search for
+`ignoreDestinationZoom: true,`). No code in `scrollPageIntoView` or
+`setInitialView` is patched for this. The option is origin-keyed, which is
+exactly the split we need:
+
+- **Document-originated jumps** all route through
+  `PDFLinkService.goToDestination`, which forwards the flag into
+  `scrollPageIntoView` — outline clicks, OpenAction, named dests, and in-page
+  link annotations. Their zoom (named `/Fit*`, `/FitR`, or a baked numeric
+  `/XYZ` zoom) is suppressed; the jump changes the page, the user's scale
+  stays.
+- **Session restore** replays the saved view through `setHash`'s `zoom=` param
+  branch, which calls `scrollPageIntoView` directly WITHOUT the flag — so
+  ViewHistory restore works for numeric zooms and named presets
+  (`page-width`, `auto`, …) alike, on the untouched upstream path.
+
+The app never navigates the viewer via URL hashes (see the `disableAutoFetch`
+note in the same block), so the unflagged `setHash` path carries session
+restore and nothing else.
+
+**History.** Until 2026-08-23 this was a hand patch inside
+`scrollPageIntoView` forcing `ignoreZoom = true` for every destination jump.
+That blanket also swallowed the SESSION-RESTORE zoom riding the same function,
+so the viewer reopened at `"auto"` on every tab revisit and app restart — and
+`onUpdateViewarea` then wrote that `"auto"` back over the stored zoom,
+destroying the setting. An intermediate fix (commit b8ee61ba) let numeric
+zooms through by value-shape and side-channeled presets via a `restoredZoom`
+option on `setInitialView`; review showed value-shape keying re-exposed
+`/FitR` and baked numeric `/XYZ` dests and left the stock
+`ignoreDestinationZoom` parameter dead. Keying on the jump's ORIGIN via the
+stock option replaced both patches with this one config line.
+
+---
+
+### 0z. Zoom step
+
+Search for: `const DEFAULT_SCALE_DELTA = 1.1;`
+
+Replace with:
+```js
+const DEFAULT_SCALE_DELTA = 1.02; // Custom: reduced from 1.1 (10%) to 1.02 (2%) per zoom step
+```
+
+---
+
+## `web/viewer.html` — Added zoom input overlay
+
+### Zoom input
+
+Inside the existing `<span id="scaleSelectContainer" class="dropdownToolbarButton">`, add a sibling `<input id="zoomInput" type="text" readonly>` immediately after the `</select>` closing tag. No wrapper changes needed — the select stays exactly as-is.
+
+The input is positioned absolutely over the text area of the select (covering the select's own rendered text), leaving the right 38px free so the select's native `::after` dropdown arrow remains fully visible and clickable. The select continues to work normally — clicking the arrow opens the dropdown as before.
+
+Behavior:
+- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `change` and `PDFViewerApplication.eventBus` `scalechanging` (hooked once the app exists — eventBus events are not DOM events, so a `window` listener never fires). Without the eventBus hook, Ctrl+0 or a wheel/key zoom landing on an already-listed preset left a stale label.
+- **On focus:** switches to `type="number"`, shows the current scale as a plain integer percentage, selects all text.
+- **On Enter:** applies `PDFViewerApplication.pdfViewer.currentScaleValue = (value / 100).toString()`, blurs.
+- **On Escape or invalid input:** discards, reverts to resting state. Escape clears the `edited` flag before blurring, so the blur handler applies nothing (it used to apply the typed value).
+- **On blur:** applies zoom only if the user typed (an `input` event since focus), then reverts to resting state. Focusing at "אוטומטי" and leaving must not pin the zoom to the rounded % (e.g. 118%).
+- Polls `waitForApp` until `PDFViewerApplication.pdfViewer` is ready and Fluent has translated the options before showing the first label.
+
+The init script is added as a `<script>` block immediately before `</body>`.
+
+---
+
+## `web/viewer.html` + `viewer-custom.css` — Narrow-viewport zoom control
+
+In a narrow toolbar the full zoom dropdown (`#scaleSelectContainer`, the select + the
+`#zoomInput` overlay) is too wide. PDF.js's own responsive CSS simply hides it
+(`@media (max-width: 560px){ #scaleSelectContainer{ display:none } }`), leaving no way
+to change zoom. This customization instead **collapses it into a compact icon button**
+at the same breakpoint, so tapping the icon opens the native option list directly (no
+custom popover — the real `<select>` does the work, so the list keeps its original size
+and theme).
+
+### Added file: `web/images/toolbarButton-zoom.svg`
+
+A "fit-to-width" glyph (a page rectangle with a horizontal double-headed arrow), used
+as the collapsed button's icon. It is drawn to match PDF.js's own toolbar icon set —
+**not** Fluent: PDF.js uses a custom set (solid `fill`/thin strokes, 16×16 viewBox).
+
+### `viewer-custom.css`
+
+At `@media (max-width: 560px)`, restyle `#scaleSelectContainer` into a 28px icon button
+and swap the dropdown caret (`::after`) for the zoom glyph. Key points:
+
+- Must set `display: inline-flex` to **override PDF.js's built-in `display:none`** at
+  this exact breakpoint (viewer-custom.css loads after viewer.css, so it wins) — this is
+  what makes the icon appear the instant the full dropdown would otherwise vanish.
+- The real `<select>` stays **in flow** (so the button keeps its height — absolutely
+  positioning it collapsed the container to 0px) and keeps its natural width so the
+  native list opens at the original size; it is clipped by the 28px container's
+  `overflow: hidden` and hidden with `opacity: 0` (still fully clickable).
+- `#zoomInput` is `display:none` at the same breakpoint.
+
+```css
+@media (max-width: 560px) {
+  #scaleSelectContainer {
+    display: inline-flex;   /* override PDF.js's display:none at 560px */
+    align-items: center;
+    position: relative;
+    min-width: 0;
+    width: 28px;
+    max-width: 28px;
+    padding: 0;
+    background: none;
+    border: none;
+    overflow: hidden;
+  }
+  #scaleSelectContainer:hover { background: var(--button-hover-color); }
+  #scaleSelectContainer > select {
+    flex: 0 0 auto;
+    width: 140px;           /* natural width → native list opens at original size */
+    opacity: 0;             /* invisible but clickable */
+    cursor: pointer;
+  }
+  #scaleSelectContainer::after {
+    inset-block: 0;
+    inset-inline: 0;
+    margin: auto;
+    -webkit-mask-image: url(images/toolbarButton-zoom.svg);
+            mask-image: url(images/toolbarButton-zoom.svg);
+  }
+}
+@media (max-width: 560px) { #zoomInput { display: none; } }
+```
+
+### `viewer.html` — zoom input script
+
+Since the collapsed button is icon-only, the zoom-input `mirrorSelect()` (see the zoom
+input overlay section above) also writes the current zoom % into the container's tooltip:
+
+```js
+if (container && text) container.title = 'שינוי מרחק (זום) — ' + text;
+```
+
+---
+
+## `web/locale/he/viewer.ftl` — Hebrew translation overrides
+
+### Automatic zoom label
+
+The default Hebrew translation for `pdfjs-page-scale-auto` is the verbose "מרחק מתצוגה אוטומטי". Change it to the concise:
+
+```
+pdfjs-page-scale-auto = אוטומטי
+```
+
+---
+
+### Outline (table of contents) label
+
+The default Hebrew for the outline view title and its view-selector option is the
+verbose "תוכן העניינים של המסמך". Shorten both to "תוכן עניינים" (keep the `.title`
+double-click hint, just drop "של המסמך"):
+
+```
+pdfjs-views-manager-outlines-title1 = תוכן עניינים
+    .title = הצגת תוכן העניינים (יש ללחוץ לחיצה כפולה כדי להרחיב או לצמצם את כל הפריטים)
+pdfjs-views-manager-outlines-option-label = תוכן עניינים
+```
+
+---
+
+### 0a. Partial render delay (jump performance)
+
+Search for:
+```js
+  minDurationToUpdateCanvas: {
+    value: 500,
+    kind: OptionKind.VIEWER
+  },
+```
+
+Replace with:
+```js
+  minDurationToUpdateCanvas: {
+    // PATCH: reduced from 500 to 0 so partial renders appear immediately on
+    // large page jumps (e.g. page 5 → 350) rather than waiting 500ms before
+    // showing any content. The page renders progressively as tiles complete.
+    value: 0,
+    kind: OptionKind.VIEWER
+  },
+```
+
+PDF.js uses `enableOptimizedPartialRendering` to render pages in tiles. `minDurationToUpdateCanvas` is the minimum time that must pass before a partial tile update is shown to the user. At 500ms, a cold jump to a distant page shows nothing for half a second even though tiles are already rendered. Setting it to 0 makes content appear as soon as the first tile is ready.
+
+---
+
+### 0c. Reset renderingState after cancellation (stuck spinner fix)
+
+This patch fixes pages getting permanently stuck on the loading animation after a large scroll jump.
+
+**Root cause:** `_cancelRendering()` calls `pageView.cancelRendering()` on each page, which cancels the active `renderTask` but does **not** touch `renderingState`. Inside `_drawCanvas`, a cancelled task throws `RenderingCancelledException`, which causes an early return — the `this.renderingState = RenderingStates.FINISHED` line at the bottom of `_drawCanvas` is never reached. The page remains in `RUNNING` state indefinitely, spinner visible. The only accidental fix was zooming, because zoom calls `reset()` internally which explicitly sets the state back to `INITIAL`.
+
+**The fix:** in `_cancelRendering()`, after calling `pageView.cancelRendering()`, check if the page was in `RUNNING` or `PAUSED` state and reset it to `INITIAL`. This removes the spinner immediately and allows the page to be re-queued for rendering correctly.
+
+Search for:
+```js
+  _cancelRendering() {
+    for (const pageView of this._pages) {
+      pageView.cancelRendering();
+    }
+  }
+```
+
+Replace with:
+```js
+  _cancelRendering() {
+    for (const pageView of this._pages) {
+      // PATCH: reset renderingState to INITIAL after cancelling so that pages
+      // stuck in RUNNING state (spinner visible) are cleaned up immediately.
+      // Without this, cancelled pages stay in RUNNING state and the loading
+      // spinner is never removed — the only way out was to zoom, which calls
+      // reset() internally. Calling cancelRendering() only cancels the task;
+      // it does not touch renderingState, so the spinner stays forever.
+      const wasRunning = pageView.renderingState === RenderingStates.RUNNING ||
+                         pageView.renderingState === RenderingStates.PAUSED;
+      pageView.cancelRendering();
+      if (wasRunning) {
+        pageView.renderingState = RenderingStates.INITIAL;
+      }
+    }
+  }
+```
+
+---
+
+### 0b. Cancel in-progress renders on large scroll jumps
+
+This is the most impactful patch for the "slow scrollbar jump" complaint.
+
+**Root cause:** when the user drags the scrollbar far (page 10 → page 350), PDF.js sets the new page as highest priority but does **not cancel** the previously-rendering pages. Those pages hold live `renderTask` objects that continue executing on the microtask queue — their `onContinue` callbacks fire every tile, check `isHighestPriority`, pause themselves, then re-fire. This microtask churn competes with the new target page's first tiles, causing a blank-then-render delay that scales with how many pages were mid-render when the jump happened.
+
+**The fix:** detect a large scroll jump in `_scrollUpdate` (jump distance > one viewport height in a single rAF tick, which only happens on scrollbar drag, not smooth scrolling), and call `_cancelRendering()` immediately before starting the new render cycle. This hard-cancels all in-progress `renderTask` objects so the new target page gets the full microtask queue and renders its first tiles as fast as possible.
+
+Search for the `_scrollUpdate` method in the `PDFViewer` class:
+```js
+  _scrollUpdate() {
+    if (this.pagesCount === 0) {
+      return;
+    }
+    if (this.#scrollTimeoutId) {
+      clearTimeout(this.#scrollTimeoutId);
+    }
+    this.#scrollTimeoutId = setTimeout(() => {
+      this.#scrollTimeoutId = null;
+      this.update();
+    }, 100);
+    this.update();
+  }
+```
+
+Replace with (also add `#lastScrollTop = 0;` as a class field immediately before `_scrollUpdate`):
+```js
+  // PATCH: track the last known scrollTop to detect large jumps.
+  #lastScrollTop = 0;
+  _scrollUpdate() {
+    if (this.pagesCount === 0) {
+      return;
+    }
+    // PATCH: when the user drags the scrollbar to a distant page, the scroll
+    // position jumps by more than one viewport height in a single rAF tick.
+    // In that case, cancel all in-progress renders immediately so the new
+    // target page gets the full CPU budget rather than competing with renders
+    // for pages that are no longer visible.
+    const currentScrollTop = this.container.scrollTop;
+    const jumpThreshold = this.container.clientHeight;
+    if (Math.abs(currentScrollTop - this.#lastScrollTop) > jumpThreshold) {
+      this._cancelRendering();
+    }
+    this.#lastScrollTop = currentScrollTop;
+    if (this.#scrollTimeoutId) {
+      clearTimeout(this.#scrollTimeoutId);
+    }
+    this.#scrollTimeoutId = setTimeout(() => {
+      this.#scrollTimeoutId = null;
+      this.update();
+    }, 100);
+    this.update();
+  }
+```
+
+---
+
+### 0a. Page cache size (memory)
+
+Search for: `const DEFAULT_CACHE_SIZE = 10;`
+
+Replace with:
+```js
+// Reduced from 10 to 3 (current page + 1 on each side) to cut page-cache
+// memory by ~70%. Each cached page holds a rendered canvas bitmap; at 1.5x
+// devicePixelRatio a typical A4 page costs ~10 MB, so 10 pages = ~100 MB.
+// 3 pages is sufficient for smooth scrolling in a read-only book reader.
+const DEFAULT_CACHE_SIZE = 3;
+```
+
+PDF.js dynamically grows the cache to `max(DEFAULT_CACHE_SIZE, 2 * visiblePages + 1)` as the user scrolls, but the floor is this constant. Reducing it from 10 to 3 cuts the minimum page-cache footprint by ~70% with no visible impact on scrolling.
+
+---
+
+### 0. Canvas cleanup timeout (memory)
+
+Search for: `const CLEANUP_TIMEOUT = 30000;`
+
+Replace with:
+```js
+const CLEANUP_TIMEOUT = 5000; // Custom: reduced from 30000ms to 5000ms — frees canvas memory sooner when the user stops scrolling
+```
+
+PDF.js waits this many milliseconds of idle time before calling `cleanup()` on off-screen pages, which releases their canvas memory. 30 seconds is too long for a book reader where users frequently switch tabs or close PDFs. 5 seconds releases memory much sooner without any visible impact on scrolling performance.
+
+---
+
+### 0b. Memory-reduction AppOptions overrides
+
+Search for: `function webViewerLoad() {`
+
+Add the following block immediately after `const config = getViewerConfiguration();` and before the `const event = new CustomEvent(...)` line:
+
+```js
+// Custom: override AppOptions before the viewer initialises.
+AppOptions.setAll({
+  disablePreferences: true,     // prevent stored browser prefs from overwriting these settings
+  enableScripting: false,       // no embedded JS in Hebrew books
+  enableDetailCanvas: false,    // no second high-res canvas overlay
+  // annotationMode and annotationEditorMode left at defaults so the full
+  // annotation editor (highlight, freetext, signature, etc.) is available
+  enableAutoLinking: false,     // no URL scanning in text layer
+  ignoreDestinationZoom: true,  // document dests never change the user's zoom — see §0y
+  maxCanvasPixels: 4096 * 4096, // cap canvas at ~16M px, not 33M
+  disableAutoFetch: true,       // don't fetch the whole PDF upfront; MUST be set here, not in the URL hash
+  disableStream: true,          // use direct range reads instead of chunked streaming; faster for local files via WebView2 virtual hosts
+});
+```
+
+These options cannot be set via URL params — they are only settable via `AppOptions.setAll()` from inside the viewer's JS context. Setting them here, before `PDFViewerApplication.run()`, ensures they take effect before any page is rendered.
+
+**Critical — why `disableAutoFetch` must not be in the URL hash:** PDF.js reads `document.location.hash.substring(1)` at startup and stores it verbatim as `initialBookmark`. Any hash value — even one containing only option flags like `disableAutoFetch=true` — is treated as a navigation destination and takes priority over the stored scroll/zoom position from `ViewHistory`. Putting `#disableAutoFetch=true` in the iframe URL therefore breaks session restore: the stored page/zoom is never applied because `initialBookmark` is always truthy. Setting it via `AppOptions.setAll()` here avoids this entirely. The iframe URL must have no hash fragment.
+
+---
+
+### 1. Hebrew locale default
+
+Search for: `lang: navigator.language || "en-US"`
+
+Replace with:
+```js
+lang: new URLSearchParams(window.location.search).get("locale") || "he"
+```
+
+The Vue app passes `?locale=he` in the iframe src. This reads it and falls back to Hebrew if absent.
+
+---
+
+### 2. Cross-origin allow for WebView2 virtual hosts
+
+Search for the `validateFileURL` function. Find this block:
+```js
+const fileOrigin = URL.parse(file, window.location)?.origin;
+if (fileOrigin === viewerOrigin) {
+  return;
+}
+```
+
+Add immediately after:
+```js
+// Allow WebView2 virtual hosts (http:// origins for local file serving)
+if (fileOrigin && fileOrigin.startsWith("http://")) {
+  return;
+}
+```
+
+Without this, PDF.js rejects files served from WebView2 virtual hostnames like `http://KitveiHakodesh-pdf-1/`.
+
+---
+
+### 3. Filename URL parameter
+
+Search for: `validateFileURL(file);`
+
+Add immediately after:
+```js
+// Custom: read filename param for document properties and save dialog
+const customFilename = params.get("filename");
+if (customFilename) {
+  this._contentDispositionFilename = decodeURIComponent(customFilename);
+}
+```
+
+The Vue app passes `?filename=encodedName` so the original filename appears in document properties and the save dialog.
+
+---
+
+### 4. Save dialog with File System Access API
+
+Find the `DownloadManager` class and its `_triggerDownload` method. Replace the entire method with:
+
+```js
+_triggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
+  // Custom: use File System Access API save dialog when available
+  if (blobUrl && !isAttachment && window.showSaveFilePicker) {
+    (async () => {
+      try {
+        const response = await fetch(blobUrl);
+        const blob = await response.blob();
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename || "document.pdf",
+          types: [{ description: "PDF Files", accept: { "application/pdf": [".pdf"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        if (blobUrl.startsWith("blob:")) URL.revokeObjectURL(blobUrl);
+        return;
+      } catch {
+        // User cancelled or API error — fall through to default anchor download
+      }
+    })();
+    return;
+  }
+  this._defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment);
+}
+_defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
+  if (!blobUrl && !isAttachment) {
+    if (!createValidAbsoluteUrl(originalUrl, "http://example.com")) {
+      throw new Error(`_triggerDownload - not a valid URL: ${originalUrl}`);
+    }
+    blobUrl = originalUrl + "#pdfjs.action=download";
+  }
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.target = "_parent";
+  if ("download" in a) {
+    a.download = filename;
+  }
+  (document.body || document.documentElement).append(a);
+  a.click();
+  a.remove();
+}
+```
+
+Shows a native OS save dialog (Chrome/Edge/WebView2). Falls back to automatic download if the user cancels or the API is unavailable.
+
+---
+
+### 5. Feature flags — set to `true`
+
+Search for each option name in `defaultOptions` and change `value: false` to `value: true`:
+
+| Option | Why |
+|---|---|
+| `enableSplitMerge` | Page reorganization UI (select, copy, cut, delete, reorder pages) |
+| `enableMerge` | PDF merge UI |
+| `enableComment` | Comment/annotation sidebar |
+| `enableHighlightFloatingButton` | Floating highlight button when text is selected |
+| `enableSignatureEditor` | Signature editor tool |
+| `enableUpdatedAddImage` | Updated image insertion UI |
+| `enableNewBadge` | "NEW" badge on new features |
+| `enableOptimizedPartialRendering` | Performance: optimized partial page rendering |
+
+These three remain `false` intentionally:
+- `enableAltText` — triggers a ~50MB AI model download, irrelevant for a book reader
+- `enablePermissions` — would disable editing on publisher-protected PDFs
+- `pdfBugEnabled` — developer debugging tool only
+
+---
+
+## `web/viewer.html` — Page count floating badge
+
+### Element
+
+Add a `<div id="pageCountBadge"></div>` immediately before `</body>`.
+
+### Init script
+
+Add this `<script>` block immediately after the page count badge `<div>` (before `</body>`). It listens to the PDF.js internal `documentloaded` and `pagechanging` events via `PDFViewerApplication.eventBus` and updates the badge text to `"currentPage / totalPages"`. The badge starts empty and is only shown by CSS when it has content.
+
+```js
+(function () {
+  function initPageCountBadge() {
+    var badge = document.getElementById('pageCountBadge');
+    if (!badge) return;
+
+    function updateBadge(currentPage, totalPages) {
+      if (!totalPages) { badge.textContent = ''; return; }
+      badge.textContent = currentPage + ' / ' + totalPages;
+    }
+
+    function waitForApp() {
+      var app = window.PDFViewerApplication;
+      if (!app || !app.eventBus) { setTimeout(waitForApp, 100); return; }
+      app.eventBus._on('documentloaded', function () { updateBadge(app.page, app.pagesCount); });
+      app.eventBus._on('pagechanging', function (data) { updateBadge(data.pageNumber, app.pagesCount); });
+      if (app.pdfDocument) { updateBadge(app.page, app.pagesCount); }
+    }
+    waitForApp();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPageCountBadge);
+  } else {
+    initPageCountBadge();
+  }
+})();
+```
+
+### CSS (`viewer-custom.css`)
+
+The badge is hidden by default and shown only when the toolbar is in compact mode (≤580px — same breakpoint where `#numPages` is hidden), and only when it has content. It fades in on page change and fades out after 2 seconds via a `setTimeout` that removes the `.visible` class. Deliberately unthemed (semi-transparent black/white) so it sits lightly on top of any PDF content.
+
+```css
+#pageCountBadge {
+  display: none;
+  position: fixed;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 1px 5px;
+  background: light-dark(rgba(255, 255, 255, 0.65), rgba(30, 30, 30, 0.65));
+  color: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.6));
+  backdrop-filter: blur(4px);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+#pageCountBadge.visible { opacity: 1; }
+
+@media (max-width: 580px) {
+  #pageCountBadge:not(:empty) { display: block; }
+}
+```
+
+---
+
+## Pages panel — "select all" checkbox
+
+Adds a tri-state **select-all checkbox** to the pages-manager (`viewsManager`) status
+bar, so the user can select or deselect every page with one click instead of ticking
+each thumbnail. It sits immediately before the existing status label
+(`pdfjs-views-manager-pages-status-none-action-label` = "בחירת עמודים" / "N נבחרו"),
+which acts as its caption. State mirrors the selection: **unchecked** (none),
+**indeterminate** (some), **checked** (all). Clicking it selects all pages, or clears
+them when all are already selected. This supersedes PDF.js's own tiny deselect
+icon-button (`#viewsManagerStatusActionDeselectButton`), which is hidden in CSS.
+
+Requires `enableSplitMerge: true` (see the feature-flags section) — the whole
+pages-manager UI, per-page checkboxes, and status bar only exist when it is enabled.
+
+### `web/viewer.html` — checkbox element
+
+Inside `<span id="viewsManagerStatusActionLabelContainer">`, add the checkbox as the
+**first child**, immediately before `<button id="viewsManagerStatusActionDeselectButton" …>`:
+
+```html
+<!-- CUSTOM: select-all checkbox — one click selects/deselects every page.
+     Sits before the status label ("בחירת עמודים" / "N נבחרו"), which acts as its caption. -->
+<input
+  id="viewsManagerSelectAllCheckbox"
+  type="checkbox"
+  tabindex="0"
+  title="בחר / בטל בחירת כל העמודים"
+  aria-label="בחר / בטל בחירת כל העמודים"
+/>
+```
+
+### `web/viewer.mjs` — wiring (4 edits)
+
+**1. Register the element in `getViewerConfiguration()`.** In the `viewsManagerStatusBar`
+object (alongside `viewsManagerStatusActionLabel`), add:
+
+```js
+viewsManagerStatusActionSelectAllCheckbox: document.getElementById("viewsManagerSelectAllCheckbox")
+```
+
+**2. In `class PDFThumbnailViewer`**, add a private field next to `#deselectButton = null;`:
+
+```js
+#selectAllCheckbox = null;
+```
+
+and, in the constructor next to `this.#deselectButton = statusBar?.viewsManagerStatusActionDeselectButton || null;`, add:
+
+```js
+this.#selectAllCheckbox = statusBar?.viewsManagerStatusActionSelectAllCheckbox || null;
+```
+
+**3. Wire the change listener** immediately after `this.#deselectButton.classList.toggle("hidden", true);`
+(inside the `if (this.#enableSplitMerge && manageMenu) { … }` block):
+
+```js
+this.#selectAllCheckbox?.addEventListener("change", this.#toggleSelectAll.bind(this));
+```
+
+**4. Add three methods** immediately after `#selectPage(pageNumber, checked) { … }`:
+
+```js
+// CUSTOM: select-all checkbox in the pages panel status bar.
+// Tri-state: unchecked (nothing selected) / indeterminate (some) / checked (all).
+// Toggling it selects or deselects every page at once.
+#toggleSelectAll() {
+  if (!this.#enableSplitMerge || !this._thumbnails?.length) {
+    return;
+  }
+  if (this.#selectAllCheckbox?.checked) {
+    this.#selectAllPages();
+  } else {
+    this.#clearSelection();
+  }
+  this.#updateMenuEntries();
+  this.#updateStatus("select");
+}
+#selectAllPages() {
+  if (this.#hasUndoBarVisible) {
+    this.#dismissUndo(false);
+  }
+  const set = this.#selectedPages ??= new Set();
+  for (let i = 0, ii = this._thumbnails.length; i < ii; i++) {
+    this._thumbnails[i].toggleSelected(true);
+    set.add(i + 1);
+  }
+}
+#updateSelectAllState() {
+  const checkbox = this.#selectAllCheckbox;
+  if (!checkbox) {
+    return;
+  }
+  const total = this._thumbnails?.length || 0;
+  const size = this.#selectedPages?.size || 0;
+  checkbox.disabled = total === 0;
+  checkbox.indeterminate = size > 0 && size < total;
+  checkbox.checked = total > 0 && size >= total;
+}
+```
+
+Then call `this.#updateSelectAllState();` from the two methods that run on every
+selection change, so the checkbox stays in sync:
+
+- at the end of `#updateMenuEntries()`;
+- inside `#updateStatus(type)`, in the `if (type === "select") { … }` branch, immediately
+  before its `return;`.
+
+### `web/viewer-custom.css` — styling
+
+```css
+#viewsManagerSelectAllCheckbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: var(--accent-color-custom, #0a84ff);
+}
+#viewsManagerSelectAllCheckbox:disabled { cursor: default; opacity: 0.5; }
+#viewsManagerSelectAllCheckbox:not(:disabled):hover {
+  outline: 1px solid var(--accent-color-custom, #0a84ff);
+  outline-offset: 1px;
+}
+/* Keep the status caption on one line — the checkbox now shares its row. */
+#viewsManagerStatusActionLabel { white-space: nowrap; }
+/* Hide PDF.js's built-in deselect icon-button — the checkbox supersedes it. */
+#viewsManagerStatusActionDeselectButton { display: none !important; }
+```
+
+### No locale change needed
+
+The checkbox's `title` / `aria-label` are hardcoded Hebrew (`בחר / בטל בחירת כל העמודים`)
+and it has **no** `data-l10n-id`, so nothing needs adding to `web/locale/**/viewer.ftl`.
+Its visible caption is the pre-existing, already-translated status label next to it.
+This matches the app's Hebrew-first convention (the iframe is always loaded with
+`?locale=he`) and keeps the patch self-contained.
+
+Verified live in Chromium against the 14-page sample PDF: select-all checks every page
+(status → `N נבחרו`, Export enabled); unchecking one page flips the checkbox to
+indeterminate; clicking it again re-selects all; clicking when fully checked clears the
+selection (status → `בחירת עמודים`).
+
+---
+
+## Pages panel — default to the outline when the document has one
+
+By default the side panel always opens to the pages/thumbnail view (`SidebarView.THUMBS`).
+This makes the **outline** (`תוכן עניינים`) the default view instead — but only when the
+document actually has a table of contents, and only when neither the PDF's page mode nor a
+stored preference explicitly asked for a specific view. If the document has no outline it
+stays on pages; an explicit choice is always respected.
+
+All edits are in `web/viewer.mjs`, in `class ViewsManager extends Sidebar`.
+
+**1. Add a private field** immediately after `#hasAnimations = …;`:
+
+```js
+// CUSTOM: true when the PDF's page mode or a stored preference explicitly picked
+// a sidebar view — used so the "default to outline" logic below never overrides
+// a deliberate choice.
+#initialViewWasExplicit = false;
+```
+
+**2. In `reset()`**, add after `this.isInitialEventDispatched = false;`:
+
+```js
+this.#initialViewWasExplicit = false;
+```
+
+**3. In `setInitialView(view = SidebarView.NONE)`**, record whether the view was explicit.
+After `this.isInitialViewSet = true;` and before the `if (view === SidebarView.NONE …)` guard:
+
+```js
+// CUSTOM: record whether an explicit sidebar view was requested (vs. the -1
+// "unknown" default) so a later-loaded outline can safely become the default.
+this.#initialViewWasExplicit = view !== SidebarView.NONE && view !== SidebarView.UNKNOWN;
+```
+
+**4. In `#addEventListeners()`**, inside the `eventBus._on("outlineloaded", …)` handler,
+immediately after the `onTreeLoaded(evt.outlineCount, this.outlineButton, SidebarView.OUTLINE);` line:
+
+```js
+// CUSTOM: when the document has a table of contents (תוכן עניינים) and no
+// view was explicitly requested by the PDF/prefs, make the outline the
+// default view instead of the pages thumbnails. If the sidebar is closed
+// this simply sets the view shown the next time the user opens it.
+if (evt.outlineCount > 0 && !this.#initialViewWasExplicit && this.active === SidebarView.THUMBS) {
+  this.switchView(SidebarView.OUTLINE);
+}
+```
+
+`outlineloaded` fires after the outline DOM is rendered and (in this app's flow) after
+`setInitialView` runs, so the `#initialViewWasExplicit` flag is already set. When the sidebar
+is closed (the common case — `sidebarViewOnLoad` defaults to `-1`), `switchView(OUTLINE)` only
+updates `active`; the outline is shown the next time the user opens the panel. Even if the
+event ever arrives before `setInitialView`, a later explicit view still wins.
+
+Verified live in Chromium: a PDF with a 2-item outline defaults to the outline view
+(`active === OUTLINE`, header label `תוכן עניינים`, outline shown on open); the no-outline
+sample stays on the pages view.
+
+---
+
+## Pages panel — tighter header bars
+
+PDF.js's default views-manager header wastes vertical space: the title bar uses 12px
+top/bottom padding and the status bar has a 64px `min-height`. Trim both. In
+`web/viewer-custom.css` (loads after `viewer.css`, so equal-specificity selectors win by
+load order — the selectors below deliberately use 3 IDs, +1 descendant for `> div`, to match
+PDF.js's own generated specificity):
+
+```css
+#viewsManager #viewsManagerHeader #viewsManagerTitle {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus > div {
+  min-height: 42px;
+}
+```
+
+Live-measured result: title bar ~56px → 42px, status bar 64px → 42px.
+
+---
+
+## Pages panel — gap between the selection count and the Manage dropdown
+
+The status bar lays out `#viewsManagerStatusActionLabelContainer` (the select-all checkbox +
+`N נבחרו` count) and `#actionSelector` (the Manage dropdown) with `justify-content:
+space-between`. But `#actionSelector` sizes to its **hidden popup menu** — whose longest item
+is `ייצוא הפריטים שנבחרו…` ("Export selected…") — so it renders ~158px wide. In a ~270px
+sidebar that leaves almost no room, and the count label ends up ~2px from the button.
+
+Cap `#actionSelector` to its own button's content width so `space-between` restores a proper
+gap; keep a 12px floor and never let the count label shrink. The popup menu is absolutely
+positioned, so it still opens at its full width (verified). Add to `web/viewer-custom.css`
+(selectors use 5 IDs to match/beat PDF.js's generated `#actionSelector` rule):
+
+```css
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction {
+  gap: 12px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #viewsManagerStatusActionLabelContainer {
+  flex: 0 0 auto;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #actionSelector {
+  min-width: 0;
+  max-width: 100px;
+}
+```
+
+Live-measured result: Manage button 158px → 100px, gap between count and button 2px → ~41–48px;
+`ניהול` not clipped; Manage menu still opens at full 158px.
+
+---
+
+## Hide the file-loading progress bar
+
+The thin 4px bar under the toolbar (`#loadingBar`) that fills as a PDF loads is not wanted.
+It is absolutely positioned, so hiding it has no layout effect, and PDF.js keeps updating it
+internally without error — only the visual is removed. Add to `web/viewer-custom.css`:
+
+```css
+#loadingBar {
+  display: none !important;
+}
+```
+
+Verified live: `#loadingBar` computes to `display: none` (0×0) throughout load, the PDF still
+loads normally, and there are no console errors.
+
+---
+
+## Outline panel — search input (תוכן עניינים), flat ranked results
+
+Adds a search input to the outline side panel that behaves **identically to the BookView
+TOC side-panel search**: typing filters the table of contents down to a flat, ranked list
+of matches (best first); clearing the query restores the normal nested tree.
+
+Entirely additive — one new file plus a `<script>` tag and a CSS block. **No `viewer.mjs`
+patches**, so nothing here conflicts with a PDF.js upgrade; the only upgrade risk is the
+outline DOM shape changing (see "If the outline DOM changes" below).
+
+### Added file: `web/outline-search.js`
+
+Self-contained. Two parts:
+
+1. **A hand-written port of the Vue app's `SegmentSearchTree`**
+   (`vue-frontend/src/utils/segmentSearchTree.ts`) — `tokenizeSegmentText` plus the
+   3-pass scoring algorithm (score with segment-crossing penalty → bond detection →
+   ancestry dedup), including the exact-last-word retry and the Talmud-page suffix rule.
+2. **The panel wiring** — DOM indexer, flat result renderer, and event hookup.
+
+**Why a port and not an import.** `public/` is copied to the output verbatim and is not
+part of the Vue module graph; importing from `src/` would couple `public/pdfjs/` to the
+Vue build output, which nothing else there does. The duplication is deliberate.
+
+**Keeping the two copies in sync** is guarded by a test:
+`vue-frontend/src/utils/outlineSearchPortEquivalence.test.ts` loads `outline-search.js`,
+extracts the ported class, and asserts it produces byte-identical rankings to
+`segmentSearchTree.ts` across 27 queries plus tokenizer, display-path, result-limit, and
+leaf-only-candidate checks. **If you change either implementation, run
+`npm run test` — a divergence fails there.** The test locates the port's internals by
+searching for the literal `  if (document.readyState === ` line, so keep that line as the
+IIFE's last statement.
+
+### How the filtering works
+
+- On `outlineloaded`, the index is invalidated (lazily rebuilt on first keystroke, so a
+  document with a TOC the user never searches costs nothing).
+- `indexOutline()` reads `#outlinesView`'s nested `div.treeItem > a` DOM into a flat
+  `{id, parentId, text, anchor}` list. Nesting is
+  `div.treeItem > div.treeItems > div.treeItem`, so an item's parent is its nearest
+  ancestor `.treeItem` — this reconstructs the same ancestor chain that `parentId` gives
+  the Vue tree, which is what makes segment-aware scoring possible.
+- While a query is active, `#outlinesView` gets `.outlineSearchActive` (`display:none`)
+  and a sibling `#outlineSearchResults` holds the flat rows. It reuses the `.treeView`
+  class **without** `withNesting`, so rows are styled exactly like real outline rows but
+  unindented.
+- Each result row's anchor is a **clone** (href + bold/italic styles copied). Clicking it
+  is delegated to the original anchor via `.click()`, so PDF.js's own `_bindLink` handler
+  stays the single source of truth for navigation and selected-item tracking. Nothing in
+  `viewer.mjs` needed changing.
+- Results are capped at **100**, matching the Vue `TreeView`'s filtered-list limit.
+- Each row's label is the **full ancestor path** — `root · parent · node` on one line,
+  from `displayPaths` — exactly what the Vue `TreeView` renders while filtering
+  (`filter ? displayPaths.get(node.id) : node.text`). The search matches across the whole
+  ancestor chain, so the row shows the same chain it matched against; a bare leaf title is
+  ambiguous on its own. The anchor is `unicode-bidi: isolate` so a title ending in `.` or
+  `:` cannot reorder against the ` · ` separators.
+
+The input is shown only when the outline view is active **and** `outlineCount > 0`.
+`Escape` clears the query (and stops propagating so it does not close the sidebar instead).
+
+**Keyboard navigation** works in **both modes** — the flat results while a query is
+active, and the nested outline tree otherwise — and is driven entirely from the search
+input's `keydown`, so there is one code path and the caret never has to leave the box.
+It is a port of the Vue app's `useListKeys` (`src/composables/useListKeyNav.ts`), the same
+composable that drives the BookView TOC list: **Up/Down** move, **Home/End** jump to the
+ends, **Enter** activates.
+
+In the **tree**, two extra bindings handle hierarchy. Because the outline is RTL,
+**ArrowLeft expands** (goes deeper) and **ArrowRight collapses** (goes back toward the
+root), mirroring the chevron direction in BookView's RTL tree; collapsing an
+already-collapsed row climbs to its parent. Both rely on PDF.js internals verified in
+`viewer.mjs` / `viewer.css`:
+
+- `.treeItemToggler` is `prepend`ed as the **first child** of `.treeItem`
+  (`_addToggleButton`), hence the `:scope > .treeItemToggler` lookup.
+- `.treeItemsHidden ~ .treeItems { display: none }` is the collapsed state, so collapsed
+  rows are genuinely `display:none` and `navItems()` filters them with
+  `offsetParent === null`. Without that filter, arrowing would step through invisible rows.
+
+Focus is **not** carried across a mode switch: the tree and the results have unrelated
+orderings, so an index would land the ring on an arbitrary row. `paintFocus()` clears
+rings in *both* containers before painting, so switching modes or collapsing the focused
+row can never strand a stale highlight.
+
+**Space** toggles expand/collapse on the focused tree row, and opens it when it is a leaf
+— mirroring BookView's `TreeNode.vue`, where Space toggles a parent and selects a leaf.
+It is bound **only while the query box is empty**: queries are multi-word
+(`"פסחים דף ד"`), so Space has to stay typable the moment there is any text. This is the
+one place the port cannot follow BookView unconditionally — there the list is not a text
+field, here it is.
+
+One deliberate difference from `useListKeys`, because the key target here is a text input
+rather than a list: focus is **painted** on the row (`.is-focused`) rather than moved there
+as real DOM focus, so the caret stays in the query box and the user can keep typing to
+refine while arrowing. `scrollIntoView({ block: 'nearest' })` matches `useListKeys`.
+
+**Arrowing starts from the current entry, not from the top.** The first Up/Down press in
+the tree seeds the ring onto the row for the page being viewed (`seedFocusFromCurrent()`)
+and consumes that keypress, so the next press moves off it. Arrowing is a continuation of
+"where am I" rather than a fresh traversal — in a 500-page book, starting at row 0 would
+mean hundreds of presses to get back to the reading position. The seed calls
+`revealCurrentEntry()` first, since the current row may sit inside a collapsed branch and
+must be expanded before `navItems()` will consider it navigable. If there is no current
+entry yet, it falls through to row 0 as before. Results mode is excluded — there the top
+hit is already the right starting point.
+
+Re-rendering on each keystroke resets the index to the **top hit**, so Enter alone opens
+the best match. Activation calls `.click()` on the row, which flows through the same
+delegated handler as a real mouse click (a synthetic click bubbles and `closest()` matches
+it), so there is exactly one navigation path.
+
+**Focus must be reclaimed after every activation**, or keyboard navigation dies after a
+single Enter. **Two** separate things steal it, at two different times:
+
+1. **The row itself** — these are real `<a href>` elements, so activating one (by Enter or
+   by mouse, in either mode) focuses it synchronously.
+2. **`PDFLinkService.goToDestination()`** — it registers a one-shot `textlayerrendered`
+   listener and calls `evt.source.textLayer.div.focus()` when the destination page
+   renders (`viewer.mjs`, in `goToDestination`). That is **asynchronous and unbounded**:
+   on a cold page it can land hundreds of ms later, long after any `requestAnimationFrame`
+   we might wait on. The text layer is focusable because `TextLayerBuilder` sets
+   `this.div.tabIndex = 0`.
+
+A single deferred re-focus therefore is not enough — that was a real bug. `refocusInput()`
+instead focuses the input immediately and opens a **1 s reclaim window**; a capturing
+document-level `focusin` listener (it bubbles, unlike `focus`) pulls focus back for the
+duration. Reclaiming is restricted to the elements activation is *known* to focus — an
+outline anchor or a `.textLayer` — so it never yanks focus from somewhere the user
+deliberately clicked, and the window is short enough that it cannot fight a later genuine
+focus change.
+
+Mouse clicks additionally sync the ring to the clicked row, so a following Enter/Arrow
+continues from there.
+
+The tree's click listener is bound on `#outlinesView`, the **same element** PDF.js binds
+its toggler listener to — `stopEvent()`'s `stopPropagation()` does not prevent other
+listeners on that same element from running, so both coexist. Toggler clicks are skipped
+explicitly so expanding/collapsing does not move the ring.
+
+**Autofocus** is driven from `updateVisibility()` on the hidden→visible transition, *not*
+from any single event. Visibility depends on two inputs — the active view and
+`outlineCount` — and either can be the last to arrive: the "default to the outline"
+customization above switches the view **before** the outline loads, so
+`sidebarviewchanged` fires while `outlineCount` is still 0 (bar correctly hidden, no focus)
+and it is `outlineloaded` that reveals the bar. Driving focus off the transition covers
+both orderings. Two details make it robust:
+
+- A `wasVisible` flag limits focus to the transition itself. PDF.js's `open()` calls
+  `switchView(this.active)` and then `#dispatchEvent()` unconditionally, so opening the
+  sidebar dispatches `sidebarviewchanged` twice with the same view; the flag also stops a
+  later unrelated dispatch from yanking focus out of the outline list while the user is
+  arrowing through it.
+- The focus call is deferred one `requestAnimationFrame`, because the bar is revealed by
+  removing `.hidden` in the same tick and `focus()` does nothing on a `display:none`
+  element.
+
+Re-focusing on every open (not just the first) falls out of `#dispatchEvent()` sending
+`view: this.visibleView`, whose getter returns `SidebarView.NONE` while the sidebar is
+closed — so closing resets `wasVisible` and reopening is a genuine transition again.
+
+### `web/viewer.html` — script tag
+
+Add immediately after `<script src="viewer.mjs" type="module"></script>`:
+
+```html
+<!-- CUSTOM: outline (תוכן עניינים) search input — flat ranked results,
+     mirroring the BookView TOC side-panel search. Self-contained; it polls for
+     PDFViewerApplication, so load order relative to viewer.mjs does not matter. -->
+<script src="outline-search.js" defer></script>
+```
+
+### `web/viewer-custom.css`
+
+The search bar is inserted **after** `#viewsManagerContent` (below the scroll area, like
+BookView's `.toc-search`, which renders after its tree). Two things about the parent
+`#viewsManager` matter, and both cost a rule:
+
+- It is `display:flex; flex-direction:column; **align-items:flex-start**` — so
+  `align-self: stretch` is **required**, otherwise the bar shrinks to its content width.
+- It has `**padding-bottom: 16px**`. That was invisible while the scrollable
+  `#viewsManagerContent` was the last child, but the search bar is now last, so the
+  padding renders as a stray gap between the input and the panel's bottom edge. The
+  `:has()` rule below zeroes it only while the bar is visible, so the pages/attachments/
+  layers views keep PDF.js's original 16px. (`:has()` takes the specificity of its most
+  specific argument, so `#viewsManager:has(#outlineSearchBar…)` is 2 IDs and beats
+  PDF.js's 1-ID `#viewsManager` rule regardless of load order.)
+
+**The bar must round its own bottom corners.** `#viewsManager` is `class="menuContainer
+sidebar"`. `.sidebar` gives the panel `border-radius: var(--sidebar-border-radius)` (8px)
+on all four corners — but `.menuContainer` sets **`overflow-y: auto`**, and a scroll
+container clips its content to the **padding box, ignoring `border-radius`**. So the
+panel's curve is painted and then the last child's square background is clipped straight
+over it. Being the last child *and* flush (the `padding-bottom: 0` above), the search bar
+made the panel's bottom corners read as square while the top stayed round. Matching the
+radius on the bar is the fix — read from the same token so it tracks an upgrade that
+changes the panel's radius:
+
+```css
+border-end-start-radius: var(--sidebar-border-radius, 8px);
+border-end-end-radius: var(--sidebar-border-radius, 8px);
+```
+
+**Do not** try `overflow: hidden` on `#viewsManager` instead: `.menuContainer`'s
+`overflow-y: auto` is already the clip, and a second overflow value does not make a
+scroller honor the radius. It would also risk clipping `.sidebarResizer`, which PDF.js
+positions *outside* the panel at `inset-inline-start: calc(100% + 4px)`.
+
+```css
+#outlinesView.outlineSearchActive { display: none; }
+
+#viewsManager:has(#outlineSearchBar:not(.hidden)) { padding-bottom: 0; }
+
+#outlineSearchBar {
+  flex: 0 0 auto;
+  align-self: stretch;   /* required — parent is align-items:flex-start */
+  /* no margin/padding-bottom here — the parent's 16px is zeroed above instead */
+  box-sizing: border-box;
+  padding: 5px 6px 6px;
+  border-top: 1px solid var(--separator-color);
+  background: var(--toolbar-bg-color);
+  /* match the panel's own 8px — see the scroll-clipping note above */
+  border-end-start-radius: var(--sidebar-border-radius, 8px);
+  border-end-end-radius: var(--sidebar-border-radius, 8px);
+}
+#outlineSearchBar.hidden { display: none; }
+#outlineSearchInner { display: flex; align-items: center; padding: 1px 6px; }
+#outlineSearchInput {
+  flex: 1; width: 0; min-width: 0;
+  padding: 0;
+  height: 18px; line-height: 18px;   /* see note below */
+  direction: rtl; text-align: right;  /* see the bidi note below */
+  background: none; border: none; outline: none;
+  font-size: 12px; font-family: inherit; color: var(--main-color);
+}
+/* result rows carry the full ancestor path as their label — see the bidi note */
+#outlineSearchResults.treeView .treeItem > a { unicode-bidi: isolate; }
+
+/* keyboard focus ring — both containers */
+#outlineSearchResults .treeItem > a.is-focused,
+#outlinesView .treeItem > a.is-focused {
+  background-color: color-mix(in srgb, var(--main-color) 10%, transparent) !important;
+  background-clip: padding-box;
+  border-radius: 2px;
+}
+/* suppress PDF.js's .selected styling inside the results — see note below */
+#outlineSearchResults .treeItem.selected > a {
+  background-color: transparent;
+  color: var(--treeitem-color);
+}
+#outlineSearchInput::placeholder { color: var(--main-color); opacity: 0.6; }
+#outlineSearchInput::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
+```
+
+Colors use PDF.js's own themed variables (which `viewer-custom.css` already maps onto the
+app's `--*-custom` values).
+
+**Bidi — every new text surface needs `direction: rtl`.** The viewer root is `dir="ltr"`,
+so any Hebrew string ending in weak punctuation (`:` or `.` — extremely common in these
+TOCs, e.g. `דף ד:`) renders with that punctuation jumping to the *wrong end*. The
+pre-existing "Hebrew RTL outline (TOC) sidebar" rule above fixes this for
+`.treeItem > a`, which the flat result rows inherit for free because they are built with
+the same `div.treeItem > a` shape — that is a reason to keep that shape. But the rule does
+**not** reach the two surfaces this feature adds, so both set it themselves:
+
+- `#outlineSearchInput` — without it a typed query like `ד:` shows the colon on the left.
+  `text-align: right` keeps the caret on the Hebrew side.
+- `#outlineSearchResults.treeView .treeItem > a` — result rows label themselves with the
+  FULL ancestor path, so they need `unicode-bidi: isolate` (not the base rule's `embed`):
+  the path joins ancestor titles with `" · "`, and an ancestor ending in `:` would
+  otherwise reorder against that separator. `direction: rtl` is inherited from the base
+  `.treeItem > a` rule, so only `unicode-bidi` is overridden. The id-bearing selector
+  (1,2,1) beats the base rule (0,1,1) regardless of source order.
+
+If you add another text element here, set `direction: rtl` on it too.
+
+**Two highlight gotchas**, both worth knowing before retuning these colors:
+
+- The focus ring must **not** use `--treeitem-selected-bg-color` (0.25 alpha). That is
+  PDF.js's *selected* weight and reads far too dark for a transient ring. The
+  `color-mix(… 10%)` above matches the Vue app's `[data-nav-item].is-focused` and stays
+  lighter than the 0.15 hover token, so hovering a focused row still reads as a change.
+- Opening a search result routes through the original anchor's handler, so PDF.js's
+  `_updateCurrentTreeItem` marks that row `.selected` — and since `#outlineSearchResults`
+  also carries the `.treeView` class, PDF.js's `.selected:is(.treeView .treeItem) > a`
+  rule painted the matching **results** row with that same heavy color, which lingered
+  after the query was cleared. The suppression rule above scopes that styling back to the
+  real tree, where it belongs (it is the current-entry indicator — see the
+  current-entry-tracking section).
+
+**Mangled titles are a separate, non-CSS problem.** ABBYY FineReader and some other
+producers store Hebrew outline titles with trailing punctuation encoded in visual/LTR
+order, so the string literally begins with the punctuation: `".מח"` instead of `"מח."`.
+No amount of `direction: rtl` fixes that — the characters really are in that order.
+`normalizeOutlineTitle()` in `outline-search.js` detects leading punctuation followed by a
+Hebrew letter and moves it to the end. It runs in two places:
+
+- `normalizeOutlineDom()`, on `outlineloaded`, rewrites PDF.js's own rendered tree in
+  place (`_finishRendering()` appends the DOM *before* dispatching the event, so it is
+  available). Correcting the DOM rather than patching `PDFOutlineViewer.render` keeps this
+  additive and upgrade-safe.
+- `indexOutline()`, so search matches what the user sees — a query for `מח.` finds a title
+  stored as `.מח`.
+
+This is a **port of the Vue app's `normalizeOutlineTitle`**
+(`src/features/pdf-viewer/usePdfViewPageTracking.ts`), which applies the same correction to
+the titlebar breadcrumb; that copy predates the sidebar search and only ever covered the
+breadcrumb. Keep the two in sync — including the regex's `.` (not `[\s\S]`), which leaves
+titles containing a newline untouched instead of reordering across the line break.
+
+**On the compact sizing.** The paddings are deliberately tighter than
+`BookViewTocTree.vue`'s `.toc-search` (which uses `5px 6px 6px` + `4px 8px`): the PDF
+sidebar is narrower and shorter than the BookView panel, so the same values read as a
+too-tall row there. Three paddings stack in this bar — the bar's, `#outlineSearchInner`'s,
+and the input's own — plus the UA's default `height`/`line-height` on `input[type=search]`,
+which is **not** derived from `font-size` and silently adds a few px. `padding: 0` and an
+explicit `height`/`line-height` on the input pin the row to exactly the 12px text plus the
+two paddings above it (~24px total, down from ~37px). If you retune this, change the
+paddings and leave the height pins alone, or the UA default creeps back in.
+
+### No locale change needed
+
+The placeholder (`חיפוש...`) and tooltip are hardcoded Hebrew with no `data-l10n-id`,
+matching the select-all checkbox convention above — the iframe is always loaded with
+`?locale=he`.
+
+### Current-entry tracking (follows the page as you scroll)
+
+The outline row covering the page being viewed becomes PDF.js's **selected** item, updated
+on every `pagechanging` and on document load — the same relationship BookView's line view
+has with its TOC. Every ancestor is expanded recursively so the row is visible, and it is
+scrolled into view with `block: 'nearest'`.
+
+`revealCurrentEntry()` calls **`pdfOutlineViewer._updateCurrentTreeItem()`** rather than
+maintaining a parallel highlight class. That is PDF.js's own selected-item bookkeeping: it
+holds `_currentTreeItem` and clears the previous row when a new one is set, so page
+tracking and a manual click share one highlight and one piece of state and can never leave
+two rows marked. There is a defensive fallback that toggles `.selected` directly if that
+private method is ever renamed upstream.
+
+The ancestor walk mirrors PDF.js's `_scrollToCurrentTreeItem`, with one deliberate
+difference: it scrolls `block: 'nearest'` where PDF.js uses `'center'`, which would yank
+the list on every page turn.
+
+**PDF.js has this feature and it cannot be reused here.** `_currentOutlineItem()` does
+exactly this, but it is gated on `_isPagesLoaded`, and `_dispatchEvent()` resolves its
+`currentOutlineItemPromise` to `false` whenever `disableAutoFetch` is set — which this
+viewer sets deliberately (see the memory-reduction AppOptions section). So its toolbar
+button is permanently disabled here. The underlying reason is `_getPageNumberToDestHash()`
+resolving pages via `cachedPageNumber()`, which only answers once every page is loaded.
+
+`buildPageIndex()` instead resolves each destination with **`getPageIndex()`**, which works
+without loading all pages — the same approach the Vue app's `usePdfViewPageTracking` uses
+for the titlebar breadcrumb. Rows are matched to entries by **destination hash**
+(`linkService.getDestinationHash(dest)`), which is exactly what PDF.js assigns to each
+anchor's `href` in `_bindLink`, so the two align by construction; this avoids assuming the
+BFS render order matches `querySelectorAll` document order (they differ for nested trees).
+The active entry for page N is the **last** entry with `page <= N`, matching BookView's
+`getActiveTocEntry`.
+
+A `pageIndexToken` counter guards the async build: switching documents bumps it so an
+in-flight build from the previous document discards its result. Revealing is suppressed
+while the panel is hidden or search results are showing, and re-triggered when the panel
+opens or the query is cleared.
+
+No custom CSS is involved — the current row is styled by PDF.js's existing
+`.selected:is(.treeView .treeItem) > a` rule. The keyboard focus ring (`.is-focused`) is
+separate and can sit on a different row, which is correct: one means "where the page is",
+the other "where the keyboard is".
+
+### Panel dismisses on outside click / window blur (overlay mode only)
+
+Stock PDF.js never dismisses the views-manager panel: `class Sidebar` binds the toggle
+button's `click` and nothing else, so once opened it stays open until explicitly toggled —
+unlike every other panel in the app. `outline-search.js` adds the dismiss behaviour, ported
+from the Vue app's `useDropdownClose` (`src/composables/useDropdownClose.ts`), which closes
+BookView's TOC side panel.
+
+**It applies only when the panel FLOATS OVER the page, never when it sits side by side.**
+Both apps have the two modes, and both guard the close the same way:
+
+| | side by side (no dismiss) | floats over page (dismiss) |
+|---|---|---|
+| BookView | `sidePanelIsOverlay === false` (shell ≥ 520px) — inline column beside the content; `BookViewSidePanel.vue` guards `emit('close')` with it | overlay component, backdrop + floating panel |
+| PDF.js | `> 840px` — `#viewerContainer` is pushed by `--viewsManager-width`, content reflows beside the panel | `≤ 840px` — `viewer.css`'s `inset-inline-start: 0 !important` stops the push, so the panel overlaps the page |
+
+Side by side the panel takes no space from the content, so dismissing it on a stray click in
+the page would be hostile — that is a docked column, not a popover. The `≤840px` media query
+in `viewer.css` is the single source of truth for which mode is live, so it is read via
+`window.matchMedia('(max-width: 840px)')` rather than duplicated as a JS constant. **If that
+breakpoint changes on upgrade, update the `matchMedia` string to match.**
+
+Closing goes through **`app.viewsManager.close()`**, not by toggling `hidden` — `close()`
+also updates `aria-expanded`, removes the `viewsManagerOpen` class, and dispatches
+`sidebarviewchanged`. Open state is read from the public `app.viewsManager.isOpen` field.
+
+Note the property is **`app.viewsManager`**, not `app.pdfSidebar` — that was the name in
+older PDF.js and does not exist in this build, so calls on it would silently no-op. If a
+future upgrade renames the instance again, these two call sites are where it shows.
+
+Three things are deliberately **not** "outside":
+
+- the sidebar subtree itself (`#viewsManager`);
+- **the toggle button** — it closes the panel through its own click handler, so closing here
+  too would let that click immediately reopen it. This is the toggle-button race
+  `useDropdownClose` guards with `justClosed`;
+- `#outlineContextMenu` and `#outlineRowMenuButton` — editor UI this panel owns, rendered on
+  `document.body` and therefore outside the sidebar subtree.
+
+An in-progress **rename commits first, then the panel closes** — clicking away is a
+deliberate "I'm done here", so it does what clicking away from the anchor alone does
+(commit) and then dismisses. Both are handled inside `closeSidebar()`, which owns the whole
+sequence; the window-blur path goes through it too, so losing the window mid-rename cannot
+discard the text.
+
+Two things make that sequence non-obvious:
+
+- The commit is triggered **explicitly** (`renamingAnchor.blur()`) rather than left to the
+  anchor's own blur handler, because this listener is on `pointerdown` (capture), which runs
+  *before* the browser's blur would fire.
+- `finish()` normally ends by calling `input.focus()` to return the caret to the query box —
+  correct for every in-panel way a rename ends (Enter, Escape, clicking another row), but
+  wrong here: **the input lives inside the panel**, so it would move focus into a subtree
+  about to be hidden and steal the caret from whatever the user clicked to dismiss. A
+  `closingPanel` flag suppresses that reclaim for the duration of the close, cleared in a
+  `finally` so an exception cannot leave renames permanently unable to restore focus.
+  Reordering alone does not fix this — committing *after* `close()` would still call
+  `input.focus()` on a now-hidden element.
+
+`pointerdown` (capture) is used rather than `click`, matching `onClickOutside` underneath
+`useDropdownClose` and firing before a click can act on whatever was hit. The `blur` close
+mirrors the Vue version's `closeOnBlur`, including the `setTimeout(…, 0)` that lets
+`document.activeElement` settle and the iframe/object check — `document.hasFocus()` stays
+true when focus moves into a child frame.
+
+### Outline tree restyled to match BookView's TOC
+
+The panel is a copy of BookView's TOC system, matched against **measurements of the
+live BookView panel** (`capture-both-tocs.mjs` captured both panels under the real
+theme and dumped computed styles + geometry) — not against a reading of its source:
+
+- rows span the **full panel width** (hover/press/current are full-bleed strips), 28px,
+  line-height 28px, 0.8rem, **no radius**, Segoe UI stack
+- chevron: a 24×28 flex-centred column at the row's inline-start (right), shifted
+  **depth × 10px**; text starts at `24 + depth*10` from the right — the exact numbers
+  measured from `TreeNode.vue` rows (`chevFromRight: 0/10…`, `textFromRight: 24/34…`)
+- hover 6% / press 10% / current 8% text-color mixes; current label = accent, weight 500
+- one Fluent `ChevronDown16Regular` mask that **rotates 90°** when collapsed
+- the search box is BookView's **pill**: 999px radius, 10% text-secondary fill, 1px
+  border, `padding: 4px 8px`, on the `.toc-search`-style bar
+
+**The structural trick — indent INSIDE full-width rows.** PDF.js indents by nesting
+`.treeItems` containers, so a row's box starts at its indent and a highlight can never
+span the panel (the old "floating grey box" look). The container margins are zeroed and
+`outline-search.js` stamps `--toc-depth` on every `.treeItem` (`stampDepths()`, one O(N)
+pass on every tree build/edit); the anchor pads by `depth*10px + 24px` and the toggler
+sits absolutely in that gutter. `inset-inline-start` resolves to the RIGHT because
+PDF.js sets `dir=rtl` on the document at runtime under `locale=he`.
+
+Colors come from the `--*-custom` tokens `themes.ts` injects. The DOM is untouched —
+editor, search, keyboard nav, tracking, and DnD are unaffected (verified 26/26 + 18/18
+after the change; 4,400-entry perf unchanged).
+
+Upgrade traps: the margin-zeroing and collapsed-chevron rules need the `#outlinesView`
+id to beat viewer.css (the collapsed rule must also re-declare `mask-image`, or the
+stock icon swap survives as a `scaleX` flip). Testing trap: the chevron transition
+(120ms) means reading its computed `transform` in the same tick as the class change
+returns the START value — assert the matrix (`matrix(0,1,-1,0)`) after waiting it out.
+
+### Outline EDITING (add / rename / delete / move / re-nest, and create-from-scratch)
+
+**Direct manipulation, no edit mode** — the interaction model every PDF editor
+(Acrobat, PDF Expert, PDF-XChange, Calibre's Edit-ToC) converged on. Rows always
+navigate on click; editing happens on the rows themselves:
+
+- **`+` button** in the search row (`#outlineAddButton`, Ctrl+B): adds an entry
+  pointing at the CURRENT page — after the ring row, else after the current-entry row,
+  else at the end — and drops straight into rename with the name pre-selected. Pressed
+  while search results are showing, it clears the query first so the insertion is
+  visible.
+- **Right-click context menu** (`#outlineContextMenu`) on any row — the action hub:
+  שינוי שם (F2) / עדכון יעד לעמוד הנוכחי / הוספת פריט אחרי / הוספת תת־פריט / מחיקה
+  (Del). Also reachable via the hover `⋯` button (`#outlineRowMenuButton` — a single
+  floating element repositioned onto the hovered row, so the PDF.js-owned tree DOM
+  stays untouched and per-row cost is zero).
+- **Drag & drop** (pointer-based, 5px threshold so plain clicks still navigate): drop
+  zones per hovered row are top quarter = before, bottom quarter = after, middle =
+  INTO (last child, prospective parent highlighted). A fixed-position insertion line
+  (`#outlineDropIndicator`) tracks the sibling positions; drops into/beside the dragged
+  row's own subtree are rejected; the container auto-scrolls near its edges. After a
+  real drop, the click that follows pointerup is swallowed via a capture listener
+  removed on a 0-timeout — NOT `{once:true}`, which would linger if no click ever
+  fires (pointer released outside the window) and eat the next unrelated click.
+- **Double-click renames** (the first click of the pair navigates — harmless); Escape
+  cancels, Enter/blur commits, and only an ACTUAL text change dirties the document.
+- **Keyboard** (from the search input, ring row as target): F2 rename, Delete remove
+  (empty query only — the key must stay typable), Ctrl+B add, **Alt+↑/↓ move among
+  siblings, Alt+←/→ indent/outdent** (RTL: Alt+← nests deeper, matching plain ←'s
+  expand direction).
+- **עדכון יעד לעמוד הנוכחי** (retarget) re-points a row at the current page: it
+  becomes editor-owned — `data-toc-page` set, `src` stamp and href/onclick dropped —
+  and navigates like an added row.
+
+There are deliberately NO visual unsaved-changes cues in the panel (no dirty dot, no
+markers on added/retargeted rows) — the dirty STATE still drives the save flow, the
+beforeunload alert and the host-side close guards; it just is not painted.
+
+**Button icons.** The `+` and `⋯` buttons draw their glyph as a **masked SVG at
+`--icon-size`** (16px) rather than as a text character, so they carry the viewer's own
+icon metrics instead of the font's. Their **background and color behavior is
+deliberately stock** — `background: none` / `--doorhanger-bg-color` →
+`--button-hover-color` on hover, and `opacity` 0.6/0.75 → 1 — so the icons are painted
+with `currentColor` and inherit that opacity, brightening on hover exactly as the text
+glyphs did. The `--toolbar-icon-*` tokens are **not** used, precisely to keep that
+behavior unchanged.
+
+- `#outlineAddButton` reuses PDF.js's own **`images/toolbarButton-zoomIn.svg`** — that
+  file is precisely the `+` glyph this button wants, already in the viewer's icon idiom,
+  so no extra asset is needed. It carries `margin-block: -1px` so the 16px icon does not
+  stretch the pill past the 24px height matched to BookView's `.toc-search` (the 2px
+  spill lands inside the pill's own 4px padding).
+- `#outlineRowMenuButton` uses the added **`web/images/toolbarButton-rowMenu.svg`** and
+  is 24px wide. `outline-search.js` must set **no `textContent`** on it — leaving the
+  old `'⋯'` in place renders the text glyph behind the icon.
+
+  Its **`height` is written from JS**, from the hovered row's measured rect, alongside
+  `top`/`left` — so the button spans the row's full height and its hover fill covers the
+  whole row. This cannot live in CSS: rows are `min-height: 28px` but grow when a title
+  wraps, and `position: fixed` on `document.body` leaves no row to inherit from. The CSS
+  `height: 16px` is a pre-first-hover fallback only. The glyph is centred with flex
+  (`align-items`/`justify-content`) rather than a `line-height`, which would strand it at
+  the top once the box grows.
+
+Edits are written into the **PDF itself** on save via the standard save pipeline — NOT
+stored app-side. Verified live end-to-end: edit → save → reload the saved bytes →
+outline persists (including on a doc with no outline at all).
+
+**The DOM is the model.** The rendered tree is already the source of truth for search,
+tracking, and keyboard nav, so editing it directly keeps all of those working with no
+parallel structure. Rows keep PDF.js's exact shape (`.treeItem > a`, `.treeItems`,
+`.treeItemToggler`), so styling and collapse come for free. Rows with editor-owned
+targets (added or retargeted) carry `data-toc-new` (dashed start-edge marker) and **no
+href** (PDF.js only binds navigation to anchors it created; an empty href would push
+history entries). Delete **promotes children** rather than dropping the subtree.
+XFA documents: every interaction trigger checks `editingDisabled()` (the worker's
+outline block skips isPureXfa, so edits would silently discard on save).
+
+**Page stamps.** `buildPageIndex` was refactored to stamp each row with
+`data-toc-page` instead of building a detached index; `rebuildPageIndexFromDom()`
+re-derives the sorted index from those stamps. This is what lets edits participate in
+current-entry tracking immediately, and it is where an added row's target page lives
+(the page being viewed at add time). `serializeOutlineDom()` walks the tree to
+`[{title, page, items}]` — titles are the DISPLAYED text, so saving persists the
+mangled-title correction permanently. Rows whose destination never resolved inherit the
+nearest previous row's page rather than being dropped.
+
+**Save path — 4 patched files, re-apply all on upgrade:**
+
+1. **`web/outline-search.js`** (added file, no re-apply needed) —
+   `pushOutlineToTransport()` sets `pdfDocument._transport.editedOutline` after every
+   edit; null means "no edits" and save behaves exactly as stock.
+
+2. **`build/pdf.mjs`** — in `WorkerTransport.saveDocument()`, add
+   `editedOutline: this.editedOutline ?? null` to the `SaveDocument` payload (search for
+   `sendWithPromise("SaveDocument"`).
+
+3. **`build/pdf.worker.mjs`** — two edits. Add `editedOutline` to the `SaveDocument`
+   handler's destructured params. Then, immediately after
+   `const refs = await Promise.all(promises);`, insert the outline-writing block (search
+   for "PATCH: write a user-edited outline"): it builds outline-item `Dict`s with
+   Title (`stringToAsciiOrUTF16BE`) / Parent / Prev / Next / First / Last / Count, puts
+   them into `changes`, and puts a **copied catalog** (same ref, `/Outlines` re-pointed
+   or omitted) alongside — the trailer's Root ref is unchanged, so the incremental
+   update stays valid. The `changes.put(ref, {data: dict})` form is serialized by
+   `writeChanges` → `writeObject`, the same path annotations use — encryption
+   transforms included.
+   **Placement is critical: the block must run BEFORE the `changes.size === 0` early
+   return**, or an outline-only save returns the original bytes unchanged.
+
+   **`src` follows item identity.** `outline-search.js` stamps `data-toc-src` by walking
+   the outline tree and the rendered rows together (PDF.js renders them 1:1), not by
+   destination: `flat` is BFS while the DOM is depth-first, so a per-href queue gave
+   items sharing a destination at different depths each other's `src`, and saving moved
+   bold/italic/color/closed state onto the other item. The href queue remains only as a
+   fallback when the DOM shape does not match the outline.
+
+   **Attribute preservation (`src`).** Entries carry `src` — their index into the
+   ORIGINAL outline flattened in the same BFS order the viewer uses — and the worker
+   fetches `pdfManager.ensureCatalog("documentOutlineForEditor")` (whose items keep
+   `rawDict`) to copy everything the editor does not model **verbatim from the raw
+   dict**: `/Dest` (precise XYZ, named destinations) or `/A` (URL and other actions),
+   `/F` (bold/italic), `/C` (color), and the closed-branch state (negative `/Count`,
+   recomputed over the possibly-changed children but keeping the original sign). This
+   is a SAME-document save, so raw values including indirect refs are valid as-is — no
+   cross-document cloning like `PDFEditor.#setOutlineItemDest` needs. Without `src`
+   (user-created rows) the entry gets a `[pageRef /XYZ null null null]` Dest; a
+   malformed page ref leaves the entry title-only rather than writing `Dest [null …]`.
+   Verified live: renaming one entry + adding one preserves, byte-exact in semantics,
+   a precise XYZ dest with coordinates/zoom, a named destination (still resolving
+   through `/Dests`), a URL action, bold, italic+color, a `/Fit` dest, a closed branch
+   (`count:-2`), and a nested child's coordinates.
+
+   **Catalog seeding.** The block seeds its catalog copy from
+   `changes.get(catalogRef)?.data` when present — `StructTreeRoot.createStructureTree`
+   puts an updated catalog into `changes` when saving annotations creates a structure
+   tree on an untagged PDF, and seeding from the original would clobber its
+   `/StructTreeRoot` and orphan the whole structure tree.
+
+4. **`web/viewer.mjs`** — in `downloadOrSave()`, the save/download decision checks only
+   `annotationStorage.size > 0`; add `|| this.pdfDocument?._transport?.editedOutline != null`
+   (search for "PATCH: also route through save()"). Without this an outline-only edit
+   takes the `download()` branch and silently writes the ORIGINAL bytes.
+
+**Dirty state.** `outlineDirty` is OR-ed into the viewer's dirty logic by wrapping
+`app._hasChanges` at runtime (no viewer.mjs patch; the `beforeunload` handler is bound to
+the app object, so the wrapper is what it calls). The + button shows a dot while dirty.
+Verified live: the beforeunload alert fires for outline-only edits. Everything resets on
+`documentloaded`.
+
+**Create-from-scratch.** A PDF with no outline: PDF.js disables the תוכן עניינים option
+and bounces the sidebar off the outline view (`onTreeLoaded` → `switchView(THUMBS)`).
+The panel re-enables the option in its own `outlineloaded` handler (registered later, so
+it runs after the disable), and `updateVisibility` shows the bar whenever a document is
+loaded — even with zero entries — so the + button is reachable and the first added entry
+starts the outline. The worker patch handles the no-existing-outline case natively: it
+builds a new `/Outlines` root and points the copied catalog at it. (`PDFEditor`'s own
+`#makeOutline` was NOT reused — it builds a whole new document; the patch reuses only its
+dict-shape conventions.)
+
+**Readiness signal.** `#outlineSearchBar[data-outline-loaded="1"]` is set once outline
+processing (including the empty-outline dance) has settled, and removed on
+`documentloaded`. PDF.js re-enables all view buttons early during document setup, so
+button state alone is a racy readiness probe — tests and the host app should key on this
+attribute instead.
+
+### Host (Vue app) integration — unsaved-edits guard
+
+The viewer's iframe is destroyed or navigated by the host on tab switches, so unsaved
+edits are pushed OUT eagerly — after every edit, not at teardown (there is no reliable
+teardown moment). Contract, all on the iframe `window`:
+
+- **`__khOutlineHostNotify({dirty, outline})`** — assigned by the host
+  (`usePdfViewPageTracking.attach`); called after every edit and, with `dirty:false`,
+  after a COMPLETED save. The host parks the snapshot per tab
+  (`bookViewStore.pdfEditStateByTabId`) and its close guards read it for background tabs
+  whose viewer no longer exists.
+- **`__khOutlineEditor`** — `{getState, setState, isDirty}`. The host calls
+  `setState({outline})` to rehydrate parked edits when a tab returns with the same file
+  (rows are rebuilt with `data-toc-page` and no href — navigation goes through the
+  `goToPage` fallback, and the next save writes exactly this tree).
+- **`__khSuppressUnloadPrompt`** — set by the host just before a Vue-initiated
+  navigation/teardown. The `_hasChanges` wrapper returns false while set, silencing
+  PDF.js's own beforeunload prompt for navigations whose state the host already holds.
+  Without it, switching between two PDF tabs pops the browser's native English prompt
+  mid-switch — and cancelling that desyncs the iframe from the already-switched tab.
+- **`kh-save-complete`** (DOM event on `document`) — dispatched by the patched
+  `_triggerDownload` in `viewer.mjs` only after the file was actually written (or the
+  fallback anchor download fired). A cancelled save picker dispatches nothing, so edits
+  correctly stay dirty. Clears the editor's dirty flag and notifies the host.
+
+**TOC autosave (writable local `.pdf` only).** `usePdfViewPageTracking` writes every
+outline edit straight into the file, debounced 600 ms after each dirty notify: it runs
+`pdfDocument.saveDocument()` and sends ONLY the bytes past the loaded length to the
+`writePdfTail` op (service in dev, C# bridge action hosted; logic in Core
+`PdfIncrementalSaveWriter`), which writes them at that offset and truncates after. Every
+save MERGES INTO THE FILE'S LAST UPDATE SECTION (Focus/title/text-layer fixes, item 12): the
+worker keeps the bytes before that section and rewrites only the section, so the host writes
+`saved[offset..]` at `offset` = the end of the last revision (`%%EOF`) inside the common
+prefix of the loaded and the saved bytes (`rewriteOffset`, computed on the first save of a
+load and reused). The loaded prefix before it never changes, and repeated saves and sessions
+never grow the file. Old files ending in a `%KH-TOC start= prev= sha=` marker (the earlier,
+app-specific mechanism) are read as a normal last section; the marker line is dropped.
+Re-apply this worker
+patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
+On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
+(capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
+it immediately — no picker. Word-rendered PDFs and HebrewBooks downloads have no writable
+source path and keep the stock save-as flow + parked-snapshot rehydrate.
+
+Vue side (not in this folder): `bookViewStore` (snapshots + `hasUnsavedPdfChanges` +
+dialog state), `tabStore` (synchronous close guards at the single chokepoint all close
+paths funnel through, including the native chrome-tabs mirror), `App.vue` (themed
+ConfirmDialog + window `beforeunload`). **Known gap:** the WinForms WebView2 host closing
+its window does not run `beforeunload` — the C# side needs a FormClosing hook that asks
+the Vue app (`bookViewStore.hasAnyUnsavedPdfChanges()`) before allowing close.
+
+**Known limitations (deliberate):**
+
+- **Page-organizer combo:** `downloadOrSave` takes the `hasStructuralChanges()` →
+  `onSavePages` branch first, and that pipeline (`PDFEditor.extractPages`) rebuilds the
+  outline itself from the original — sidebar outline edits do not ride it, and the
+  `data-toc-page` stamps would be stale after reordering anyway. Combining TOC edits
+  with page reorganization in one session is unsupported; save one before doing the
+  other.
+- **`close()` auto-save not extended:** PDF.js's `close()` auto-saves only when
+  `_annotationStorageModified`. Outline edits are deliberately NOT wired into it — in
+  this app `close()` runs during host-driven teardown, where popping a save dialog is
+  exactly what the Vue-side snapshot/guard system exists to prevent.
+- **Per-document reset rides `documentinit`, not `documentloaded`:** the latter only
+  fires after `getDownloadInfo()` resolves — i.e. after the FULL file downloads — which
+  under this viewer's `disableAutoFetch: true` is late or never for an in-place
+  `open()`. `documentinit` fires right after `setInitialView`, per document, regardless
+  of download progress.
+
+### If the outline DOM changes on upgrade
+
+Only two assumptions matter, both in `indexOutline()`:
+`.treeItem` is the per-item wrapper class, and an item's own anchor is `:scope > a`.
+Verify those in `PDFOutlineViewer.render()` (search for `div.className = "treeItem"`).
+The editor additionally assumes top-level `.treeItem`s are DIRECT children of
+`#outlinesView` (`serializeOutlineDom`'s root walk and `addItem`'s fallback append),
+and that `.treeItemToggler` is prepended as the row's first child.
+
+---
+
+## Open at an outline entry (`#khOutline=`)
+
+The Vue app opens a HebrewBooks edition of a text book and wants it to land on the section
+the reader was in. It appends `#khOutline=<encodeURIComponent(section path)>` to the iframe
+src, once, on the tab's first load (the path is the book view breadcrumb, segments joined by
+a middle dot).
+
+Two patches in `web/viewer.mjs`, both marked `[KleiKodesh]`:
+
+1. **Top of the module, before `/******/ // The require scope`** — `khInitialOutlineTarget`
+   reads `khOutline` out of `location.hash` and strips it with `history.replaceState`, keeping
+   any other hash parameters. This must run before `PDFViewerApplication` is defined, because
+   its `initialBookmark: document.location.hash.substring(1)` initialiser captures the hash at
+   module load. Stripped, PDF.js never tries to resolve it as a destination, and a hash with
+   nothing else leaves the normal ViewHistory restore untouched. The same block defines
+   `khFindOutlineItem(outline, path)`: niqqud/punctuation-stripped, whitespace-collapsed
+   titles; deepest path segment first, then shallower; exact equality before containment;
+   ties go to the item with the most matching ancestors.
+2. **`onePageRendered.then` → `pdfDocument.getOutline().then`**, right after
+   `this.pdfOutlineViewer.render({ outline, pdfDocument })` — on the first document only
+   (`this._khOutlineTargetDone`), find the item and call
+   `this.pdfLinkService.goToDestination(item.dest)`. No match = nothing happens.
+
+---
+
+## Focus, title and text-layer fixes
+
+Five small `[KleiKodesh]` patches:
+
+1. **`web/viewer.mjs` `PDFLinkService.goToDestination`** — the `textlayerrendered` handler focuses the target page's text layer late. It now skips that when `document.activeElement` is contentEditable, an INPUT or a TEXTAREA: a double-click rename of an outline row on another page was blurred (and so cancelled) by it.
+2. **`web/outline-search.js` `kh-save-complete` listener** — calls `app.setTitle()` after clearing `outlineDirty`. `setTitle()` last ran before the save dialog finished, so the window title kept its `* ` prefix after a completed save.
+3. **`web/viewer.mjs` `PDFViewer._cancelRendering()`** (the big-jump cancel patch) — a text layer whose div is already appended (built) is kept: `cancelRendering({ keepTextLayer: true })`. A still-pending text layer is cancelled as before, and if the canvas is FINISHED the page goes back to INITIAL so the rendering queue redraws it and re-requests the text layer when visible. Before, three jumps on long.pdf left visible page 22 with 0 spans for good.
+
+4. **`web/viewer.mjs` `window.print` override (pdf_print_service)** — with `disableAutoFetch` the page views only get their `pdfPage` once displayed, so `pageViewsReady` stayed false and every print (button, Ctrl+P, the app's `contentWindow.print()`) only alerted `pdfjs-printing-not-ready`. Now `window.print()` first fetches the missing pages (`pdfDocument.getPage` → `pageView.setPdfPage`, like `PDFViewer.setDocument` without disableAutoFetch) and then prints. A print before the pages exist waits for `pagesinit` instead of throwing. `disableAutoFetch` stays on.
+5. **`web/viewer.mjs` comment dates (`CommentManager`, `CommentSidebar.#setDate`, `CommentPopup`)** — a comment with no /M and no /CreationDate showed "January 1, 1970" (`Intl.DateTimeFormat.format(null)` is the epoch) and threw in the comments sidebar (`null.toISOString()`). Now it shows no date. The date format uses the viewer's UI language (`l10n.getLanguage()`, passed to `CommentManager` as a new last argument) instead of the browser's.
+6. **Page organizer: pages moved while off screen (`build/pdf.mjs` `WorkerTransport.khPagesEdited`, `getPage`; `web/viewer.mjs` `PDFViewerApplication.onPagesEdited`)** — page proxies are cached by position and keep what they loaded, but only the proxies of rendered page views moved with their pages, so a page moved onto a position whose proxy was already loaded (thumbnail, find) showed the old page there. Every cached proxy now moves with its page on `pagesedited` (restored on cancelDelete); a proxy that finishes loading after a reorganisation is placed where its page now is.
+7. **Find after reorganising pages (`web/viewer.mjs` `PDFFindController.#extractText`, `#khQueueExtract`, `#khRequeueMissingText`)** — a page whose text was not extracted yet when the pages were moved wrote its text at its old index (and the moved page kept "" for good, so find missed it). Extractions are tied to the page order they started in; after a reorganisation the stale ones write nothing and the pages not extracted yet are queued again.
+8. **Unsaved state (`web/viewer.mjs` `_hasChanges`, `_khArmSave`, `_khOnSaveComplete`)** — "unsaved" was "annotationStorage is not empty" or "pages were ever reorganised", so after a completed save the title kept "* " and closing still warned. It now tracks edits since the last completed save (`kh-save-complete`); an edit made while the save dialog is open stays unsaved.
+9. **Saving reorganised pages (`build/pdf.worker.mjs` `ExtractPages`, `PDFEditor.#buildOutline`, `#khApplyEditedOutline`; `build/pdf.mjs` `extractPages`)** — the whole-document save (`downloadOrSave`) now writes the sidebar's edited outline, like `SaveDocument` (entries with `src` keep their target, bold/italic, colour and closed state); it used to write the outline as loaded, dropping the edits. A copied page made the document appear twice in the page list and the outline was written once per entry; it is written once. "Save selected pages" keeps the loaded outline. The file is rewritten whole, as before, so repeated saves do not grow it.
+10. **Comment on an existing annotation without an editor (`build/pdf.mjs` `AnnotationElement.commentText` setter; `build/pdf.worker.mjs` `AnnotationFactory.saveNewAnnotations` default case, `KhExistingAnnotation`)** — the stored value had `page` but no `pageIndex`, so the save never found its page and the comment was lost; and the worker had no save path for annotation types without an editor (square, text, underline...). The value now carries `pageIndex`, and such an annotation keeps its dict with new /Contents, /M and /Popup (a new popup gets the annotation's /Rect).
+11. **Comment edited through an editor on an annotation that already has a popup (`build/pdf.worker.mjs` `MarkupAnnotation.createNewAnnotation`, `Page.saveNewAnnotations`)** — a second popup was created and the old one stayed orphaned in /Annots. The existing popup (`popupRef`) is reused with its other keys, and a reused popup is not added to /Annots twice.
+12. **Incremental save merges into the last update section (`build/pdf.worker.mjs` SaveDocument, `khLastSection`, `khLastSectionObjects`, `getTrailerDict`; `src/features/pdf-viewer/usePdfViewPageTracking.ts` `rewriteOffset`)** — replaces the `%KH-TOC start= prev= sha=` marker (and `khReadTocMarker`/`khDetach`), which only covered outline-only sections. The last section is found from the standard structure alone: the final startxref's xref table or stream (plus an `/XRefStm` inside the section), its `/Prev`, and the previous revision's `startxref <Prev> %%EOF` right before it. Every object it defines is carried into the new section (fetched, so strings/streams are re-encrypted for their own numbers; object/xref streams are unpacked; free entries stay free; the save's own changes win per object; the replaced outline's old items are not carried), which is written over it with `/Prev` = its `/Prev`. Bytes before it stay byte-identical; other tools' incremental changes (MuPDF/Acrobat annotations) are kept. No previous revision, a signed last section (`/ByteRange`), linearized or unproven structure → plain append (a signed file gets one new section; later saves merge into that). Hybrid files whose last table points back at an `/XRefStm` in the bytes before it (Word) keep that `/XRefStm` in the new trailer.
+13. **Host save in place (`web/viewer.mjs` `khArmHostSave`, `khDisarmHostSave`, `khNeedsWholeFileSave`; `src/features/pdf-viewer/usePdfViewPageTracking.ts` `runAutosave`, Ctrl+S, `saveAs`)** — the app's in-place save (writePdfTail: autosave, Ctrl+S, close guard) calls `saveDocument()` itself and dispatches `kh-save-complete` without arming (8.), so after it form/annotation edits kept "* " and the unsaved state. It now arms right before `saveDocument()` (edit seq recorded, so an edit made during the save stays unsaved) and disarms afterwards; an unarmed `kh-save-complete` or an unrelated download still clears nothing. Reorganised pages or a merged document can't be written as a tail (it wrote a no-op tail and claimed success): `khNeedsWholeFileSave()` routes autosave, Ctrl+S and the close guard to the viewer's own save (`downloadOrSave`, save dialog).
+14. **Save-as settles on cancel (`web/viewer.mjs` `DownloadManager._triggerDownload`; `src/features/pdf-viewer/usePdfViewPageTracking.ts` `saveAs`)** — a cancelled File System Access picker emitted nothing, so the close guard's save-as waited its 120 s timeout. `_triggerDownload` now dispatches `kh-save-settled` when the picker/write finishes either way (`finally`) and after the anchor fallback (not for attachments); it follows `kh-save-complete` on success. `saveAs` resolves false on `kh-save-settled` (still dirty) and true on `kh-save-complete`; the timeout stays only as a safety net.
+
+---
+
+## Vue App Integration (no changes needed on upgrade)
+
+These live in the Vue app and do not need to be re-applied to PDF.js:
+
+- `PdfViewPage.vue` — passes `?file=`, `?locale=he`, `?filename=`, `?cMapPacked=true` to the iframe src
+- `themes.ts syncPdfViewerTheme()` — injects `--*-custom` CSS variables and `--pdf-filter-custom` into the iframe
+- `settingsStore.togglePdfPageFilters()` — sets `data-pdf-filters` attribute on the iframe document element

@@ -1,0 +1,159 @@
+<script setup lang="ts">
+import { t } from '@/i18n'
+import { IconArrowCounterclockwise20Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import TopSearchBar from '@/components/TopSearchBar.vue'
+import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
+import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { BooksView } from '@/stores/settingsStore'
+
+defineProps<{
+  view: BooksView
+  path: CategoryNode[]
+  /** Which face the bar is showing: the search field, or the path. */
+  showSearch: boolean
+}>()
+defineEmits<{
+  setView: [BooksView]
+  navigate: [number]
+  navigateToSibling: [{ atIndex: number; node: CategoryNode }]
+  openSearch: []
+  goHome: []
+}>()
+
+const VIEW_LABELS = {
+  list: t('bookCatalog.titleBar.listView'),
+  cards: t('bookCatalog.titleBar.cardsView'),
+  tiles: t('bookCatalog.titleBar.tilesView'),
+  tree: t('bookCatalog.titleBar.treeView'),
+}
+</script>
+
+<template>
+  <!-- The Explorer address bar: ONE pill holds the whole thing. Home sits at one
+       end and the search button at the other; the middle is the path, and clicking
+       it turns that stretch into a text field. The buttons are in the bar's own end
+       slots, so they hold their positions when the middle swaps — switching faces
+       cannot resize or reflow the bar.
+
+       It IS the app's search bar (TopSearchBar), not a copy of it: the padding,
+       height, pill and inset shadow come from there, which is what keeps this and
+       the full-text-search bar the same control. `gap` is tightened because this
+       one has a button at each end rather than an input filling it. -->
+  <TopSearchBar gap="4px">
+    <!-- mousedown.prevent on every button: blur fires BEFORE click, so without it
+         clicking one while typing would collapse the field first and move the
+         button out from under the pointer. -->
+    <template #left>
+      <button class="bar-btn pill-btn" :title="$t('bookCatalog.titleBar.reset')" @mousedown.prevent @click="$emit('goHome')">
+        <IconArrowCounterclockwise20Regular />
+      </button>
+    </template>
+
+    <!-- The field is ALWAYS mounted and always focusable, even on the path face —
+         it carries the page's keydown handler, and the whole page is one combobox
+         driven from it: the arrows move a highlight through the list below whether
+         or not the user is searching. So the path face hides it by collapsing it to
+         nothing (see .pill-middle.is-hidden) rather than with `display: none` or a
+         `v-if`, either of which would stop it holding focus and kill the keyboard
+         the moment you opened a category. -->
+    <div class="pill-middle" :class="{ 'is-hidden': !showSearch }">
+      <slot name="search" />
+      <!-- After the field, not before it: the path face carries the same icon at
+           this same end, so putting it anywhere else would make it jump across the
+           bar the moment the user started typing. -->
+      <IconSearch20Regular class="search-icon" />
+    </div>
+
+    <!-- The path. Clicking anywhere that is not a crumb opens the field, the way
+         an address bar does — the crumbs and chevrons stop their own clicks, so
+         what reaches here is the slack around them, including the icon below. -->
+    <div v-show="!showSearch" class="pill-middle pill-path" @click="$emit('openSearch')">
+      <!-- The tree has no "current folder" — the whole catalog is on screen — so
+           the path means nothing there and the bar shows only home. -->
+      <BookCatalogBreadcrumb
+        v-if="view !== 'tree'"
+        :path="path"
+        @navigate="$emit('navigate', $event)"
+        @navigate-to-sibling="$emit('navigateToSibling', $event)"
+      />
+      <!-- A picture of what the bar becomes, not a control: it sits INSIDE the
+           clickable path stretch, so clicking it opens the field the same way
+           clicking the blank space beside it does. A button would have been a
+           second way to do one thing, with its own focus and hover to keep in
+           step. -->
+      <IconSearch20Regular class="search-icon path-search-icon" />
+    </div>
+    <template #right>
+      <!-- Page-specific buttons beside the view menu (UserSpace's add/remove). -->
+      <slot name="actions" />
+      <ViewModeDropdown
+        class="pill-btn"
+        :model-value="view"
+        :labels="VIEW_LABELS"
+        :title="$t('bookCatalog.titleBar.viewMenu')"
+        @update:model-value="$emit('setView', $event)"
+      />
+    </template>
+  </TopSearchBar>
+</template>
+
+<style scoped>
+/* The pill itself — padding, height, fill, border, inset shadow, and the slotted
+   input's type size — all come from TopSearchBar. What is left here is only what
+   this bar adds: the swapping middle, and the buttons in its end slots.
+
+   The middle takes whatever the end buttons leave. `flex-basis: 0` keeps its width
+   independent of what is typed into it, so a long query cannot widen the field and
+   push the buttons out. */
+.pill-middle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+/* The path stretch is clickable dead space — clicking it opens the field, so it
+   takes a text caret rather than the default arrow. */
+.pill-path {
+  cursor: text;
+}
+/* Pushed to the far end of the path stretch, where the button used to be. */
+.path-search-icon {
+  margin-inline-start: auto;
+}
+/* Hidden, but still laid out and still focusable: a `display: none` input cannot
+   hold DOM focus, and focus is what the whole keyboard model rests on. Collapsed
+   to zero width with no visible ink instead. */
+.pill-middle.is-hidden {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+:deep(.search-inner input) {
+  flex: 1;
+  /* Inputs carry an intrinsic min-width that would otherwise hold the pill open
+     and push the buttons out of it. */
+  min-width: 0;
+}
+/* Always shown, on both faces: it is what marks the bar as a search bar, and the
+   field has room for it. (It used to hide on focus to buy width back for the text,
+   from when the bar was cramped enough for that to matter.) */
+.search-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
+/* The pill's buttons take its scale, not the title bar's — the same 20px the
+   full-text-search bar gives its own in-pill buttons, both sitting in a 30px
+   pill. No margins: the bar's gap is the only thing that positions them. */
+.pill-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+</style>

@@ -1,0 +1,195 @@
+using Microsoft.Web.WebView2.Core;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace KitveiHakodeshLib
+{
+    // Navigation inside a Torah website's iframe (WebViewPage.vue names it "site-<tab id>").
+    //
+    //  - A whitelisted address: allowed, and pushed to the page ("siteFrameNavigated") so the tab
+    //    knows where the user is - tab restore, history cards and Back/Forward return there.
+    //  - Any other web address: cancelled in the frame and opened in the system browser, so only
+    //    listed sites ever show inside the app.
+    //
+    // Only the app's direct child frames named "site-..." are watched; the app's own frames
+    // (local files, PDF.js) and a site's nested frames (players, sign-in widgets) are left alone.
+    public partial class AppViewer
+    {
+        private const string SiteFrameNamePrefix = "site-";
+
+        // Tells the app once per page that the reader typed in a site (protects it from automatic
+        // unloading - siteFrames.ts). Same text as SITE_FRAME_ACTIVITY_SCRIPT in siteFrameShortcutKeys.ts.
+        private const string SiteFrameActivityScript = @"(function () {
+  if (window === window.top || window.parent !== window.top || !/^site-/.test(window.name)) return;
+  var told = false;
+  window.addEventListener('input', function () {
+    if (told) return;
+    told = true;
+    window.parent.postMessage({ type: 'kitveiSiteInput' }, '*');
+  }, true);
+})();";
+
+        // Word pane only: a site page's own scripts see the iPhone identity its page request was sent
+        // with (WebSitesFrameHeaderStripper.UseIosUserAgent). Only in the app's site frames, and not
+        // for the sites that keep the real identity (dicta) or the local Kiwix reader.
+        private static readonly string SiteFrameIosScript = @"(function () {
+  if (window === window.top || !/^site-/.test(window.name) || /dicta|^kiwix-app$/.test(location.hostname)) return;
+  var ua = '" + KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.IosUserAgent + @"';
+  try {
+    Object.defineProperty(Navigator.prototype, 'userAgent', { get: function () { return ua; } });
+    Object.defineProperty(Navigator.prototype, 'platform', { get: function () { return 'iPhone'; } });
+    Object.defineProperty(Navigator.prototype, 'vendor', { get: function () { return 'Apple Computer, Inc.'; } });
+  } catch (e) { }
+})();";
+
+        private Timer _lowMemoryTimer;
+        private IntPtr _lowMemoryNotification = IntPtr.Zero;
+
+        private void AttachSiteFrameNavigation()
+        {
+            _webView.CoreWebView2.FrameCreated += OnAppChildFrameCreated;
+            _ = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(SiteFrameActivityScript);
+            if (IsVstoHost && _webSites != null)
+            {
+                // Word pane: sites in phone layout, like the add-in's Websites pane.
+                _webSites.UseIosUserAgent = true;
+                _ = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(SiteFrameIosScript);
+            }
+            WatchLowMemory();
+            WatchMinimized();
+        }
+
+        // ── Memory per site (the leave prompt and low-memory choice use it) ──────────────────
+
+        /// <summary>
+        /// Reply: { frames: { "site-<tab id>": MB } } - the private memory of the renderer process(es)
+        /// showing each website frame, from WebView2's process list. A process shared by several
+        /// site frames is split between them.
+        /// </summary>
+        internal async Task HandleSiteFrameMemory(string id)
+        {
+            var frames = new Dictionary<string, double>();
+            try
+            {
+                IReadOnlyList<CoreWebView2ProcessExtendedInfo> infos = await _webView.CoreWebView2.Environment.GetProcessExtendedInfosAsync();
+                foreach (CoreWebView2ProcessExtendedInfo info in infos)
+                {
+                    var names = info.AssociatedFrameInfos
+                        .Select(f => f.Name ?? "")
+                        .Where(n => n.StartsWith(SiteFrameNamePrefix, StringComparison.Ordinal))
+                        .Distinct()
+                        .ToList();
+                    if (names.Count == 0) continue;
+                    double mb;
+                    try { mb = System.Diagnostics.Process.GetProcessById(info.ProcessInfo.ProcessId).PrivateMemorySize64 / 1048576.0; }
+                    catch (Exception) { continue; } // the process just ended
+                    foreach (string name in names)
+                        frames[name] = (frames.TryGetValue(name, out double sum) ? sum : 0) + mb / names.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("site frame memory: " + ex.Message);
+            }
+            _bridge.Reply(id, new { frames });
+        }
+
+        // ── Windows low memory: the page unloads one hidden site per signal (siteFrames.ts) ───
+
+        [DllImport("kernel32.dll")] private static extern IntPtr CreateMemoryResourceNotification(int notificationType);
+        [DllImport("kernel32.dll")] private static extern bool QueryMemoryResourceNotification(IntPtr handle, out bool state);
+        [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+
+        private void StopWatchingLowMemory()
+        {
+            _lowMemoryTimer?.Dispose();
+            _lowMemoryTimer = null;
+            if (_lowMemoryNotification != IntPtr.Zero) CloseHandle(_lowMemoryNotification);
+            _lowMemoryNotification = IntPtr.Zero;
+        }
+        private const int LowMemoryResourceNotification = 0;
+
+        private void WatchLowMemory()
+        {
+            _lowMemoryNotification = CreateMemoryResourceNotification(LowMemoryResourceNotification);
+            if (_lowMemoryNotification == IntPtr.Zero) return;
+            // Polled (cheap), so the UI thread pushes the event; one signal per 30 s while memory stays low.
+            _lowMemoryTimer = new Timer { Interval = 30000 };
+            _lowMemoryTimer.Tick += (s, e) =>
+            {
+                if (QueryMemoryResourceNotification(_lowMemoryNotification, out bool low) && low)
+                    _bridge?.PushEvent(new { @event = "lowMemory" });
+            };
+            _lowMemoryTimer.Start();
+        }
+
+        // ── App minimized: WebView2 keeps less in memory (scripts still run) ───────────────────
+
+        private void WatchMinimized()
+        {
+            Form form = FindForm();
+            if (form == null) return;
+            form.Resize += (s, e) =>
+            {
+                try
+                {
+                    _webView.CoreWebView2.MemoryUsageTargetLevel = form.WindowState == FormWindowState.Minimized
+                        ? CoreWebView2MemoryUsageTargetLevel.Low
+                        : CoreWebView2MemoryUsageTargetLevel.Normal;
+                }
+                catch (Exception ex) { Log("memory target level: " + ex.Message); }
+            };
+        }
+
+        private void OnAppChildFrameCreated(object sender, CoreWebView2FrameCreatedEventArgs e)
+        {
+            // The name as the app set it (the iframe's name attribute), read once: Frame.Name follows
+            // window.name, which a site's own script may change.
+            string name = e.Frame.Name ?? "";
+            if (!name.StartsWith(SiteFrameNamePrefix, StringComparison.Ordinal)) return;
+            e.Frame.NavigationStarting += (s, args) => OnSiteFrameNavigationStarting(name, args);
+        }
+
+        /// <summary>
+        /// A page inside the app (a Torah website such as Hameshiv, in a frame or a popup) follows
+        /// an otzaria:// / zayit:// / our own book link: open it here, not in the other app.
+        /// Hooked on the main view and on every popup view.
+        /// </summary>
+        internal void OnLaunchingExternalUriScheme(object sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
+        {
+            HostLink link = HostLink.TryParse(e.Uri);
+            if (link == null) return; // mailto:, other apps - Windows' usual prompt
+            e.Cancel = true;
+            Log("external link opened in the app: " + e.Uri);
+            if (InvokeRequired) BeginInvoke((Action)(() => OpenBookFromHost(link)));
+            else OpenBookFromHost(link);
+        }
+
+        private void OnSiteFrameNavigationStarting(string name, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (_webSites == null) return;
+            if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri uri)) return;
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return; // about:, data:, blob:
+
+            if (_webSites.IsWebsiteAddress(uri.AbsoluteUri) || IsKiwixAddress(uri))
+            {
+                _bridge?.PushEvent(new { @event = "siteFrameNavigated", frame = name, url = uri.AbsoluteUri });
+                return;
+            }
+            e.Cancel = true;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Log("site frame: could not open " + uri + " externally: " + ex.Message);
+            }
+        }
+    }
+}

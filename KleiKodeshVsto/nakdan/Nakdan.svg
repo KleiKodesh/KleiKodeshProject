@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="16" cy="16" r="13" fill="none" stroke="#0A84E8" stroke-width="2.2"/>
+  <text
+    x="16"
+    y="20"
+    font-family="Segoe UI, Arial, sans-serif"
+    font-size="18"
+    font-weight="500"
+    text-anchor="middle"
+    fill="#0A84E8">אָ</text>
+</svg>

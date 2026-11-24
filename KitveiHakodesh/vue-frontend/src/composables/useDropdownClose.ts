@@ -1,0 +1,112 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
+import { onClickOutside, useEventListener, type MaybeElementRef } from '@vueuse/core'
+import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
+import { useDropdownViewportFit } from './useDropdownViewportFit'
+
+type MaybeElement = HTMLElement | null | undefined
+
+/**
+ * Closes a dropdown when the user clicks outside it OR when the browser window
+ * loses focus (e.g. clicking into a WebView iframe or switching apps).
+ *
+ * Also solves the toggle-button race: when the outside click lands on the
+ * toggle button, `justClosed` is set to `true` for the duration of that event
+ * loop tick. The toggle handler should guard with:
+ *
+ *   function toggle() {
+ *     if (closer.justClosed.value) return
+ *     isOpen.value = !isOpen.value
+ *   }
+ *
+ * This prevents the sequence: pointerdown closes → click on button reopens.
+ *
+ * @param target       - The dropdown root element ref
+ * @param handler      - Called when the dropdown should close
+ * @param options.ignore      - Extra elements that don't count as "outside"
+ * @param options.toggleButton - The button that opens/closes the dropdown;
+ *                               clicks on it suppress the handler so the
+ *                               button's own click can handle the close
+ * @param options.enabled - When it resolves to `false`, neither the outside
+ *                          click nor the blur close fires. Defaults to enabled.
+ * @param options.fitToViewport - Defaults to true: the dropdown is kept inside the window
+ *                          and scrolls when taller than the room left (see
+ *                          useDropdownViewportFit). Pass false for targets that are not popups.
+ */
+export function useDropdownClose(
+  target: MaybeElementRef<MaybeElement>,
+  handler: (event?: FocusEvent | MouseEvent | PointerEvent | TouchEvent | Event) => void,
+  options?: {
+    ignore?: MaybeElementRef<MaybeElement>[]
+    toggleButton?: MaybeElementRef<MaybeElement>
+    closeOnBlur?: boolean
+    enabled?: MaybeRefOrGetter<boolean>
+    fitToViewport?: boolean
+  },
+) {
+  const hostWindow = useHostWindow()
+  if (options?.fitToViewport !== false) useDropdownViewportFit(target)
+
+  const justClosed = ref(false)
+  const isEnabled = () => toValue(options?.enabled) !== false
+
+  function close(e?: Parameters<typeof handler>[0]) {
+    handler(e)
+    if (options?.toggleButton) {
+      justClosed.value = true
+      // Reset after the click event that follows this pointerdown has fired
+      setTimeout(() => {
+        justClosed.value = false
+      }, 0)
+    }
+  }
+
+  onClickOutside(
+    target,
+    (e) => {
+      if (!isEnabled()) return
+      const btn = toValue(options?.toggleButton)
+      if (btn && btn.contains(e.target as Node)) {
+        justClosed.value = true
+        setTimeout(() => {
+          justClosed.value = false
+        }, 0)
+        return
+      }
+      close(e)
+    },
+    { ignore: options?.ignore, window: hostWindow },
+  )
+
+  // A press on the native chrome (tab strip / title bar) dispatches no DOM event,
+  // so neither the outside-click nor the blur path above can see it. The host
+  // pushes it to us instead.
+  onNativeChromePressed(() => {
+    if (!isEnabled()) return
+    if (!toValue(target)) return
+    // handler(), not close(): close() arms `justClosed` to swallow the DOM click that
+    // follows a pointerdown, but a native press produces no such click. Arming it here
+    // would instead swallow the user's NEXT real click on the toggle button.
+    handler()
+  })
+
+  if (options?.closeOnBlur !== false) {
+    useEventListener(hostWindow, 'blur', (e: FocusEvent) => {
+      // Use setTimeout so hostWindow.document.activeElement settles before we check focus.
+      setTimeout(() => {
+        if (!isEnabled()) return
+        if (!toValue(target)) return
+        // hostWindow.document.hasFocus() returns true when focus is inside a child iframe
+        // (the top-level document is still considered focused). We must also
+        // close when focus has moved into an iframe — detect that by checking
+        // whether hostWindow.document.activeElement is an iframe or object element.
+        const activeElement = hostWindow.document.activeElement
+        const focusMovedIntoFrame =
+          activeElement?.tagName === 'IFRAME' || activeElement?.tagName === 'OBJECT'
+        if (!hostWindow.document.hasFocus() || focusMovedIntoFrame) close(e)
+      }, 0)
+    })
+  }
+
+  return { justClosed }
+}

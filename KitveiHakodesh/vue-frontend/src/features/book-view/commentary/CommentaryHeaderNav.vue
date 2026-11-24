@@ -1,0 +1,353 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { normalize } from '@/utils/normalizeText'
+import {
+  IconChevronDown20Regular,
+  IconChevronUp20Regular,
+  IconChevronRight20Regular,
+  IconChevronLeft20Regular,
+  IconMinimize20Regular,
+  IconBookOpen20Regular,
+  IconFilter20Regular,
+  IconLink20Regular,
+  IconLinkDismiss20Regular,
+} from '@iconify-prerendered/vue-fluent'
+import type { CommentaryGroup } from './useCommentary'
+import PaneWindowGlyph from '@/components/PaneWindowGlyph.vue'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import { commentaryDisplayTitle } from './commentaryGroupBuilder'
+import type { PinnedCommentaryGroup } from '../bookViewTypes'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
+const props = defineProps<{
+  groups: CommentaryGroup[]
+  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
+  activePinnedGroup: PinnedCommentaryGroup | null
+  filterVisible?: boolean
+  activeTocPath?: string
+  /** The panel is shown in its own window. */
+  detached?: boolean
+  /** A detached panel: whether it changes with the line picked in the book. */
+  followsBook?: boolean
+}>()
+
+const emit = defineEmits<{
+  'navigate-section': [direction: 'next' | 'prev', bookId: number]
+  'toggle-filter': []
+  'toggle-search': []
+  'open-book': [bookId: number, lineIndex: number]
+  'toggle-detached': []
+  'toggle-follows-book': []
+  close: []
+}>()
+
+const filterBtnRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
+
+defineExpose({ filterBtnRef })
+const componentId = Math.random().toString(36).slice(2)
+
+onMounted(() => nextTick(() => inputRef.value?.focus()))
+
+const groupLabel = (g: CommentaryGroup) => g.path
+
+function navigateToGroup(g: CommentaryGroup) {
+  props.scrollToGroup(g.bookId, g.sectionLabel, g.subSectionLabel, 'header-nav-picker')
+  if (inputRef.value) inputRef.value.value = ''
+}
+
+const activeGroup = computed(() =>
+  props.activePinnedGroup
+    ? props.groups.find(
+        (g) =>
+          g.bookId === props.activePinnedGroup!.bookId &&
+          (g.sectionLabel ?? '') === props.activePinnedGroup!.sectionLabel &&
+          (g.subSectionLabel ?? '') === props.activePinnedGroup!.subSectionLabel,
+      ) ?? null
+    : null,
+)
+
+// The commentator's title, also while its list is still loading (no group yet): the
+// panel's commentator is known throughout, its title comes from the catalog. Without
+// this the box showed its search placeholder for a moment on every line change.
+const booksDataStore = useBooksDataStore()
+// The same form the list's groups carry (commentaryDisplayTitle), so the name does not
+// change shape when the list arrives.
+function catalogDisplayTitle(bookId: number | undefined): string | undefined {
+  const title = bookId != null ? booksDataStore.allBooksMap.get(bookId)?.title : undefined
+  return title ? commentaryDisplayTitle(title) : undefined
+}
+const activeBookTitle = computed(() =>
+  activeGroup.value?.bookTitle
+    ?? catalogDisplayTitle(props.activePinnedGroup?.bookId)
+    ?? '',
+)
+
+const openBookTooltip = computed(() => {
+  const bookTitle = activeBookTitle.value
+  const full = props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
+  return full ? t('bookView.commentary.openInNewTabNamed', { name: full }) : t('bookView.commentary.openInNewTab')
+})
+
+const activeFullLabel = computed(() => {
+  const bookTitle = activeBookTitle.value
+  return props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
+})
+
+const activeIndex = computed(() => {
+  if (!props.activePinnedGroup) return -1
+  return props.groups.findIndex(
+    (g) =>
+      g.bookId === props.activePinnedGroup!.bookId &&
+      (g.sectionLabel ?? '') === props.activePinnedGroup!.sectionLabel &&
+      (g.subSectionLabel ?? '') === props.activePinnedGroup!.subSectionLabel,
+  )
+})
+const hasPrevious = computed(() => activeIndex.value > 0)
+const hasNext = computed(
+  () => activeIndex.value !== -1 && activeIndex.value < props.groups.length - 1,
+)
+
+function openActiveBook() {
+  const group = activeGroup.value
+  if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
+}
+
+// Set to true only when the user types — guards handleSelect against spurious
+// 'change' events fired by datalist re-renders during virtualizer scrolls.
+const userHasTyped = ref(false)
+
+function onInput() {
+  userHasTyped.value = true
+}
+
+function handleSelect() {
+  // Only navigate if the user actually typed something — spurious 'change' events
+  // fire when the datalist re-renders (e.g. during virtualizer scroll). Those events
+  // have no preceding 'input' event so userHasTyped stays false.
+  if (!userHasTyped.value) return
+  userHasTyped.value = false
+  const val = normalize(inputRef.value?.value ?? '')
+  const match = props.groups.find(
+    (g) => normalize(groupLabel(g)) === val || normalize(g.bookTitle) === val,
+  )
+  if (match) navigateToGroup(match)
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+    // Let the event bubble up to the commentary scroller's useScopedKeys handler
+    // which will emit toggle-search correctly.
+    return
+  }
+  if (e.key !== 'Enter') return
+  const val = normalize((inputRef.value?.value ?? '').trim())
+  if (!val) return
+  const matches = props.groups.filter(
+    (g) => normalize(groupLabel(g)).includes(val) || normalize(g.bookTitle).includes(val),
+  )
+  if (matches.length === 1) navigateToGroup(matches[0]!)
+}
+</script>
+
+<template>
+  <!-- Always RTL, even in English UI: it sits over Hebrew text. -->
+  <div class="nav" dir="rtl">
+    <button
+      ref="filterBtnRef"
+      class="btn c-pointer hover-bg"
+      :class="{ active: filterVisible }"
+      :title="$t('bookView.commentary.tree')"
+      @click.stop="emit('toggle-filter')"
+    >
+      <IconFilter20Regular />
+    </button>
+    <div class="sep" />
+    <div class="search-wrapper" :title="activeFullLabel || undefined">
+      <IconChevronDown20Regular class="search-icon" />
+      <input
+        ref="inputRef"
+        type="text"
+        class="search-input"
+        :list="`commentary-list-${componentId}`"
+        :placeholder="activeFullLabel || $t('bookView.commentary.searchPlaceholder')"
+        @input="onInput"
+        @change="handleSelect"
+        @keydown="handleKeydown"
+      />
+      <datalist :id="`commentary-list-${componentId}`">
+        <option v-for="g in groups" :key="`${g.bookId}::${g.sectionLabel ?? ''}::${g.subSectionLabel ?? ''}`" :value="groupLabel(g)" />
+      </datalist>
+    </div>
+    <button
+      class="btn c-pointer hover-bg"
+      :disabled="!hasPrevious"
+      :title="$t('bookView.commentary.prevCommentary')"
+      @click="navigateToGroup(groups[activeIndex - 1]!)"
+    >
+      <IconChevronUp20Regular />
+    </button>
+    <button
+      class="btn c-pointer hover-bg"
+      :disabled="!hasNext"
+      :title="$t('bookView.commentary.nextCommentary')"
+      @click="navigateToGroup(groups[activeIndex + 1]!)"
+    >
+      <IconChevronDown20Regular />
+    </button>
+    <div class="sep" />
+    <button
+      class="btn c-pointer hover-bg"
+      :title="$t('bookView.commentary.prevSection')"
+      :disabled="!activePinnedGroup"
+      @click="activePinnedGroup && emit('navigate-section', 'prev', activePinnedGroup.bookId)"
+    >
+      <IconChevronRight20Regular class="dir-icon" />
+    </button>
+    <button
+      class="btn c-pointer hover-bg"
+      :title="$t('bookView.commentary.nextSection')"
+      :disabled="!activePinnedGroup"
+      @click="activePinnedGroup && emit('navigate-section', 'next', activePinnedGroup.bookId)"
+    >
+      <IconChevronLeft20Regular class="dir-icon" />
+    </button>
+    <div class="sep" />
+    <button
+      class="btn c-pointer hover-bg"
+      :title="openBookTooltip"
+      @click.stop="openActiveBook()"
+    >
+      <IconBookOpen20Regular />
+    </button>
+    <button
+      v-if="detached"
+      class="btn c-pointer hover-bg"
+      :class="{ active: followsBook }"
+      data-testid="commentary-follow-book"
+      :title="followsBook ? $t('bookView.commentary.followBookStop') : $t('bookView.commentary.followBookStart')"
+      @click.stop="emit('toggle-follows-book')"
+    >
+      <IconLink20Regular v-if="followsBook" />
+      <IconLinkDismiss20Regular v-else />
+    </button>
+    <button
+      class="btn c-pointer hover-bg"
+      data-testid="commentary-toggle-detached"
+      :title="detached ? $t('bookView.commentary.attach') : $t('bookView.commentary.detach')"
+      @click.stop="emit('toggle-detached')"
+    >
+      <PaneWindowGlyph :kind="detached ? 'pop-in' : 'pop-out'" />
+    </button>
+    <button
+      class="btn c-pointer hover-bg close-btn"
+      :title="$t('bookView.commentary.closePanel')"
+      @click.stop="emit('close')"
+    >
+      <IconMinimize20Regular />
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 32px;
+  overflow: hidden;
+  /* --bg-toolbar plus the same bottom rule the book view's top toolbar carries: this strip
+     is a row of controls, not reading surface, so it should read as chrome like the
+     toolbar does rather than blending into the commentary text below it. The fill also has
+     to be opaque either way - the virtual rows scroll underneath it, and the rule is what
+     gives them a clean edge to disappear behind. */
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-color);
+  /* Strip stays full width; its controls sit inside the same centred column as the
+     commentary lines (--lines-content-max-width), so the edges line up with the text. */
+  --nav-col-inset: calc((100% - var(--lines-content-max-width, 100%)) / 2 + var(--commentary-pad-inline, 12px) - 6px);
+  position: relative;
+  padding-inline: max(6px, var(--nav-col-inset));
+  /* Room for the close button, which is pinned to the panel's end edge. */
+  padding-inline-end: max(30px, var(--nav-col-inset));
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+.btn svg {
+  width: 14px;
+  height: 14px;
+}
+.btn.active {
+  color: var(--accent-color);
+}
+.btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+.sep {
+  width: 1px;
+  height: 14px;
+  flex-shrink: 0;
+  /* --border-color, like every other static separator in the app. This one used a
+     hand-mixed --text-secondary at 20% and read a shade off from its neighbours. */
+  background: var(--border-color);
+  margin-inline: 2px;
+}
+.search-wrapper {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-icon {
+  position: absolute;
+  inset-inline-end: 2px;
+  width: 12px;
+  height: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  height: 20px;
+  padding-inline: 6px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.search-input::placeholder {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.search-input::-webkit-calendar-picker-indicator,
+.search-input::-webkit-list-button {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+.close-btn {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+</style>

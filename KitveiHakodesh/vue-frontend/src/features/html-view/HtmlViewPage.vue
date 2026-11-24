@@ -1,0 +1,351 @@
+<script setup lang="ts">
+import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useLocalFileStore } from '@/stores/localFileStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { getTheme, isDarkTheme } from '@/theme/themes'
+import type { ThemePreset } from '@/theme/themeTypes'
+import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
+import { useSwipe } from '@vueuse/core'
+import { shallowRef } from 'vue'
+import { useOtzariaAddinBridge } from './useOtzariaAddinBridge'
+import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
+import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
+import MessageBanner from '@/components/MessageBanner.vue'
+
+const localFileStore = useLocalFileStore()
+const settingsStore = useSettingsStore()
+const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
+// The window this page is in: a widget's page is in a window of its own, and its
+// iframe posts its messages to that window.
+const hostWindow = useHostWindow()
+
+const src = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
+const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
+
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+const loaded = ref(false)
+const error = ref<string | null>(null)
+const loading = ref(false)
+let loadTimeoutId: number | null = null
+
+const tabId = paneNavigation.activeTabId
+let scrollSaveTimer: number | null = null
+
+// When isOtzariaAddin is set on the tab, activate the bridge after iframe load.
+// The addin id used to scope IDB storage is derived from localFilePath (the folder
+// name is unique enough) since we don't parse the manifest on the Vue side.
+const isOtzariaAddin = computed(() => !!(paneNavigation.activeTab as any).isOtzariaAddin)
+const addinIdRef = computed(() => {
+  const filePath = (paneNavigation.activeTab as any).localFilePath as string | undefined
+  if (!filePath) return ''
+  // Use the parent folder name as the storage key — simple and stable.
+  const sep = filePath.includes('\\') ? '\\' : '/'
+  const parts = filePath.split(sep)
+  return parts[parts.length - 2] ?? parts[parts.length - 1] ?? ''
+})
+
+const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef, isOtzariaAddin)
+const iframeScrollbars = useIframeScrollbarsHidden(() => iframeRef.value)
+
+// ── Load handling ─────────────────────────────────────────────────────────────
+
+function clearLoadTimer() {
+  if (loadTimeoutId !== null) {
+    clearTimeout(loadTimeoutId)
+    loadTimeoutId = null
+  }
+}
+
+watch(src, (url) => {
+  loaded.value = false
+  error.value = null
+  if (!url) {
+    loading.value = false
+    clearLoadTimer()
+    return
+  }
+  loading.value = true
+  clearLoadTimer()
+  loadTimeoutId = window.setTimeout(() => {
+    if (!loaded.value) {
+      loading.value = false
+      error.value = t('htmlView.notLoaded')
+    }
+  }, 8000)
+})
+
+function onIframeLoad() {
+  loaded.value = true
+  loading.value = false
+  error.value = null
+  clearLoadTimer()
+  iframeContentWindow.value = iframeRef.value?.contentWindow ?? null
+  attachIframeWheelRelay()
+  sendThemeToIframe()
+  iframeScrollbars.apply()
+  restoreScrollPosition()
+  if (isOtzariaAddin.value) bridge.onIframeLoaded()
+
+  // Use the HTML page's <title> as the tab title — this is meaningful for multi-file
+  // HTML pages (exported documents) where the entry point is always index.html and the
+  // file name itself carries no useful information.
+  //
+  // Addins are the exception: the manifest's name is authoritative — it is the name
+  // Otzaria itself shows, and the search result was already presented under it — while
+  // an entry point's <title> is usually a placeholder. Letting it win here would undo
+  // the addin title a moment after the user sees it.
+  const pageTitle = isOtzariaAddin.value
+    ? undefined
+    : iframeRef.value?.contentDocument?.title?.trim()
+  if (pageTitle) {
+    tabStore.updateTab(tabId, { title: pageTitle })
+    // Patch the recently opened entry for this file so the home page dropdown and
+    // native chrome dropdown show the page title rather than the file name.
+    // trackNavigation performs an in-place LRU bump keyed on localFilePath, so calling
+    // it again with the corrected title replaces the existing entry without adding a duplicate.
+    const tab = paneNavigation.activeTab
+    const filePath = tab.localFilePath
+    // A widget's stand-in tab is not something the user opened as a document.
+    if (filePath && !tabId.startsWith('widget:')) {
+      const recentlyOpenedStore = useRecentlyOpenedStore()
+      recentlyOpenedStore.trackNavigation(
+        '/html-view',
+        pageTitle,
+        undefined,
+        filePath,
+        undefined,
+        undefined,
+        tab.localFileName,
+        !!(tab as any).isOtzariaAddin,
+      )
+    }
+  }
+}
+
+async function retry() {
+  error.value = null
+  loading.value = true
+  await localFileStore.restoreTab(tabId)
+}
+
+// ── Scroll persistence via postMessage ────────────────────────────────────────
+// The local file iframe is cross-origin (kitvei-localfile-N vs kitveihakodesh-app)
+// so contentWindow.scrollY is inaccessible from Vue. Instead, a script injected
+// by C# via AddScriptToExecuteOnDocumentCreatedAsync (JsBridge.IframeScrollScript)
+// runs inside the iframe and posts { type: 'htmlViewScroll', scrollTop } messages
+// to window.top. This component listens for those and persists the position via
+// tabStore. On iframe load it posts a { type: 'htmlViewScrollTo' } command back
+// into the iframe to restore the saved position.
+
+function onWindowMessage(event: MessageEvent) {
+  // A Torah website's frame (WebViewPage) must not be able to post app messages.
+  if (isFromWebsiteFrame(event.source)) return
+  if (!event.data || event.data.type !== 'htmlViewScroll') return
+  const scrollTop = event.data.scrollTop as number
+  if (scrollSaveTimer !== null) clearTimeout(scrollSaveTimer)
+  scrollSaveTimer = window.setTimeout(() => saveScrollPosition(scrollTop), 400)
+}
+
+async function saveScrollPosition(scrollTop: number) {
+  scrollSaveTimer = null
+  const existing = (await tabStore.getTabViewState(tabId)) ?? {}
+  tabStore.setTabViewState(tabId, { ...existing, htmlViewScrollTop: scrollTop })
+}
+
+async function restoreScrollPosition() {
+  const state = await tabStore.getTabViewState(tabId)
+  if (!state?.htmlViewScrollTop) return
+  await nextTick()
+  iframeRef.value?.contentWindow?.postMessage(
+    { type: 'htmlViewScrollTo', scrollTop: state.htmlViewScrollTop },
+    '*',
+  )
+}
+
+// ── Gesture relay ────────────────────────────────────────────────────────────
+// The HTML iframe captures pointer focus, so touch and wheel events fire on the
+// iframe's contentWindow and never bubble to the parent document. iframeContentWindow
+// is set after load so useSwipe (VueUse) attaches its listeners there directly.
+
+const RELAY_TOUCH_THRESHOLD_PX = 60
+
+const iframeContentWindow = shallowRef<Window | null>(null)
+
+function fireSwipe(direction: 'next' | 'previous') {
+  window.dispatchEvent(
+    new CustomEvent<TabSwipeGestureEventDetail>(TAB_SWIPE_EVENT, {
+      detail: { direction },
+    }),
+  )
+}
+
+useSwipe(iframeContentWindow, {
+  threshold: RELAY_TOUCH_THRESHOLD_PX,
+  onSwipeEnd(_event, direction) {
+    if (direction === 'right') fireSwipe('next')
+    else if (direction === 'left') fireSwipe('previous')
+  },
+})
+
+// Trackpad horizontal scroll — wheel events also stay inside the iframe.
+// useSwipe only handles touch, so we still need a wheel relay. The shared handler
+// carries the RTL direction convention and one-switch-per-gesture debounce.
+let iframeWheelCleanup: (() => void) | null = null
+
+function attachIframeWheelRelay() {
+  detachIframeWheelRelay()
+  const contentWindow = iframeRef.value?.contentWindow
+  if (!contentWindow) return
+
+  const onWheel = createWheelSwipeHandler(fireSwipe)
+  contentWindow.addEventListener('wheel', onWheel, { passive: true })
+  iframeWheelCleanup = () => contentWindow.removeEventListener('wheel', onWheel)
+}
+
+function detachIframeWheelRelay() {
+  iframeWheelCleanup?.()
+  iframeWheelCleanup = null
+}
+
+onMounted(() => {
+  hostWindow.addEventListener('message', onWindowMessage)
+  startThemeObserver()
+  if (src.value) {
+    loading.value = true
+    clearLoadTimer()
+    loadTimeoutId = window.setTimeout(() => {
+      if (!loaded.value) {
+        loading.value = false
+        error.value = t('htmlView.notLoaded')
+      }
+    }, 8000)
+  }
+})
+
+onBeforeUnmount(() => {
+  hostWindow.removeEventListener('message', onWindowMessage)
+  iframeContentWindow.value = null
+  detachIframeWheelRelay()
+  themeObserver?.disconnect()
+  clearLoadTimer()
+  if (scrollSaveTimer !== null) {
+    clearTimeout(scrollSaveTimer)
+    scrollSaveTimer = null
+  }
+})
+
+// ── Theme sync ────────────────────────────────────────────────────────────────
+// Reads current theme colors from the app's root CSS custom properties and posts
+// them into the iframe via postMessage. The injected IframeScrollScript applies
+// them to the document body so txt (and html) files use the app's color scheme.
+
+function getThemeColors(): Record<string, string> {
+  const style = document.documentElement.style
+  return {
+    bgPrimary: style.getPropertyValue('--bg-primary-custom').trim(),
+    textPrimary: style.getPropertyValue('--text-primary-custom').trim(),
+    textSecondary: style.getPropertyValue('--text-secondary-custom').trim(),
+  }
+}
+
+function sendThemeToIframe() {
+  if (!iframeRef.value?.contentWindow) return
+  // isDark drives the frame document's color-scheme, so natively drawn UI
+  // inside it (scrollbars, form-control popups) matches the app theme.
+  iframeRef.value.contentWindow.postMessage(
+    { type: 'htmlViewTheme', colors: getThemeColors(), isDark: isDarkTheme() },
+    '*',
+  )
+}
+
+// Watch for theme changes (the data-theme-preset attribute changes on root when
+// the user switches theme) and push the new colors into the iframe.
+let themeObserver: MutationObserver | null = null
+
+function startThemeObserver() {
+  themeObserver?.disconnect()
+  themeObserver = new MutationObserver(sendThemeToIframe)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme-preset', 'style'],
+  })
+}
+
+const htmlFilter = computed(() => {
+  if (!htmlMaskEnabled.value) return 'none'
+  const preset = document.documentElement.getAttribute('data-theme-preset') as ThemePreset | null
+  const theme = preset ? getTheme(preset) : null
+  if (!theme) return 'invert(0.85) hue-rotate(180deg) sepia(0.2)'
+  return 'invert(0.85) hue-rotate(180deg) sepia(0.2) brightness(0.95) contrast(0.95)'
+})
+</script>
+
+<template>
+  <div class="html-view-page" :style="{ filter: htmlFilter }">
+    <div v-if="!src" class="html-state-message">
+      <span>{{ $t('htmlView.noFileOpen') }}</span>
+    </div>
+    <div v-else style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;">
+      <iframe
+        ref="iframeRef"
+        :src="src"
+        class="html-frame"
+        @load="onIframeLoad"
+      />
+      <div v-if="loading" class="html-overlay">
+        <span>{{ $t('htmlView.loading') }}</span>
+      </div>
+      <div v-if="error" class="html-overlay html-overlay--error">
+        <MessageBanner class="html-overlay-message" :message="error" :dismissible="false" />
+        <button @click="retry">{{ $t('htmlView.retry') }}</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.html-view-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.html-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.html-state-message {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.html-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+}
+.html-overlay--error {
+  color: var(--text-primary);
+}
+.html-overlay-message {
+  width: min(100% - 32px, 480px);
+}
+</style>

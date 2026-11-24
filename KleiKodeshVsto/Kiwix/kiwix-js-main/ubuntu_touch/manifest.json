@@ -1,0 +1,15 @@
+{
+  "name": "kiwix",
+  "description": "Kiwix is an offline reader for content from Wikipedia, Project Gutenberg, TED Talks, Wikivoyage, Stackexchange, etc.",
+  "architecture": "all",
+  "maintainer": "Kiwix team <contact+ubuntutouch@kiwix.org>",
+  "framework": "ubuntu-sdk-20.04",
+  "version": "4.3.1",
+  "title": "Kiwix",
+  "hooks": {
+    "kiwix": {
+      "apparmor": "kiwix.apparmor",
+      "desktop":  "kiwix.desktop"
+    }
+  }
+}

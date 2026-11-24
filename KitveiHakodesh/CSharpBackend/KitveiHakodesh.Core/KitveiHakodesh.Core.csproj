@@ -1,0 +1,118 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The data core: the seforim database, the dictionary, the HebrewBooks catalog, the FTS and
+    catalog indexes. ONE consumer: KitveiHakodeshService, which publishes native AOT.
+
+    This used to multi-target net48 as well, for the WebView2 host (KitveiHakodeshLib), the
+    Word VSTO add-in and KitveiHakodeshDesktopApp. Those reach the data through the service's
+    named pipe now (KitveiHakodesh.ServiceClient) and reference nothing in here - which is the
+    point: SQLite, Lucene, FtsLib and MessagePack are referenced by the service alone. The
+    host-only pieces that lived on the net48 leg (Word COM finder + thesaurus, the environment
+    probes) moved to KitveiHakodeshLib; self-update is the service's (KitveiHakodeshService/KitveiHakodesh/Updater*).
+
+    net10.0-windows, NOT plain net10.0: registry access, the NTFS MFT/USN calls of the local
+    file index (LocalFiles/) and the Windows pipe ACLs all need Windows.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>KitveiHakodesh.Core</RootNamespace>
+    <AssemblyName>KitveiHakodesh.Core</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Pure managed code: stay architecture-neutral even when the solution builds this
+         project under Platform=x64/x86, or a host of the other bitness loading it throws
+         BadImageFormatException. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <!-- Output stays in bin\<cfg>\net10.0-windows\, where the service's reference expects it. -->
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <!-- DbFileFingerprint reads NTFS ChangeTime and the per-file USN through two kernel32
+         calls that take raw pointers. It is the only unsafe code here. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The Service publishes native AOT and references this project, so ILC compiles
+         everything in it. IsAotCompatible surfaces an AOT-hostile construct as a warning HERE,
+         at Core's own build, instead of at the Service's link step. See MIGRATION-PLAN rule 0d. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- Explicit, platform-suffixed output paths. The SDK default (bin\<Platform>\<Configuration>\)
+       produced CS1566 for multi-platform solution builds (seen first in the old DocumentLocator). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' != 'AnyCPU'">
+    <OutputPath>bin\Release-$(Platform)\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <OutputPath>bin\Debug\</OutputPath>
+  </PropertyGroup>
+
+  <!-- The FTS engine. Core feeds it through IFtsCorpus (SeforimDbFtsCorpus) - the engine's
+       built-in corpus reader is not used from here. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="KitveiHakodeshService.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
+    <!-- Word -> PDF (COM) and the Office-free OOXML -> HTML fallback (WordDocuments/).
+         net10.0 leg, IsAotCompatible. -->
+    <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
+    <!-- FastDocView/: Word-family, OpenDocument, RTF and text files read in windows of blocks.
+         Its own public repo, a git submodule at KitveiHakodesh\FastDocView (SeekableDeflate and
+         TextEncodingDetection are its own submodules). net10.0 leg, IsAotCompatible, no P/Invoke. -->
+    <ProjectReference Include="..\..\FastDocView\FastDocView\FastDocView.csproj" />
+  </ItemGroup>
+
+  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db.
+       This is the one working copy; built by KleiKodesh/KitveiHakodeshDictionary (see Dictionary\README.md). -->
+  <ItemGroup>
+    <Content Include="Dictionary\Dictionary.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- The HebrewBooks catalog. Flows into every referencing project's output as HebrewBooks\HebrewBooksCatalog.db. -->
+  <ItemGroup>
+    <Content Include="HebrewBooks\HebrewBooksCatalog.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Download fallbacks for HebrewBooksDownloadSources. Kept out of git; the Condition lets a
+         clone without it build and download from the official handler alone. -->
+    <Content Include="HebrewBooks\hb-mirror.json" Condition="Exists('HebrewBooks\hb-mirror.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
+         SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
+         fails with a sharing violation. Matches the version KitveiHakodeshService uses. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
+    <!-- Line content in SeforimLibrary schema 6+ is zstd-compressed with a dictionary that
+         ships inside the database. ZstdSharp.Port is a pure-C# port: no native libzstd.dll
+         to package per architecture, nothing for the per-user installer to place, and
+         nothing for ILC to choke on. Decode of a ~1 KB line is microseconds either way;
+         the one path where a native binding could win is a full FTS index rebuild, which
+         is measurable if it ever matters. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+    <!-- Core's models ARE the wire types: one shared set, serialized directly by the service
+         transports, with no mirror types and no mapping layer. The version matches the
+         Service's. Its source generator emits a formatter per [MessagePackObject] type in
+         THIS compilation, which is why Core declares its own resolver (CoreMessagePackResolver)
+         rather than relying on the Service's - a generator cannot see across assemblies. -->
+    <PackageReference Include="MessagePack" Version="3.1.12" />
+    <!-- The catalog index (SeforimDbCatalog/). Same version as the Service. NOTE FOR AOT
+         PUBLISHERS: Lucene discovers codecs via reflection (NamedSPILoader +
+         Activator.CreateInstance), so the APP that publishes native AOT must root the
+         assembly - <TrimmerRootAssembly Include="Lucene.Net" /> - as KitveiHakodeshService
+         already does. A library cannot do that for its consumers. -->
+    <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Section_Actions" xml:space="preserve"><value>פעולות ניקוד</value></data>
+  <data name="Action_Vowelize" xml:space="preserve"><value>נקד טקסט מסומן</value></data>
+  <data name="Tip_Vowelize" xml:space="preserve"><value>נקד רק את הטקסט המסומן</value></data>
+  <data name="Action_Clean" xml:space="preserve"><value>ניקוי טקסט</value></data>
+  <data name="Tip_Clean" xml:space="preserve"><value>הסר מהטקסט המסומן את הסימנים שנבחרו</value></data>
+  <data name="Tip_CleanChoose" xml:space="preserve"><value>בחר מה להסיר</value></data>
+  <data name="Clean_All" xml:space="preserve"><value>הכל</value></data>
+  <data name="Clean_KeepEndPunct" xml:space="preserve"><value>השאר פיסוק בסוף פסקה</value></data>
+  <data name="Section_Genre" xml:space="preserve"><value>סוג הטקסט</value></data>
+  <data name="Section_IgnoreStyles" xml:space="preserve"><value>סמן סגנונות לדלג בתהליך הניקוד:</value></data>
+  <data name="ChooseStyles" xml:space="preserve"><value>בחר סגנונות ▾</value></data>
+  <data name="Section_Suggestions" xml:space="preserve"><value>הצעות ניקוד</value></data>
+  <data name="NextWord" xml:space="preserve"><value>מילה הבאה</value></data>
+  <data name="Tip_Show" xml:space="preserve"><value>הצג חלופות ניקוד למילה המסומנת</value></data>
+  <data name="Show" xml:space="preserve"><value>הצג</value></data>
+  <data name="PrevWord" xml:space="preserve"><value>מילה הקודמת</value></data>
+  <data name="Tip_ApplyOption" xml:space="preserve"><value>החלף את המילה בניקוד זה</value></data>
+  <data name="Section_Status" xml:space="preserve"><value>סטטוס</value></data>
+  <data name="Busy" xml:space="preserve"><value>מנקד… אנא המתן</value></data>
+  <data name="Close" xml:space="preserve"><value>סגור</value></data>
+  <data name="Tip_Cancel" xml:space="preserve"><value>בטל את הניקוד</value></data>
+  <data name="GenreDesc_Modern" xml:space="preserve"><value>עברית מודרנית: מתאים לרוב הטקסטים</value></data>
+  <data name="GenreDesc_Poetry" xml:space="preserve"><value>שירה: מיוחד לשירה ולטקסטים פיוטיים</value></data>
+  <data name="GenreDesc_Bible" xml:space="preserve"><value>מקראי: לטקסטים ממקור מקראי</value></data>
+  <data name="GenreDesc_Rabbinic" xml:space="preserve"><value>רבני: לספרות הלכתית ורבנית</value></data>
+  <data name="Genre_Rabbinic" xml:space="preserve"><value>טקסט רבני</value></data>
+  <data name="Genre_Bible" xml:space="preserve"><value>טקסט מקראי</value></data>
+  <data name="Genre_Modern" xml:space="preserve"><value>עברית מודרנית</value></data>
+  <data name="Genre_Poetry" xml:space="preserve"><value>שירה</value></data>
+  <data name="Clean_Nikkud" xml:space="preserve"><value>ניקוד</value></data>
+  <data name="Clean_Cantillations" xml:space="preserve"><value>טעמים</value></data>
+  <data name="Clean_Periods" xml:space="preserve"><value>נקודות</value></data>
+  <data name="Clean_Commas" xml:space="preserve"><value>פסיקים</value></data>
+  <data name="Clean_Dashes" xml:space="preserve"><value>מקפים</value></data>
+  <data name="Clean_QuestionExclamation" xml:space="preserve"><value>סימני שאלה וקריאה</value></data>
+  <data name="Clean_Colons" xml:space="preserve"><value>נקודותיים</value></data>
+  <data name="Status_Done" xml:space="preserve"><value>הניקוד הושלם ✓</value></data>
+  <data name="Status_Cancelled" xml:space="preserve"><value>הניקוד בוטל על ידי המשתמש</value></data>
+  <data name="Status_Cleaned" xml:space="preserve"><value>הטקסט נוקה ✓</value></data>
+  <data name="Hint_ClickOption" xml:space="preserve"><value>לחיצה על הצעה מחליפה את המילה ועוברת לבאה.</value></data>
+  <data name="Hint_SelectWord" xml:space="preserve"><value>בחרו מילה במסמך ולחצו הצג.</value></data>
+  <data name="Sugg_Loading" xml:space="preserve"><value>טוען הצעות…</value></data>
+  <data name="Sugg_None" xml:space="preserve"><value>אין הצעות למילה זו</value></data>
+  <data name="Sugg_LoadFailed" xml:space="preserve"><value>לא ניתן לטעון הצעות (בדוק חיבור לאינטרנט)</value></data>
+  <data name="Sugg_WordChanged" xml:space="preserve"><value>המילה השתנתה — בחר אותה שוב</value></data>
+  <data name="Undo_Suggestion" xml:space="preserve"><value>הצעת ניקוד</value></data>
+  <data name="Sugg_ReplaceFailed" xml:space="preserve"><value>ההחלפה נכשלה</value></data>
+  <data name="Err_NoInternet" xml:space="preserve"><value>אין חיבור לאינטרנט או שהשרת אינו זמין.
+בדוק את החיבור שלך ונסה שוב.</value></data>
+  <data name="Prog_Analyze" xml:space="preserve"><value>ניתוח מבנה המסמך</value></data>
+  <data name="Prog_Styles" xml:space="preserve"><value>חילוץ סגנונות</value></data>
+  <data name="Prog_Runs" xml:space="preserve"><value>איסוף קטעי טקסט</value></data>
+  <data name="Prog_Tokens" xml:space="preserve"><value>בניית זרם אותיות - {0} קטעים</value></data>
+  <data name="Prog_Chunks" xml:space="preserve"><value>חלוקת טקסט לחלקים - {0} אותיות</value></data>
+  <data name="Prog_Send" xml:space="preserve"><value>שליחה ל-Dicta - {0} בקשות</value></data>
+  <data name="Prog_Apply" xml:space="preserve"><value>הוספת ניקוד לטקסט</value></data>
+  <data name="Prog_Write" xml:space="preserve"><value>כתיבת התוצאה למסמך</value></data>
+  <data name="Prog_Done" xml:space="preserve"><value>ניקוד הושלם בהצלחה</value></data>
+  <data name="Err_NoSelectionVowelize" xml:space="preserve"><value>אין טקסט מסומן.
+יש לסמן טקסט לפני הפעלת הניקוד.</value></data>
+  <data name="Err_NoSelectionClean" xml:space="preserve"><value>אין טקסט מסומן.
+יש לסמן טקסט לפני ניקוי הטקסט.</value></data>
+  <data name="Err_NothingToClean" xml:space="preserve"><value>לא נבחר מה להסיר.
+יש לסמן לפחות אפשרות אחת בתיבה הנפתחת.</value></data>
+  <data name="Msg_Title" xml:space="preserve"><value>ניקוד</value></data>
+  <data name="Err_VowelizePrefix" xml:space="preserve"><value>שגיאה בניקוד:
+</value></data>
+  <data name="Err_Title" xml:space="preserve"><value>שגיאה</value></data>
+</root>

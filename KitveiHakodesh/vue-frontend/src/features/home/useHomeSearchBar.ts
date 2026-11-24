@@ -1,0 +1,196 @@
+import { ref, watch, type Ref } from 'vue'
+import { t } from '@/i18n'
+import { showToast } from '@/composables/useToast'
+import { useIntervalFn } from '@vueuse/core'
+import { useHostSearchStore } from '@/stores/hostSearchStore'
+import { parseBookLink } from '@/utils/appDeepLink'
+
+// Book names stay Hebrew in both UI languages; only the prefix wording is translated.
+const EXAMPLE_BOOK_HB = '\u05E9\u05D1\u05EA'
+const EXAMPLE_BOOK_PC = '\u05D1\u05E8\u05DB\u05D5\u05EA'
+
+const SEARCH_PLACEHOLDERS = [
+  t('home.searchHint.quick'),
+  t('home.searchHint.enter'),
+  t('home.searchHint.free'),
+  t('home.searchHint.hbPrefix'),
+  t('home.searchHint.hbExample1', { book: EXAMPLE_BOOK_HB }),
+  t('home.searchHint.hbExample2', { book: EXAMPLE_BOOK_HB }),
+  t('home.searchHint.hbExample3', { book: EXAMPLE_BOOK_HB, shorthand: '\\' }),
+  t('home.searchHint.pcPrefix'),
+  t('home.searchHint.pcExample1', { book: EXAMPLE_BOOK_PC }),
+  t('home.searchHint.pcExample2', { book: EXAMPLE_BOOK_PC }),
+  t('home.searchHint.pcExample3', { book: EXAMPLE_BOOK_PC, shorthand: '\\\\' }),
+  t('home.searchHint.addins'),
+]
+
+const MINIMUM_QUERY_LENGTH = 2
+
+/**
+ * Types the hero search bar's placeholder out character by character, cycling
+ * through the hint phrases. Pauses while the user has typed something.
+ */
+function useAnimatedPlaceholder(query: Ref<string>) {
+  const placeholder = ref(SEARCH_PLACEHOLDERS[0]!)
+  let phraseIndex = 0
+  let charIndex = 0
+  let pauseTicks = 0
+
+  const { pause, resume } = useIntervalFn(() => {
+    if (pauseTicks > 0) {
+      pauseTicks--
+      return
+    }
+    const target = SEARCH_PLACEHOLDERS[phraseIndex]!
+    if (charIndex < target.length) {
+      placeholder.value = target.slice(0, ++charIndex)
+    } else {
+      pauseTicks = 12
+      phraseIndex = (phraseIndex + 1) % SEARCH_PLACEHOLDERS.length
+      charIndex = 0
+    }
+  }, 80)
+
+  watch(query, (value) => (value ? pause() : resume()))
+
+  return placeholder
+}
+
+/**
+ * Owns the hero search bar's dropdown: when it is open, where it is anchored,
+ * and the keyboard handling on the input. Result fetching lives in
+ * `useGlobalSearch`; navigation on select lives in `useHomeSearchNavigation`.
+ *
+ * This composable deliberately knows nothing about navigation — it reports what
+ * the user did (`onSubmit`, `onDropdownKeydown`) and lets the page decide.
+ * Depending on `useHomeSearchNavigation` here would create a cycle, since that
+ * composable needs `reset` from this one.
+ *
+ * The anchor is computed once on open rather than tracked reactively — reactive
+ * tracking would update on every scroll and fight the dropdown's own scrollTop.
+ */
+export function useHomeSearchBar(options: {
+  query: Ref<string>
+  searchBarRef: Ref<HTMLElement | null>
+  hasAnyResults: () => boolean
+  isLoadingAny: () => boolean
+  clearResults: () => void
+  /** Called with the trimmed query when the user presses Enter or clicks search. */
+  onSubmit: (query: string) => void
+  /**
+   * Forwards a keydown to the open dropdown's highlight navigation (combobox
+   * model — focus never leaves the input). Returns true when the dropdown
+   * consumed the key, in which case the bar's own Enter/Escape handling is
+   * skipped.
+   */
+  onDropdownKeydown: (event: KeyboardEvent) => boolean
+}) {
+  const { query, searchBarRef, hasAnyResults, isLoadingAny, clearResults } = options
+
+  const placeholder = useAnimatedPlaceholder(query)
+
+  const isDropdownOpen = ref(false)
+  const anchorTop = ref(0)
+  const anchorLeft = ref(0)
+  const anchorRight = ref(0)
+  const maxHeight = ref(300)
+
+  function computeAnchor() {
+    if (!searchBarRef.value) return
+    const rect = searchBarRef.value.getBoundingClientRect()
+    anchorTop.value = rect.bottom + 6
+    anchorLeft.value = rect.left
+    anchorRight.value = window.innerWidth - rect.right
+    maxHeight.value = Math.max(120, window.innerHeight - rect.bottom - 12)
+  }
+
+  function hasMinimumQuery() {
+    return (query.value ?? '').trim().length >= MINIMUM_QUERY_LENGTH
+  }
+
+  /** Hide the dropdown, leaving the query and results intact. */
+  function close() {
+    isDropdownOpen.value = false
+  }
+
+  /** Hide the dropdown and clear both the query and the fetched results. */
+  function reset() {
+    close()
+    clearResults()
+    query.value = ''
+  }
+
+  function onFocus() {
+    if (hasAnyResults()) {
+      computeAnchor()
+      isDropdownOpen.value = true
+    }
+  }
+
+  function onInput() {
+    const ready = hasMinimumQuery()
+    if (ready) computeAnchor()
+    isDropdownOpen.value = ready && (hasAnyResults() || isLoadingAny())
+  }
+
+  function submit() {
+    const trimmed = query.value.trim()
+    if (!trimmed) return
+    // A pasted book link (otzaria://, zayit://, ours) opens the book instead of searching.
+    const bookLink = parseBookLink(trimmed)
+    if (bookLink) {
+      reset()
+      void useHostSearchStore().openBookLink(bookLink).then((opened) => { if (!opened) showToast(t('fastDocView.bookNotInLibrary')) })
+      return
+    }
+    // Capture before reset() blanks the query, then hand off to the page.
+    reset()
+    options.onSubmit(trimmed)
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    // Dropdown navigation first: arrows/paging move its highlight, and Enter
+    // WITH a highlight activates the highlighted row. Enter with no highlight
+    // is not consumed there and falls through to submit below.
+    if (isDropdownOpen.value && options.onDropdownKeydown(event)) return
+    if (event.code === 'Enter') {
+      event.preventDefault()
+      submit()
+      return
+    }
+    if (event.code === 'Escape') {
+      event.preventDefault()
+      reset()
+    }
+  }
+
+  /**
+   * Async sources (HebrewBooks, files) resolve after the debounce — open the
+   * dropdown once they land, or close it if they all came back empty.
+   * Pass the result refs whose arrival should reveal the dropdown.
+   */
+  function openWhenAsyncResultsArrive(sources: Array<Ref<unknown>>) {
+    watch(sources, () => {
+      if (!hasMinimumQuery()) return
+      if (hasAnyResults()) isDropdownOpen.value = true
+      else if (!isLoadingAny()) isDropdownOpen.value = false
+    })
+  }
+
+  return {
+    placeholder,
+    isDropdownOpen,
+    anchorTop,
+    anchorLeft,
+    anchorRight,
+    maxHeight,
+    computeAnchor,
+    close,
+    reset,
+    submit,
+    onFocus,
+    onInput,
+    onKeydown,
+    openWhenAsyncResultsArrive,
+  }
+}

@@ -1,0 +1,107 @@
+import type { Ref } from 'vue'
+
+/**
+ * The public surface of WindowedScroller.vue, for the composables that drive it
+ * (scroll restore, navigation) — they take the component instance as a getter
+ * and must not import the `.vue` file.
+ */
+
+/**
+ * How a row is laid out in flow mode: a `block` of its own, or `inline`, flowing
+ * on with its neighbours as a span of one paragraph. In rows mode every row is a block.
+ */
+export type WindowedScrollerRowKind = 'block' | 'inline'
+
+/** Who moved a WindowedScroller (its `moveend`): the reader, or a landing code asked for. */
+export type WindowedScrollerMoveSource = 'reader' | 'landing'
+
+export interface WindowedScrollerScrollToOptions {
+  /**
+   * Pixels added to the row's top when landing. Negative leaves a gap above the
+   * row (a landing sliver, a search bar inset); positive restores a position that
+   * was partway down the row.
+   */
+  offsetPx?: number
+  /** 'end' puts the row's bottom at the viewport's bottom — the End key. */
+  align?: 'start' | 'end'
+}
+
+export interface WindowedScrollerRevealOptions {
+  /** A mounted row lands through scrollToIndex too (a landing), not the browser's nearest-edge scroll. */
+  landMounted?: boolean
+  /** Pixels at the viewport's top covered by a sticky header: a row under them is not showing; one landed from above lands below them. */
+  topInsetPx?: number
+}
+
+export interface WindowedScrollerRowVisibilityOptions {
+  /** Pixels at the viewport's top covered by a sticky header, not counted as showing. */
+  topInsetPx?: number
+}
+
+/** The bar's thumb in viewport coordinates, and the track it travels in. */
+export interface WindowedScrollerThumbRect {
+  top: number
+  height: number
+  trackHeight: number
+}
+
+export interface WindowedScrollerVisibleRow {
+  index: number
+  /** How far the viewport's top sits below the row's top. Negative when the row starts below it. */
+  offsetWithinRow: number
+}
+
+/**
+ * What the drawn scrollbar shows, kept as refs the BAR reads — never unwrapped in
+ * the scroller's own template, or every scroll tick would re-render every row.
+ */
+export interface WindowedScrollerBarState {
+  /** Estimated height of the whole list, in viewport pixels. */
+  totalHeight: Ref<number>
+  /** The viewport's position within the whole list, in the same pixels. */
+  position: Ref<number>
+  /** The scroller's landmark tiers as list positions — see WindowedScroller's `landmarkTiers`. */
+  landmarkTiers: Ref<number[][]>
+}
+
+/** What the scrollbar has under a pointer: the thumb, or the row a seek there would land on. */
+export interface WindowedScrollerBarTarget {
+  index: number
+  onThumb: boolean
+}
+
+export interface WindowedScrollerApi {
+  /** A landing code asked for is under way, or its scroll has not ended yet. */
+  isLanding(): boolean
+  /** The native scroll container holding the rows — focus, keys and pointer listeners go here. */
+  scrollerElement: HTMLElement | null
+  /** The drawn scrollbar beside the viewport, arrows included — what a hover label listens on. */
+  scrollbarElement: HTMLElement | null
+  /** Rows currently mounted in flow: [start, end). Pinned rows outside it are mounted too, out of flow. */
+  renderedRange: { start: number; end: number }
+  /**
+   * Lands the row at the top of the viewport. Exact: when the row is not mounted the
+   * window is rebuilt around it first, then the scroll is set from its real position.
+   * Resolves true once the row is mounted and the scroll set; false when this landing
+   * was superseded by a newer one (or its rows could not be had) - no counters needed.
+   */
+  scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<boolean>
+  /** One contiguous change of the list (rows inserted/removed mid-list), before it renders - see WindowedScroller. */
+  replaceRows(at: number, removed: number, inserted: number): void
+  /** Moves the view by `px` as part of a landing (a follow-up nudge): held by isLanding, ends as moveend('landing'). */
+  nudge(px: number): void
+  /** Brings the row into view with 'nearest' semantics (no-op when fully visible) — the keyboard-highlight reveal. */
+  revealIndex(index: number, options?: WindowedScrollerRevealOptions): void
+  /**
+   * The first row showing below the viewport's top plus `topInsetPx`. `fully` asks for
+   * the first row whose top is below that line, not merely any part of it.
+   */
+  readFirstVisible(topInsetPx?: number, fully?: boolean): WindowedScrollerVisibleRow | null
+  isRowRendered(index: number): boolean
+  isRowFullyVisible(index: number, options?: WindowedScrollerRowVisibilityOptions): boolean
+  rowElement(index: number): HTMLElement | null
+  /** What the scrollbar has at a viewport Y, or null when the pointer is off the bar. */
+  barTargetAt(clientY: number): WindowedScrollerBarTarget | null
+  /** Where the bar's thumb is heading, in viewport coordinates; null when the list does not scroll. */
+  thumbRect(): WindowedScrollerThumbRect | null
+}

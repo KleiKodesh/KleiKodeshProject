@@ -1,0 +1,39 @@
+# Rewrites an existing release's notes with Gemini (same prompt as Release):
+# English + Hebrew, from the commits between that release and the one before it.
+name: Rewrite release notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v10.2.3)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release notes backfill (git notes)
+        run: git fetch origin refs/notes/release:refs/notes/release || true
+
+      - name: Gemini - release notes
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/ai-release-plan.ps1 -Tag '${{ inputs.tag }}'
+
+      - name: Replace the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pwsh .github/scripts/notes-to-markdown.ps1 -Json release-notes.json -Out body.md
+          { echo "Release ${{ inputs.tag }}"; echo; cat body.md; } > notes.md
+          gh release edit '${{ inputs.tag }}' --repo ${{ github.repository }} --notes-file notes.md

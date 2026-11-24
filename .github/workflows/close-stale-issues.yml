@@ -1,0 +1,32 @@
+# Daily: an issue with no activity for 90 days gets a "stale" label and a warning comment;
+# 14 days later, still without activity, it is closed. Any comment removes the label. PRs untouched.
+name: Close stale issues
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 90
+          days-before-issue-close: 14
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: stale
+          stale-issue-message: |
+            לא הייתה פעילות בפנייה זו 3 חודשים. אם היא עדיין רלוונטית, נא להגיב כאן - אחרת היא תיסגר אוטומטית בעוד שבועיים.
+
+            There has been no activity on this issue for 3 months. If it is still relevant, please comment here - otherwise it will be closed automatically in two weeks.
+          close-issue-message: |
+            פנייה זו נסגרה באופן אוטומטי. אם היא עדיין רלוונטית, נא לפתוח פנייה חדשה.
+
+            This issue was closed automatically. If it is still relevant, please open a new issue.
+          close-issue-reason: not_planned

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="48" height="48">
+  <!-- Kitvei Hakodesh logo as vectors (same shapes and colours as kitvei-logo.png),
+       so it stays sharp at icon sizes. -->
+  <path d="M400 165 C340 135 250 100 165 95 C125 95 100 125 100 160 L100 615 C185 625 270 655 350 692 C368 698 385 700 400 700 Z" fill="#DDD6FB"/>
+  <path d="M400 165 C460 135 550 100 635 95 C675 95 700 125 700 160 L700 615 C615 625 530 655 450 692 C432 698 415 700 400 700 Z" fill="#7B3BEB"/>
+  <path d="M250 110 L350 140 L350 375 L300 335 L250 360 Z" fill="#5F58C0"/>
+</svg>

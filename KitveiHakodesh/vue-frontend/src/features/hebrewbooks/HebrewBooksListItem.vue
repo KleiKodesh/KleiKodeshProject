@@ -1,0 +1,222 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import {
+  IconArrowDownload20Regular,
+  IconDelete20Regular,
+  IconFolderOpen20Regular,
+} from '@iconify-prerendered/vue-fluent'
+import type { HebrewBook } from './hebrewBooksCatalog'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+
+const props = defineProps<{
+  book: HebrewBook
+  focused?: boolean
+  hasLocalFile?: boolean
+  downloading?: boolean
+  /** Details only, no download / folder buttons (the book view's add-from-HebrewBooks window). */
+  hideActions?: boolean
+}>()
+const emit = defineEmits<{
+  'book-clicked': [book: HebrewBook, openInNewTab: boolean]
+  'download-clicked': [book: HebrewBook]
+  'delete-clicked': [book: HebrewBook]
+  'reveal-clicked': [book: HebrewBook]
+}>()
+
+const tags = computed(() =>
+  (props.book.categories || '')
+    .split(';')
+    .map((t: string) => t.trim())
+    .filter(Boolean),
+)
+
+const tooltip = computed(() => {
+  const lines: string[] = []
+  if (props.book.title) lines.push(props.book.title)
+  if (props.book.author) lines.push(props.book.author)
+  if (tags.value.length) lines.push(tags.value.join(' • '))
+  if (props.book.pages) lines.push(`📄 ${props.book.pages}`)
+  if (props.book.printingYear) lines.push(`📅 ${props.book.printingYear}`)
+  if (props.book.printingPlace) lines.push(`📍 ${props.book.printingPlace}`)
+  return withNewTabHint(lines.join('\n'))
+})
+</script>
+
+<template>
+  <div dir="rtl"
+    class="item"
+    data-nav-item
+    :class="{ 'is-focused': focused }"
+    :title="tooltip"
+    @click="emit('book-clicked', book, wantsNewTab($event))"
+    @auxclick.middle="emit('book-clicked', book, wantsNewTab($event))"
+  >
+    <div class="row-top">
+      <div class="title-line">
+        <span class="title">{{ book.title }}</span>
+        <span v-if="book.author" class="author">{{ book.author }}</span>
+      </div>
+      <div v-if="!hideActions" class="actions">
+        <button
+          v-if="hasLocalFile"
+          class="dl-btn reveal-btn"
+          :title="$t('hebrewBooks.item.openInExplorer', { title: book.title })"
+          tabindex="-1"
+          @click.stop="emit('reveal-clicked', book)"
+        >
+          <IconFolderOpen20Regular />
+        </button>
+        <button
+          v-if="hasLocalFile"
+          class="dl-btn delete-btn"
+          :title="$t('hebrewBooks.item.deleteFromFolder', { title: book.title })"
+          tabindex="-1"
+          @click.stop="emit('delete-clicked', book)"
+        >
+          <IconDelete20Regular />
+        </button>
+        <button
+          v-if="!hasLocalFile"
+          class="dl-btn"
+          :title="$t('hebrewBooks.item.download', { title: book.title })"
+          tabindex="-1"
+          :disabled="downloading"
+          :aria-busy="downloading"
+          @click.stop="emit('download-clicked', book)"
+        >
+          <span v-if="downloading" class="download-spinner" />
+          <IconArrowDownload20Regular v-else />
+        </button>
+      </div>
+    </div>
+    <div class="row-bottom">
+      <div v-if="tags.length" class="tags">
+        <span v-for="tag in tags" :key="tag" class="tag">{{ tag }}</span>
+      </div>
+      <div class="meta">
+        <span v-if="book.pages">📄 {{ book.pages }}</span>
+        <span v-if="book.printingYear">📅 {{ book.printingYear }}</span>
+        <span v-if="book.printingPlace">📍 {{ book.printingPlace }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.item {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+}
+.item:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.item:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.author {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+.dl-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dl-btn:hover {
+  color: var(--text-primary);
+}
+.delete-btn:hover {
+  color: var(--status-danger);
+}
+.reveal-btn:hover {
+  color: #3478f6;
+}
+
+/* Same ring as the book-view toolbar's export-to-Word button. */
+.download-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: download-spin 0.8s linear infinite;
+}
+@keyframes download-spin {
+  to { transform: rotate(360deg); }
+}
+
+.row-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+.tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.tag {
+  white-space: nowrap;
+}
+.tag:not(:last-child)::after {
+  content: ' •';
+  margin-inline-start: 2px;
+  opacity: 0.5;
+}
+.meta {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.meta span {
+  white-space: nowrap;
+}
+</style>

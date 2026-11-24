@@ -1,0 +1,41 @@
+import { Button, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer } from "../state.slint";
+import { PageTitle } from "../widgets.slint";
+
+// "What's new" in this version: section headings, areas in bold, their changes as bullets.
+export component WhatsNewPage inherits VerticalLayout {
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 12px;
+        PageTitle { title: Lang.t("מה חדש בגרסה ", "What's new in version ") + Installer.version; }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 4px;
+                for line in Installer.notes: Text {
+                    text: line.kind == 2 ? "•  " + line.text : line.text;
+                    color: line.kind == 2 ? Theme.muted : Theme.text;
+                    font-size: line.kind == 0 ? 16px : 13px;
+                    font-weight: line.kind == 2 ? 400 : 600;
+                    horizontal-alignment: Lang.start;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 12px;
+        height: 52px;
+        if !Lang.en: Rectangle { horizontal-stretch: 1; }
+        Button { text: Lang.t("חזרה", "Back"); min-width: 80px; clicked => { Installer.page = Installer.whats-new-back; } }
+        if Lang.en: Rectangle { horizontal-stretch: 1; }
+    }
+}

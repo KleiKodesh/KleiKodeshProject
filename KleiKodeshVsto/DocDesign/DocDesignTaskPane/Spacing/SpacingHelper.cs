@@ -1,0 +1,26 @@
+using Microsoft.Office.Interop.Word;
+
+namespace DocDesignTaskPane.Spacing
+{
+    public static class SpacingHelper
+    {
+        public static float GetSpaceAfterFromStyle(this Selection selection) =>
+            selection.Characters.First.get_Style().ParagraphFormat.SpaceAfter;
+        public static float GetSpaceBeforeFromStyle(this Selection selection) =>
+            selection.Characters.First.get_Style().ParagraphFormat.SpaceBefore;
+        public static float GetLineSpacingFromStyle(this Selection selection) =>
+            selection.Characters.First.get_Style().ParagraphFormat.LineSpacing;
+
+        public static float GetSpaceBetweenWords(this Selection selection)
+        {
+            Range range = selection.Range.Paragraphs[1].Range;
+            range.Collapse();
+            // Bounded: unbounded MoveUntil scans to the END OF THE DOCUMENT when
+            // the paragraph has no space, and this runs on selection changes.
+            // A first word longer than 255 characters is not a word.
+            range.MoveUntil(" ", 255);
+            range.MoveEnd();
+            return (float)range.Font.Spacing;
+        }
+    }
+}

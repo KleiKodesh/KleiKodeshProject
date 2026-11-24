@@ -1,0 +1,340 @@
+/**
+ * Row shapes returned by the seforim queries in `queries.sql.ts`.
+ *
+ * Every type used as a `query<T>` parameter or a `{ rows: T[] }` service reply belongs here,
+ * beside the SQL that produces it — the same rule `queries.sql.ts` applies to the SQL strings
+ * themselves. Several of these previously lived in feature folders, which forced `seforimApi.ts`
+ * to import upward into `features/` just to name its own results, and made a UI feature the
+ * authority for a contract the C# service also has to match (`SeforimModels.cs`).
+ *
+ * This file has **no imports**, deliberately. A row shape describes what SQLite returned; it must
+ * not reference a component prop type, a Vue type, or anything from a feature. Types that *build
+ * on* a row — `CategoryNode` adding `children`/`books`, or anything holding rendered state — are
+ * view models and belong to the feature that builds them.
+ *
+ * Naming: these mirror the SELECT lists, not the tables. If a query changes its columns, change
+ * the type here in the same edit.
+ */
+
+// ── Catalog ───────────────────────────────────────────────────────────────────
+
+/** What the publisher allows for a book - computed by Core (BookProtection.cs); enforced as-is. */
+export interface BookProtection {
+  level: number
+  allowsEditableExport: boolean
+  allowsPdfExport: boolean
+  /** Most lines one copy may hold; null = no limit. */
+  maxCopyLines: number | null
+  /** Most lines one print job may hold; null = no limit. */
+  maxPrintLines: number | null
+}
+
+export interface BookRow {
+  id: number
+  categoryId: number
+  title: string
+  hasTeamim?: number | null // 1 if the book has cantillation marks, 0/null if not
+  authors?: string | null
+  /**
+   * The book's precedence in the library, computed ONCE by the service
+   * (SeforimDbBookTreeOrder.cs) and shared with the catalog and full-text indexes, so every
+   * ranking here ties on the same order. Optional only for custom (negative-id) books, which
+   * the server never sees; `assignFullPaths` numbers those after the last server value.
+   */
+  treeOrder?: number
+  /** The publisher's limits (Core BookProtection, from Otzaria's `book_protection`); null/absent = none. */
+  protection?: BookProtection | null
+  /** The publisher's credit line shown above the text; may hold `[label](url)` links. Null = none. */
+  publisherBanner?: string | null
+  parentPath?: string // category path without the book title — used for display in search results
+  period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
+  rootCategory?: string // First-tier category title
+}
+
+export interface CategoryRow {
+  id: number
+  parentId: number | null
+  title: string
+  level: number
+}
+
+/** Per-book metadata plus the connection-kind flags the book-view toolbar switches on. */
+export interface BookInfo {
+  totalLines: number
+  hasTeamim: number
+  hasTargumConnection: number
+  hasReferenceConnection: number
+  hasSourceConnection: number
+  hasCommentaryConnection: number
+  hasOtherConnection: number
+  /** 1 when the library marks the book a commentary: clean text then accepts plain headings. */
+  isCommentary?: number
+}
+
+/**
+ * Everything the library records ABOUT a book - credits, provenance, licence - for the
+ * book view's info popover. Mirrors BookMetadataRow in SeforimDbModels.cs. Optional fields
+ * are null when blank or when the open library's schema lacks the column; lists are empty.
+ */
+export interface BookMetadataRow {
+  title: string
+  heRef: string | null
+  collectiveTitle: string | null
+  shortDescription: string | null
+  description: string | null
+  categoryTitle: string | null
+  sourceName: string | null
+  authors: string[]
+  publicationPlaces: string[]
+  publicationDates: string[]
+  topics: string[]
+  /** Licence codes as the library spells them (CC-BY, Public Domain, ...). */
+  licenses: string[]
+  /** Where the edition text came from - a name or a URL, as recorded. */
+  editionSources: string[]
+}
+
+// ── Table of contents ─────────────────────────────────────────────────────────
+
+/**
+ * One TOC entry, flat — `parentId` gives the tree.
+ *
+ * The first five fields are structurally identical to `TreeNodeItem` in
+ * `components/treeTypes.ts`, which is `TreeView`'s input contract. That is deliberate and there is
+ * no `extends` between them: TypeScript is structural, so this satisfies that prop with no import
+ * in either direction. Declaring the relationship would make the data layer depend on a component.
+ */
+export interface TocEntry {
+  id: number
+  parentId: number | null
+  level: number
+  hasChildren: boolean | number
+  text: string
+  lineId: number | null
+  lineIndex: number | null
+  /** On main-TOC entries merged in from an alt structure (the seifim): that structure's id. */
+  altStructureId?: number | null
+}
+
+export interface AltTocStructure {
+  id: number
+  key: string
+  title: string | null
+  heTitle: string | null
+}
+
+/** TOC titles across several books — the catalog-search TOC fallback (`GET_TOC_TITLES_FOR_BOOKS`). */
+export interface TocRow {
+  id: number
+  parentId: number | null
+  bookId: number
+  text: string
+  lineIndex: number | null
+  hasChildren: number | boolean
+}
+
+// ── Lines ─────────────────────────────────────────────────────────────────────
+
+export interface LineRow {
+  id: number
+  lineIndex: number
+  content: string
+}
+
+/**
+ * One alternate version of a book — an overlay of replacement text over the SAME
+ * line ids, so the TOC, links and highlights stay valid when the reader swaps to it.
+ */
+export interface BookVersionRow {
+  id: number
+  /** The upstream key, usually English. Stable — this is what persistence stores. */
+  versionTitle: string
+  /** Display name. Often absent, in which case the UI falls back to versionTitle. */
+  heVersionTitle: string | null
+  versionSource: string | null
+  versionNotes: string | null
+  heVersionNotes: string | null
+}
+
+/**
+ * A scanned edition of an Otzaria book on HebrewBooks. Ordered by the service: the best
+ * edition first, then certain matches before uncertain ones.
+ */
+export interface HebrewBooksEdition {
+  /** The HebrewBooks file id - what the download and the local-folder lookup key on. */
+  id: number
+  title: string
+  author: string
+  printingPlace: string
+  printingYear: string
+  pages: number | null
+  isBest: boolean
+  /** False when the book-to-edition match is only probable. */
+  isCertain: boolean
+  /** Already on disk (user's HebrewBooks folder or the app cache) - opens without a download. */
+  isOnDisk: boolean
+}
+
+/** Result of getHebrewBooksEditions. */
+export interface HebrewBooksEditionsResult {
+  editions: HebrewBooksEdition[]
+  /** Otzaria's own PDF of this tractate (Talmud Bavli only), or null. */
+  talmudPdfPath: string | null
+}
+
+/** A scanned edition the user attached to a book: their own PDF ('file') or a HebrewBooks id ('hb'). */
+export interface UserEdition {
+  id: number
+  bookId: number
+  kind: 'file' | 'hb'
+  filePath: string | null
+  hbId: string | null
+  title: string
+  /** Unix ms. */
+  addedAt: number
+  /** kind 'file' only: the file is still there. */
+  fileExists: boolean
+  /** kind 'hb' only: in the user's HebrewBooks folder or the app cache. */
+  isOnDisk: boolean
+}
+
+/** Reverse source/targum lookup — which lines point AT the given ones. */
+export interface ReverseLineRow {
+  sourceBookId: number
+  sourceLineId: number
+  lineIndex: number
+  content: string
+}
+
+/** A ReverseLineRow without its text: one base-text line (getReverseLines). */
+export interface ReverseLineRefRow {
+  sourceBookId: number
+  sourceLineId: number
+  lineIndex: number
+}
+
+/** A book's lines with lineIndex in [fromIndex, toIndex): a section sent as its bounds. */
+export interface BookLineRange {
+  bookId: number
+  fromIndex: number
+  toIndex: number
+}
+
+// ── Links ─────────────────────────────────────────────────────────────────────
+
+export interface CommentaryLinkRow {
+  targetBookId: number
+  targetLineId: number
+  connectionTypeId: number
+  lineIndex: number
+  content?: string
+}
+
+/**
+ * Forward commentary links grouped per (target book, connection type): DISTINCT
+ * target line ids with their line indexes as parallel arrays. Ids and numbers only.
+ */
+export interface CommentaryLinkGroupRow {
+  targetBookId: number
+  connectionTypeId: number
+  lineIds: number[]
+  lineIndexes: number[]
+}
+
+/** A link group seen from its target end: the source book and ITS lines that point at ours. */
+export interface IncomingLinkGroupRow {
+  sourceBookId: number
+  connectionTypeId: number
+  lineIds: number[]
+  lineIndexes: number[]
+}
+
+/**
+ * One call's worth of commentary-pane structure. `incoming` is the other end of links
+ * the DB stores pointing AT our lines (Sefaria stores non-dependant links in alphabetical
+ * order, so e.g. every Pilpula Charifta ↔ Rosh link is source=Pilpula, type OTHER);
+ * `catalogCommentaryBookIds` are the books the catalogue files as commentaries on this
+ * one (shelved two or more folders below the parent of its folder, e.g.
+ * "Rosh / Mefarshim / …") — commentaries by placement, whatever the link type says.
+ */
+export interface CommentaryLinkGroups {
+  rows: CommentaryLinkGroupRow[]
+  incoming: IncomingLinkGroupRow[]
+  catalogCommentaryBookIds: number[]
+}
+
+/** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */
+/**
+ * One inline note (footnote) of a line, from Otzaria's `line_note` table (schema 7+).
+ * `hasMarker`: the line keeps a `<sup class="footnote-marker">` for it, and the k-th note
+ * with a marker belongs to the k-th such marker of the line (Otzaria's matching). A note
+ * without a marker has no place in the text. `body` is the note's HTML.
+ */
+export interface LineNote {
+  lineId: number
+  noteIndex: number
+  charPos: number
+  hasMarker: boolean
+  body: string
+}
+
+export interface WordLinkAnchor {
+  lineId: number
+  charStart: number
+  charEnd: number | null
+  label: string | null
+  targetBookId: number
+  targetLineId: number
+  targetLineIndex: number
+  sourceBookId: number
+  connectionTypeId: number
+  // Client-assigned by useWordLinkAnchors (NOT from the wire): per-book fallback
+  // treatment slot and runtime-chosen enclosure glyphs. Absent → the splicer's
+  // modulo fallback applies. See buildWordLinkTreatments in wordLinkAnchors.ts.
+  colorBucket?: number
+  encOpen?: string
+  encClose?: string
+}
+
+/** One distinct (commentary book, anchor label) pair of a source book's word-link anchors. */
+export interface WordLinkTargetRow {
+  targetBookId: number
+  label: string | null
+  connectionTypeId: number
+  orderIndex: number
+}
+
+/** A book in the related-books dropdown (Core RelatedBook). Sent back as is on a click. */
+export interface RelatedBook {
+  bookId: number
+  title: string
+  /** A base text of the open book. */
+  isBaseText: boolean
+  /** A commentary of a base text: its line is reached through that base. */
+  viaSourceBookId: number | null
+  /** That commentary's own primary base, when it is a commentary on the via-base. */
+  chainBaseBookId: number | null
+}
+
+/** A section of the related-books list: a commentary-panel label, or "commentaries of" a base text. */
+export interface RelatedBooksSection {
+  label: string | null
+  commentariesOfBookId: number | null
+  commentariesOfTitle: string | null
+  books: RelatedBook[]
+}
+
+/** One commentary filter-tree row (Core CommentaryFilterGroup): CommentaryGroup minus lines. */
+export interface CommentaryFilterGroup {
+  bookId: number
+  bookTitle: string
+  path: string
+  connectionTypes: string[]
+  category: string
+  sectionLabel: string
+  subSectionLabel: string | null
+}
+
+export interface RelatedBooksList {
+  sections: RelatedBooksSection[]
+}

@@ -1,0 +1,809 @@
+/* KitveiHakodesh theme integration — CSS variable hooks injected by syncPdfViewerTheme() in themes.ts */
+
+:root {
+  --toolbar-bg-color: var(--bg-toolbar-custom, light-dark(rgb(249 249 250), rgb(56 56 61)));
+  --toolbar-border-color: var(--border-color-custom, light-dark(rgb(184 184 184), rgb(92 92 97)));
+  --main-color: var(--text-primary-custom, light-dark(rgb(12 12 13), rgb(249 249 250)));
+  --body-bg-color: var(--bg-secondary-custom, light-dark(rgb(212 212 215), rgb(35 35 39)));
+  --progressBar-color: var(--accent-color-custom, #0a84ff);
+  --doorhanger-bg-color: var(--bg-primary-custom, light-dark(rgb(255 255 255), rgb(56 56 61)));
+  --doorhanger-border-color: var(--border-color-custom, light-dark(rgb(184 184 184), rgb(92 92 97)));
+  --button-hover-color: var(--hover-bg-custom, light-dark(rgba(0 0 0 / 0.08), rgba(255 255 255 / 0.08)));
+  --toggled-btn-bg-color: var(--active-bg-custom, light-dark(rgba(0 0 0 / 0.12), rgba(255 255 255 / 0.12)));
+  --field-bg-color: var(--bg-primary-custom, light-dark(rgb(255 255 255), rgb(56 56 61)));
+  --field-border-color: var(--border-color-custom, light-dark(rgb(187 187 188), rgb(115 115 115)));
+  --separator-color: var(--border-color-custom, light-dark(rgba(0 0 0 / 0.08), rgba(255 255 255 / 0.08)));
+}
+
+/* PDF page filter — controlled by data-pdf-filters attribute set by settingsStore.togglePdfPageFilters() */
+/* The actual filter value is injected as --pdf-filter-custom by syncPdfViewerTheme() */
+:root[data-pdf-filters="true"] #viewerContainer .page canvas {
+  filter: var(--pdf-filter-custom, none);
+}
+
+/* Scrollbar styling */
+:root {
+  --scrollbar-color: var(--border-color-custom, auto);
+  --scrollbar-bg-color: transparent;
+}
+
+/* --- Zoom select: contain dynamic width --- */
+#scaleSelectContainer {
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+#scaleSelect {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Allow all toolbar flex containers to shrink to zero */
+#toolbarContainer,
+#toolbarViewer,
+#toolbarViewerLeft,
+#toolbarViewerMiddle,
+#toolbarViewerRight,
+.toolbarHorizontalGroup,
+.toolbarButtonWithContainer,
+#scaleSelectContainer {
+  min-width: 0;
+}
+
+/* Override PDF.js's #toolbarContainer #toolbarViewer { width: 100% } — must match exact specificity */
+#toolbarContainer #toolbarViewer {
+  width: auto;
+  flex-shrink: 1;
+}
+
+/* --- Responsive toolbar: progressive hiding --- */
+
+/* Step 1 — Shrink gaps and padding */
+@media (max-width: 650px) {
+  #toolbarViewer,
+  #toolbarViewerLeft,
+  #toolbarViewerMiddle,
+  #toolbarViewerRight {
+    gap: 2px;
+  }
+  .toolbarButton {
+    padding-inline: 4px;
+  }
+}
+
+/* Step 2 — Shrink page number input */
+@media (max-width: 600px) {
+  #pageNumber {
+    width: 2em;
+    min-width: 0;
+    padding-inline: 2px;
+    text-align: center;
+  }
+}
+
+/* Step 3 — Hide "of N pages" first */
+@media (max-width: 580px) {
+  #numPages {
+    display: none;
+  }
+}
+
+/* Keep middle section from being squeezed away by flex before our breakpoints fire */
+#toolbarViewerMiddle {
+  flex-shrink: 0;
+}
+
+/* Step 4 — Shrink zoom dropdown gradually before hiding */
+#scaleSelectContainer {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Override PDF.js dropdown min-width via the CSS custom property it uses internally.
+   Since !important on .dropdownToolbarButton doesn't win, we intercept at :root level
+   and use max-width + overflow on the container instead to force the shrink. */
+#scaleSelectContainer {
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: max-width 0.2s ease;
+  max-width: 200px;
+}
+
+/* Narrow viewport: collapse the zoom dropdown into a compact icon button that
+   looks like the other toolbar buttons. The real <select> stays in place (just
+   invisible), so tapping the button opens the native option list directly —
+   no custom popover, no dropdown-inside-a-dropdown. The selected zoom % is
+   surfaced via the container's tooltip (set in JS). */
+@media (max-width: 560px) {
+  #scaleSelectContainer {
+    /* Override PDF.js's built-in `display:none` at this same breakpoint so the
+       container survives as our compact icon button the instant the full
+       dropdown would otherwise disappear. */
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    min-width: 0;
+    width: 28px;
+    max-width: 28px;
+    padding: 0;
+    background: none;
+    border: none;
+    overflow: hidden;
+  }
+  #scaleSelectContainer:hover {
+    background: var(--button-hover-color);
+  }
+  /* The real <select> stays in flow (so the button keeps its height) and keeps
+     its natural width — so the native option list opens at the original size and
+     theme — but is clipped to the 28px button and hidden with opacity. It does
+     NOT shrink, and the whole button stays clickable and opens it. */
+  #scaleSelectContainer > select {
+    flex: 0 0 auto;
+    width: 140px;
+    opacity: 0;
+    cursor: pointer;
+  }
+  /* Replace the caret (::after) with the fit-to-width glyph, centered */
+  #scaleSelectContainer::after {
+    inset-block: 0;
+    inset-inline: 0;
+    margin: auto;
+    -webkit-mask-image: url(images/toolbarButton-zoom.svg);
+            mask-image: url(images/toolbarButton-zoom.svg);
+  }
+}
+
+/* Step 6 — Hide zoom +/- buttons */
+@media (max-width: 380px) {
+  #zoomOutButton,
+  #zoomInButton,
+  #zoomOutButton + .splitToolbarButtonSeparator {
+    display: none;
+  }
+}
+
+
+@media (min-width: 350px) {
+ #toolbarViewer {
+  display: flex;
+}
+}
+
+
+
+/* Step 7 — Hide page number input entirely */
+@media (max-width: 300px) {
+  .loadingInput.start,
+  #numPages {
+    display: none;
+  }
+}
+
+/* --- Custom zoom input overlay --- */
+/* #zoomInput sits absolutely inside #scaleSelectContainer, covering the text area of the select.
+   It uses the same background as the select so it hides the select's own text.
+   When blurred it mirrors the selected option label; when focused it shows the numeric % for editing. */
+
+#scaleSelectContainer {
+  position: relative;
+}
+
+#zoomInput {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  /* Stop before the ::after dropdown arrow — select has padding-inline-end:38px for it */
+  inset-inline-end: 38px;
+  width: auto;
+  height: 100%;
+  padding-inline: 6px;
+  border: none;
+  border-radius: 0;
+  /* Match the select's own background exactly so it covers the select text */
+  background: var(--dropdown-btn-bg-color);
+  color: var(--main-color, #d4d4d4);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: start;
+  outline: none;
+  box-sizing: border-box;
+  z-index: 1;
+  cursor: default;
+  /* Remove browser spinner arrows (type=number when focused) */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#zoomInput::-webkit-outer-spin-button,
+#zoomInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+#zoomInput:focus {
+  background: var(--dropdown-btn-bg-color) !important;
+  cursor: text;
+  text-align: center;
+}
+
+/* Hide at the same breakpoint as the container */
+@media (max-width: 560px) {
+  #zoomInput {
+    display: none;
+  }
+}
+
+/* --- Hebrew RTL outline (TOC) sidebar ---
+   The viewer HTML root is dir="ltr". Hebrew titles that end with punctuation
+   like ":" or "." are rendered incorrectly by the bidi algorithm — the weak
+   punctuation character attaches to the LTR context and jumps to the wrong end.
+   Setting direction:rtl on the anchor element gives each title its own RTL
+   base direction so punctuation stays anchored to the Hebrew text. */
+.treeItem > a {
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+/* --- Outline tree: BookView's TOC system, measured from the live app --------
+   Reference numbers captured from the running BookView TOC (TreeView/TreeNode)
+   under the real theme — NOT re-imagined from its source:
+     rows full panel width, 28px, NO radius, align flex-start
+     chevron: 24x28 flex-centred column at the row's inline-start, shifted
+       depth*10px; label follows it (leaves keep the same 24px gutter)
+     label: 0.8rem / 28px line-height, padding-inline-end 4px
+     hover 6% / press 10% / active 8% text-color mixes, full-bleed strips
+     active label: accent color, weight 500
+     font: Segoe UI Variable stack
+   PDF.js indents by nesting .treeItems containers, so a row's box STARTS at
+   its indent and a highlight can never span the panel. The container margins
+   are therefore zeroed and the indent moves INSIDE each full-width row:
+   outline-search.js stamps --toc-depth on every .treeItem (stampDepths), the
+   anchor pads by depth*10px+24px, and the toggler sits absolutely in that
+   gutter. This is exactly TreeNode.vue's geometry. */
+#outlinesView.treeView,
+#outlineSearchResults.treeView,
+#outlineSearchBar,
+#outlineContextMenu {
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Kill the structural indent — beats viewer.css's 20px rule via the id. */
+#outlinesView.treeView.withNesting > .treeItem,
+#outlinesView.treeView.withNesting .treeItem > .treeItems {
+  margin-inline-start: 0;
+}
+
+#outlinesView.treeView .treeItem {
+  position: relative; /* anchors the absolutely-positioned toggler */
+}
+
+/* Full-width rows; the indent lives in padding-inline-start. */
+#outlinesView.treeView .treeItem > a {
+  display: block;
+  min-height: 28px;
+  min-width: 0;
+  width: auto;
+  margin: 0;
+  padding: 0 4px 0 8px; /* RTL: 4px before the text side, 8px at the far end */
+  padding-inline-start: calc(var(--toc-depth, 0) * 10px + 24px);
+  border-radius: 0;
+  color: var(--text-primary-custom, var(--treeitem-color));
+  font-size: 0.8rem;
+  line-height: 28px; /* BookView's label rhythm — single lines centred */
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Hover / press / current: full-bleed strips, BookView's exact mixes. */
+#outlinesView.treeView .treeItem > a:hover {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
+  color: var(--text-primary-custom, var(--treeitem-hover-color));
+}
+#outlinesView.treeView .treeItem > a:active {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 10%, transparent);
+}
+#outlinesView.treeView .treeItem.selected > a {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 8%, transparent);
+  color: var(--accent-color-custom, #3478f6);
+  font-weight: 500;
+}
+
+/* Chevron: BookView's 24x28 column at the row's inline-start, shifted by the
+   row's depth. Absolute inside the .treeItem so the anchor keeps full width. */
+#outlinesView.treeView.withNesting .treeItemToggler {
+  float: none;
+  position: absolute;
+  inset-inline-start: calc(var(--toc-depth, 0) * 10px);
+  top: 0;
+  width: 24px;
+  height: 28px;
+  cursor: pointer;
+}
+#outlinesView.treeView.withNesting .treeItemToggler::before {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  content: '';
+  background-color: var(--text-secondary-custom, var(--toolbar-icon-bg-color));
+  /* Fluent ChevronDown16Regular; collapsed rotates it (see below). */
+  -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  transition: transform 120ms ease;
+}
+/* Collapsed: the SAME chevron rotated to point inline-start (Fluent
+   ChevronLeft in this RTL panel). Needs the id to beat PDF.js's (0,3,1)
+   collapsed rule, and must re-declare the mask or the stock icon swap wins. */
+.treeItemsHidden:is(#outlinesView.treeView.withNesting .treeItemToggler)::before {
+  -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  transform: rotate(90deg);
+}
+/* No subtree tinting on toggler hover (stock behaviour) — chevron brightens. */
+#outlinesView.treeView.withNesting .treeItemToggler:hover + a,
+#outlinesView.treeView.withNesting .treeItemToggler:hover ~ .treeItems {
+  background-color: transparent;
+  color: inherit;
+}
+#outlinesView.treeView.withNesting .treeItemToggler:hover::before {
+  background-color: var(--text-primary-custom, var(--main-color));
+}
+
+/* Panel surface: BookView's tree sits on --bg-primary, full-bleed rows =
+   no side padding. */
+#viewsManager #viewsManagerContent #outlinesView,
+#viewsManager #viewsManagerContent #outlineSearchResults {
+  padding: 4px 0 8px;
+  background: var(--bg-primary-custom, transparent);
+}
+
+/* Flat search results: BookView's filtered-row look (is-filtered).
+   Each row's label is the FULL ancestor path ("root · parent · node"), so
+   `isolate` keeps it in its own bidi run — the path joins ancestor titles with
+   " · ", and without isolation a title ending in ":" or "." would let that weak
+   punctuation reorder against the separator. */
+#outlineSearchResults.treeView .treeItem > a {
+  display: block;
+  min-height: 0;
+  padding: 8px 12px;
+  border-radius: 0;
+  color: var(--text-primary-custom, var(--treeitem-color));
+  font-size: 0.8rem;
+  line-height: 1.4;
+  unicode-bidi: isolate;
+}
+#outlineSearchResults.treeView .treeItem > a:hover {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
+}
+
+/* --- Page count floating badge ---
+   Visible only when the toolbar is too narrow to show #numPages (≤580px).
+   Fades in on page change and fades out after 2s of inactivity.
+   Positioned at the physical bottom-right corner (inline-start in RTL). */
+#pageCountBadge {
+  display: none;
+  position: fixed;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 1px 5px;
+  background: light-dark(rgba(255, 255, 255, 0.65), rgba(30, 30, 30, 0.65));
+  color: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.6));
+  backdrop-filter: blur(4px);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1.4;
+  font-family: inherit;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+#pageCountBadge.visible {
+  opacity: 1;
+}
+
+@media (max-width: 580px) {
+  #pageCountBadge:not(:empty) {
+    display: block;
+  }
+}
+
+/* --- Pages panel: "select all" checkbox ---
+   A tri-state checkbox in the pages-manager status bar, placed right before the
+   status label ("בחירת עמודים" / "N נבחרו") so that label reads as its caption.
+   One click selects every page; when all pages are already selected it deselects
+   them. It reflects the current state: unchecked (none), indeterminate (some),
+   checked (all). It supersedes PDF.js's own tiny deselect icon-button (hidden). */
+#viewsManagerSelectAllCheckbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: var(--accent-color-custom, #0a84ff);
+}
+#viewsManagerSelectAllCheckbox:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+#viewsManagerSelectAllCheckbox:not(:disabled):hover {
+  outline: 1px solid var(--accent-color-custom, #0a84ff);
+  outline-offset: 1px;
+}
+
+/* Keep the status caption on one line — the checkbox now shares its row, and
+   the bidi-isolated page count ("14 נבחרו") would otherwise wrap after the number. */
+#viewsManagerStatusActionLabel {
+  white-space: nowrap;
+}
+
+/* Hide PDF.js's built-in deselect icon-button — the select-all checkbox now
+   owns both selecting and clearing, so the extra indicator is redundant. */
+#viewsManagerStatusActionDeselectButton {
+  display: none !important;
+}
+
+/* --- Pages panel: tighter header bars ---
+   PDF.js's default title bar (12px vertical padding) and status bar (64px
+   min-height) waste a lot of vertical space above the thumbnails/outline.
+   Trim both. Selectors match PDF.js's own specificity (3 IDs, +1 for `> div`)
+   and win by load order (viewer-custom.css loads after viewer.css). */
+#viewsManager #viewsManagerHeader #viewsManagerTitle {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus > div {
+  min-height: 42px;
+}
+
+/* --- Pages panel: space between the selection count and the Manage dropdown ---
+   The Manage button (#actionSelector) sizes to its hidden popup menu, whose long
+   "ייצוא הפריטים שנבחרו…" item inflates it to ~158px. In a ~270px sidebar that
+   leaves the count label ("573 נבחרו") almost touching the button (~2px gap).
+   Cap the button to its own content width so space-between restores a real gap,
+   keep a 12px floor, and never squeeze the count itself. The popup menu is
+   absolutely positioned, so it still opens at its full width. */
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction {
+  gap: 12px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #viewsManagerStatusActionLabelContainer {
+  flex: 0 0 auto;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #actionSelector {
+  min-width: 0;
+  max-width: 100px;
+}
+
+/* --- Hide the file-loading progress bar ---
+   The thin bar under the toolbar that fills as a PDF loads. It is absolutely
+   positioned, so hiding it has no layout effect; PDF.js still updates it
+   internally (harmlessly) — we only remove the visual. */
+#loadingBar {
+  display: none !important;
+}
+
+/* --- Outline panel: search input + flat results list ---
+   Mirrors the BookView TOC side-panel search (see outline-search.js). The input
+   sits BELOW the scrollable content, like BookView's `.toc-search`, and is shown
+   only while the outline view is active and the document actually has a TOC.
+   While a query is active, #outlinesView is hidden and a flat ranked
+   #outlineSearchResults list takes its place; it reuses the `.treeView` class
+   (without `withNesting`) so rows are styled identically, just unindented. */
+#outlinesView.outlineSearchActive {
+  display: none;
+}
+
+/* #viewsManager has `padding-bottom:16px`. That was invisible while the scrollable
+   #viewsManagerContent was the last child, but the search bar is now last, so the
+   padding showed up as a stray gap between the input and the panel's bottom edge.
+   Drop it while the bar is visible so the bar sits flush; other sidebar views
+   (which hide the bar) keep PDF.js's original 16px. */
+#viewsManager:has(#outlineSearchBar:not(.hidden)) {
+  padding-bottom: 0;
+}
+
+/* #viewsManager is `display:flex; flex-direction:column; align-items:flex-start`,
+   so a child inserted after #viewsManagerContent would shrink to its content
+   width — align-self:stretch is required to span the sidebar. */
+#outlineSearchBar {
+  flex: 0 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 5px 6px 6px; /* BookView's .toc-search */
+  border-top: 1px solid var(--separator-color);
+  background: var(--bg-primary-custom, var(--toolbar-bg-color));
+  /* Round the bottom corners to match the panel's own 8px.
+     `.sidebar` sets `border-radius: var(--sidebar-border-radius)` (8px) on all four
+     corners, but `#viewsManager` is also `.menuContainer`, which sets
+     `overflow-y: auto` — and a scroll container clips its content to the PADDING
+     BOX, ignoring border-radius. So this bar (the last child, made flush by the
+     `padding-bottom: 0` above) paints square corners straight over the panel's
+     curve. Matching the radius here is the fix; `overflow: hidden` on the panel is
+     not, since the existing `overflow-y: auto` is already the clip. */
+  border-end-start-radius: var(--sidebar-border-radius, 8px);
+  border-end-end-radius: var(--sidebar-border-radius, 8px);
+}
+
+#outlineSearchBar.hidden {
+  display: none;
+}
+
+/* The pill — measured from BookView's live search box: 999px radius, a 10%
+   text-secondary fill, 1px border, 4px 8px padding. */
+#outlineSearchInner {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color-custom, var(--separator-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary-custom, var(--main-color)) 10%, transparent);
+}
+
+#outlineSearchInput {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  /* The UA gives search inputs their own height/line-height; pin both so the row
+     height is only the 12px text plus the paddings above, with no hidden extra. */
+  height: 14px;
+  line-height: 14px;
+  /* Same bidi reason as `.treeItem > a` above: the viewer root is dir="ltr", so a
+     typed Hebrew query ending in ":" or "." (e.g. "ד:") renders with the weak
+     punctuation jumping to the wrong end. The input needs its own RTL base
+     direction, and text-align:right keeps the caret at the Hebrew side. */
+  direction: rtl;
+  text-align: right;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--main-color);
+}
+
+#outlineSearchInput::placeholder {
+  color: var(--main-color);
+  opacity: 0.6;
+}
+
+#outlineSearchInput::-webkit-search-cancel-button {
+  filter: grayscale(1) opacity(0.4);
+}
+
+/* Keyboard-nav focus ring on the flat results, mirroring the Vue app's
+   `[data-nav-item].is-focused`. Focus is painted on the row rather than moved
+   there as real DOM focus, so the caret stays in the query box and the user can
+   keep typing while arrowing. `!important` beats `.treeItem > a:hover`.
+
+   Color deliberately does NOT use --treeitem-selected-bg-color (0.25 alpha) —
+   that is PDF.js's *selected* weight and reads far too dark for a transient
+   focus ring. This matches the Vue app's `[data-nav-item].is-focused`, a 10%
+   mix of the text color, which also keeps it lighter than the 0.15 hover token
+   so hovering a focused row still reads as a change. */
+#outlineSearchResults .treeItem > a.is-focused,
+#outlinesView .treeItem > a.is-focused {
+  background-color: color-mix(in srgb, var(--main-color) 10%, transparent) !important;
+  background-clip: padding-box;
+  border-radius: 2px;
+}
+
+/* Current-entry tracking uses PDF.js's own `.selected` styling — no separate
+   highlight class. The row covering the page being viewed IS the selected item,
+   so page tracking and a manual click share one highlight and one piece of state
+   (`_currentTreeItem`). See outline-search.js — revealCurrentEntry().
+
+   PDF.js's own weight for this is too heavy here. Its `--treeitem-selected-bg-color`
+   is 0.25 alpha, chosen for a selection the user makes deliberately and rarely;
+   ours now moves on every page turn, so it reads as a constantly-shifting dark
+   block. Retune the TOKEN rather than the rule, so every `.selected` consumer
+   stays consistent.
+
+   The three tree highlights must stay separable, so keep this ordering:
+     focus ring   10% (color-mix, see below)
+     hover      0.15  (--treeitem-bg-color, PDF.js)
+     selected   0.18  (here — above hover so it still reads as selection)
+
+   Both blocks below mirror PDF.js's own structure for this token, including the
+   exact `@supports` condition, so whichever branch the browser takes ours is the
+   one that wins on load order (viewer-custom.css loads after viewer.css). */
+.treeView {
+  --treeitem-selected-bg-color: rgb(0 0 0 / 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  .treeView {
+    --treeitem-selected-bg-color: rgb(255 255 255 / 0.18);
+  }
+}
+
+@supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)) {
+  .treeView {
+    --treeitem-selected-bg-color: light-dark(rgb(0 0 0 / 0.18), rgb(255 255 255 / 0.18));
+  }
+}
+
+/* Opening a result calls the original anchor's handler, so PDF.js's
+   `_updateCurrentTreeItem` marks that row `.selected` — in the *tree*, which is
+   hidden at the time. Its `.selected:is(.treeView .treeItem) > a` rule then
+   painted the matching tree row with the heavy selected color, still showing
+   after the query was cleared. #outlineSearchResults also carries `.treeView`,
+   so that rule reaches these rows too. Suppress it here and let `.is-focused`
+   be the only highlight in the results list; the real tree keeps its own
+   selected styling untouched. */
+#outlineSearchResults .treeItem.selected > a {
+  background-color: transparent;
+  color: var(--treeitem-color);
+}
+
+/* --- Outline editing: direct manipulation, no mode ---
+   The + button shares the search row (Acrobat's "new bookmark" header button);
+   row actions live in a right-click / hover-⋯ context menu; drag moves rows.
+   See outline-search.js — "Editing". */
+/* The glyph is a masked SVG at PDF.js's `--icon-size`, matching the metrics of
+   the viewer's own toolbar buttons, rather than a `+` text character whose size
+   and weight came from the font. The background and the on-hover color change are
+   deliberately unchanged: `background: none` → `--button-hover-color` on hover,
+   and `opacity` 0.6 → 1. The icon inherits that opacity from the button, so it
+   brightens on hover exactly as the text glyph did. */
+#outlineAddButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  padding: 0;
+  margin-inline-start: 4px;
+  /* The pill's height is content-driven (14px input + 4px padding = 24px), a
+     measurement matched to BookView's `.toc-search`. A 16px-tall button would
+     stretch it by 2px, so keep the full-size icon but let it overflow the flex
+     line instead of growing it: the 2px spill lands in the pill's 4px padding. */
+  margin-block: -1px;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--main-color);
+  opacity: 0.6;
+  cursor: pointer;
+}
+/* Reuses PDF.js's own zoom-in glyph — it is precisely the `+` this button wants,
+   already in the viewer's icon idiom, so no extra asset is needed. Painted with
+   `currentColor` so it keeps following the button's `color`. */
+#outlineAddButton::before {
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background-color: currentColor;
+  -webkit-mask-image: url(images/toolbarButton-zoomIn.svg);
+          mask-image: url(images/toolbarButton-zoomIn.svg);
+  -webkit-mask-size: cover;
+          mask-size: cover;
+  -webkit-mask-position: center;
+          mask-position: center;
+}
+#outlineAddButton:hover {
+  opacity: 1;
+  background: var(--button-hover-color);
+}
+/* Context menu — floats at the cursor, styled on PDF.js's doorhanger tokens. */
+#outlineContextMenu {
+  position: fixed;
+  z-index: 40000;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--doorhanger-border-color);
+  border-radius: 6px;
+  background: var(--doorhanger-bg-color);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+  direction: rtl;
+  /* Scrolls only in a window too small to hold it. */
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.outlineMenuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--main-color);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+.outlineMenuItem:hover {
+  background: var(--button-hover-color);
+}
+.outlineMenuHint {
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+/* Hover ⋯ — one floating button parked at the hovered row's end (left, RTL). */
+#outlineRowMenuButton {
+  position: fixed;
+  z-index: 39999;
+  /* Height comes from JS (the hovered row's measured rect) so the button spans
+     the full row; 16px here is only a pre-first-hover fallback. The glyph is
+     centred with flex rather than a line-height, which would strand it at the
+     top of a 28px row. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: var(--doorhanger-bg-color);
+  color: var(--main-color);
+  opacity: 0.75;
+  cursor: pointer;
+}
+/* Masked SVG at `--icon-size` instead of the `⋯` text character, so the dots get
+   the viewer's own icon metrics rather than the font's. `currentColor` +
+   inherited `opacity` keep the hover color change identical to before. */
+#outlineRowMenuButton::before {
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background-color: currentColor;
+  -webkit-mask-image: url(images/toolbarButton-rowMenu.svg);
+          mask-image: url(images/toolbarButton-rowMenu.svg);
+  -webkit-mask-size: cover;
+          mask-size: cover;
+  -webkit-mask-position: center;
+          mask-position: center;
+}
+#outlineRowMenuButton:hover {
+  opacity: 1;
+  background: var(--button-hover-color);
+}
+
+/* Drag & drop */
+#outlinesView .treeItem.outlineDragging > a {
+  opacity: 0.4;
+}
+#outlineDropIndicator {
+  position: fixed;
+  z-index: 40001;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--progressBar-color, #0a84ff);
+  pointer-events: none;
+}
+/* "Drop INTO" (become a child): highlight the prospective parent row. */
+#outlinesView .treeItem.outlineDropIntoRow > a {
+  background-color: color-mix(in srgb, var(--progressBar-color, #0a84ff) 22%, transparent);
+  border-radius: 2px;
+}
+
+/* Renaming: the anchor becomes contentEditable — make that visible. */
+/* Rows are full-bleed now, so a ring drawn OUTSIDE the box (outline-offset:
+   1px) extends past the panel edges and is clipped by the scroll container on
+   both sides. Draw it INSIDE with an inset box-shadow instead — box-shadow
+   also follows the border-radius-less row cleanly. */
+#outlinesView .treeItem > a.outlineRenaming {
+  box-shadow: inset 0 0 0 1px var(--progressBar-color, #0a84ff);
+  background: var(--field-bg-color);
+  /* Chrome draws its own `outline: auto` focus ring on a focused
+     contentEditable — outside the box, so the full-bleed row gets it clipped
+     at the panel edges too. The inset shadow above is the focus indicator. */
+  outline: none;
+}
+

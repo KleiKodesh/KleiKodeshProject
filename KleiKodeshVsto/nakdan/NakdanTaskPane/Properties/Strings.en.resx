@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Section_Actions" xml:space="preserve"><value>Vowelization actions</value></data>
+  <data name="Action_Vowelize" xml:space="preserve"><value>Vowelize selected text</value></data>
+  <data name="Tip_Vowelize" xml:space="preserve"><value>Vowelize only the selected text</value></data>
+  <data name="Action_Clean" xml:space="preserve"><value>Clean text</value></data>
+  <data name="Tip_Clean" xml:space="preserve"><value>Remove the chosen marks from the selected text</value></data>
+  <data name="Tip_CleanChoose" xml:space="preserve"><value>Choose what to remove</value></data>
+  <data name="Clean_All" xml:space="preserve"><value>All</value></data>
+  <data name="Clean_KeepEndPunct" xml:space="preserve"><value>Keep punctuation at paragraph end</value></data>
+  <data name="Section_Genre" xml:space="preserve"><value>Text type</value></data>
+  <data name="Section_IgnoreStyles" xml:space="preserve"><value>Mark styles to skip while vowelizing:</value></data>
+  <data name="ChooseStyles" xml:space="preserve"><value>Choose styles ▾</value></data>
+  <data name="Section_Suggestions" xml:space="preserve"><value>Vowelization suggestions</value></data>
+  <data name="NextWord" xml:space="preserve"><value>Next word</value></data>
+  <data name="Tip_Show" xml:space="preserve"><value>Show vowelization alternatives for the selected word</value></data>
+  <data name="Show" xml:space="preserve"><value>Show</value></data>
+  <data name="PrevWord" xml:space="preserve"><value>Previous word</value></data>
+  <data name="Tip_ApplyOption" xml:space="preserve"><value>Replace the word with this vowelization</value></data>
+  <data name="Section_Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Busy" xml:space="preserve"><value>Vowelizing… please wait</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Tip_Cancel" xml:space="preserve"><value>Cancel vowelization</value></data>
+  <data name="GenreDesc_Modern" xml:space="preserve"><value>Modern Hebrew: suits most texts</value></data>
+  <data name="GenreDesc_Poetry" xml:space="preserve"><value>Poetry: for poetry and liturgical poems</value></data>
+  <data name="GenreDesc_Bible" xml:space="preserve"><value>Biblical: for texts of biblical origin</value></data>
+  <data name="GenreDesc_Rabbinic" xml:space="preserve"><value>Rabbinic: for halachic and rabbinic literature</value></data>
+  <data name="Genre_Rabbinic" xml:space="preserve"><value>Rabbinic text</value></data>
+  <data name="Genre_Bible" xml:space="preserve"><value>Biblical text</value></data>
+  <data name="Genre_Modern" xml:space="preserve"><value>Modern Hebrew</value></data>
+  <data name="Genre_Poetry" xml:space="preserve"><value>Poetry</value></data>
+  <data name="Clean_Nikkud" xml:space="preserve"><value>Vowel points</value></data>
+  <data name="Clean_Cantillations" xml:space="preserve"><value>Cantillation marks</value></data>
+  <data name="Clean_Periods" xml:space="preserve"><value>Periods</value></data>
+  <data name="Clean_Commas" xml:space="preserve"><value>Commas</value></data>
+  <data name="Clean_Dashes" xml:space="preserve"><value>Dashes</value></data>
+  <data name="Clean_QuestionExclamation" xml:space="preserve"><value>Question and exclamation marks</value></data>
+  <data name="Clean_Colons" xml:space="preserve"><value>Colons</value></data>
+  <data name="Status_Done" xml:space="preserve"><value>Vowelization complete ✓</value></data>
+  <data name="Status_Cancelled" xml:space="preserve"><value>Vowelization cancelled by the user</value></data>
+  <data name="Status_Cleaned" xml:space="preserve"><value>Text cleaned ✓</value></data>
+  <data name="Hint_ClickOption" xml:space="preserve"><value>Clicking a suggestion replaces the word and moves to the next one.</value></data>
+  <data name="Hint_SelectWord" xml:space="preserve"><value>Select a word in the document and click Show.</value></data>
+  <data name="Sugg_Loading" xml:space="preserve"><value>Loading suggestions…</value></data>
+  <data name="Sugg_None" xml:space="preserve"><value>No suggestions for this word</value></data>
+  <data name="Sugg_LoadFailed" xml:space="preserve"><value>Could not load suggestions (check your internet connection)</value></data>
+  <data name="Sugg_WordChanged" xml:space="preserve"><value>The word changed. Select it again</value></data>
+  <data name="Undo_Suggestion" xml:space="preserve"><value>Vowelization suggestion</value></data>
+  <data name="Sugg_ReplaceFailed" xml:space="preserve"><value>Replacement failed</value></data>
+  <data name="Err_NoInternet" xml:space="preserve"><value>No internet connection or the server is unavailable.
+Check your connection and try again.</value></data>
+  <data name="Prog_Analyze" xml:space="preserve"><value>Analyzing document structure</value></data>
+  <data name="Prog_Styles" xml:space="preserve"><value>Extracting styles</value></data>
+  <data name="Prog_Runs" xml:space="preserve"><value>Collecting text runs</value></data>
+  <data name="Prog_Tokens" xml:space="preserve"><value>Building character stream - {0} runs</value></data>
+  <data name="Prog_Chunks" xml:space="preserve"><value>Splitting text into chunks - {0} characters</value></data>
+  <data name="Prog_Send" xml:space="preserve"><value>Sending to Dicta - {0} requests</value></data>
+  <data name="Prog_Apply" xml:space="preserve"><value>Adding vowels to the text</value></data>
+  <data name="Prog_Write" xml:space="preserve"><value>Writing the result to the document</value></data>
+  <data name="Prog_Done" xml:space="preserve"><value>Vowelization completed successfully</value></data>
+  <data name="Err_NoSelectionVowelize" xml:space="preserve"><value>No text is selected.
+Select text before vowelizing.</value></data>
+  <data name="Err_NoSelectionClean" xml:space="preserve"><value>No text is selected.
+Select text before cleaning it.</value></data>
+  <data name="Err_NothingToClean" xml:space="preserve"><value>Nothing was chosen to remove.
+Check at least one option in the dropdown.</value></data>
+  <data name="Msg_Title" xml:space="preserve"><value>Vowelization</value></data>
+  <data name="Err_VowelizePrefix" xml:space="preserve"><value>Vowelization error:
+</value></data>
+  <data name="Err_Title" xml:space="preserve"><value>Error</value></data>
+</root>

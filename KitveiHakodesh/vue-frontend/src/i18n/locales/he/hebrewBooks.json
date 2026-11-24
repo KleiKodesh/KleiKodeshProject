@@ -1,0 +1,25 @@
+{
+  "item": {
+    "openInExplorer": "פתח בסייר הקבצים: {title}",
+    "deleteFromFolder": "מחק מהתיקייה: {title}",
+    "download": "הורד {title}"
+  },
+  "deleteConfirm": {
+    "title": "מחיקת הקובץ: {title}",
+    "warning": "שים לב: הקובץ יימחק מהתיקייה המקומית במחשב. מחיקה לצמיתות לא ניתנת לשחזור.",
+    "deletePermanently": "מחק לצמיתות",
+    "moveToRecycleBin": "העבר לסל המחזור"
+  },
+  "searchPlaceholder": "חפש ספרים, מחברים או נושאים...",
+  "noBooksFound": "לא נמצאו ספרים",
+  "noHistory": "אין היסטוריה — חפש ספר להתחיל",
+  "error": {
+    "loadFailed": "שגיאה בטעינת הספרים",
+    "noInternet": "אין חיבור לאינטרנט",
+    "notOnServer": "הספר לא נמצא בשרת",
+    "downloadFailed": "ההורדה נכשלה",
+    "generic": "שגיאה",
+    "fileNotInFolder": "הקובץ לא נמצא בתיקייה",
+    "noRecycleBin": "בכונן זה אין סל מחזור, ולכן הקובץ לא נמחק. כדי להסיר אותו, בחרו \"מחק לצמיתות\"."
+  }
+}

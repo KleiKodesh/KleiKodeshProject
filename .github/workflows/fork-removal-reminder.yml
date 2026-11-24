@@ -1,0 +1,86 @@
+# Reminds fork owners on issue #367 to remove the withdrawn zmanim code (legal request).
+# Checks every fork daily; from 2026-11-26 on, posts a reminder that @-mentions only the
+# owners whose fork still has the files - at most once every 7 days. Stops by itself once
+# no fork has them (then it posts a final "all clear" comment once).
+# Manual run: gh workflow run fork-removal-reminder.yml  (-f force=true posts even if too soon)
+name: Fork removal reminder
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Post now even if the start date or the 7-day gap says not yet
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: 367
+      START: "2026-11-26"
+      FORCE: ${{ inputs.force == true }}
+      DIR: KitveiHakodesh/vue-frontend/src/features/hebrew-calendar
+    steps:
+      - name: Check forks and remind
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          today=$(date -u +%F)
+          if [ "$FORCE" != true ] && [[ "$today" < "$START" ]]; then echo "Before $START - nothing to do."; exit 0; fi
+
+          # Already all clear? Then this workflow has finished its job.
+          if gh api "repos/$repo/issues/$ISSUE/comments" --paginate --jq '.[].body' | grep -q '<!-- fork-reminder:all-clear -->'; then
+            echo "All clear was already posted."; exit 0; fi
+
+          # The withdrawn files, identified by the SHA-256 of their file names (first 16 hex digits), so the
+          # names themselves are not written here.
+          WITHDRAWN="af498c06822ef135 8f5660169213ed7c 96bca057ad4601b7 76244de7b00c605b 8d12534b3c4f0b0a a838ea8951be0840 a8481046205a1df3 e3592944d6c34b8e ffe985ec46c06b90 bfb4fbbfe55f5acb f6cce9984d10e942 603df10ef4c4fcdc"
+          # Every file name anywhere under the zmanim folder (any depth), from the branch's tree.
+          names() { gh api "repos/$1/git/trees/$2?recursive=1" --jq ".tree[] | select(.type==\"blob\") | .path | select(startswith(\"$DIR/\")) | split(\"/\") | last" 2>/dev/null | grep -v '^{' || true; }
+          bad=()
+          # Every fork at every level (forks of forks too).
+          allforks() { for f in $(gh api "repos/$1/forks" --paginate --jq '.[].full_name' 2>/dev/null || true); do echo "$f"; allforks "$f"; done; }
+          for f in $(allforks "$repo" | sort -u); do
+            for b in $(gh api "repos/$f/branches" --paginate --jq '.[].name' 2>/dev/null || true); do
+              hit=0
+              while read -r n; do
+                [ -z "$n" ] && continue
+                h=$(printf '%s' "$n" | sha256sum | cut -c1-16)
+                case " $WITHDRAWN " in *" $h "*) hit=1; break;; esac
+              done < <(names "$f" "$b")
+              if [ $hit -eq 1 ]; then echo "STILL HAS FILES: $f ($b)"; bad+=("${f%%/*}"); break; fi
+            done
+          done
+          mapfile -t owners < <(printf '%s\n' "${bad[@]:-}" | grep . | sort -u || true)
+          echo "Forks still holding the code: ${#owners[@]}"
+
+          if [ ${#owners[@]} -eq 0 ]; then
+            body=$'כל המזלגות הסירו את הקוד. תודה לכולם!\n\nAll forks have removed the code. Thank you all!\n\n<!-- fork-reminder:all-clear -->\n\n---\nPosted automatically by a GitHub workflow (written by Claude Code) on behalf of the maintainer.'
+            gh issue comment "$ISSUE" --repo "$repo" --body "$body"; echo "Posted all-clear."; exit 0
+          fi
+
+          last=$(gh api "repos/$repo/issues/$ISSUE/comments" --paginate --jq '.[] | select(.body | contains("<!-- fork-reminder -->")) | .created_at' | tail -1)
+          if [ "$FORCE" != true ] && [ -n "$last" ] && [ $(( $(date -u +%s) - $(date -u -d "$last" +%s) )) -lt $((7*86400)) ]; then
+            echo "Last reminder $last - less than 7 days ago."; exit 0; fi
+
+          mentions=$(printf '@%s ' "${owners[@]}")
+          body="$mentions
+
+          תזכורת: המזלג שלכם עדיין מכיל את קוד הזמנים שהוסר מהמאגר הראשי מסיבות משפטיות. נא לבצע את ההוראות שבראש הדיון הזה (איפוס ל-upstream/master ומחיקת ענפים ותגיות ישנים, או מחיקת המזלג ויצירתו מחדש), ולהגיב כאן כשסיימתם. תודה!
+
+          Reminder: your fork still contains the zmanim code that was removed from the main repository for legal reasons. Please follow the instructions at the top of this issue (reset to upstream/master and delete old branches and tags, or delete the fork and fork again), and reply here when done. Thank you!
+
+          <!-- fork-reminder -->
+
+          ---
+          Posted automatically by a GitHub workflow (written by Claude Code) on behalf of the maintainer."
+          gh issue comment "$ISSUE" --repo "$repo" --body "$(sed 's/^          //' <<<"$body")"
+          echo "Reminder posted for: ${owners[*]}"

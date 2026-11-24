@@ -1,0 +1,98 @@
+# Kiwix JS — KleiKodesh Customisation Log
+
+All modifications to the upstream [kiwix-js](https://github.com/kiwix/kiwix-js) source are documented here.
+Source: `KleiKodeshVsto/Kiwix/kiwix-js-main/`
+Built output: `KleiKodeshVsto/Kiwix/KiwixTaskPane/Kiwix.js/`
+
+---
+
+## Workflow
+
+1. Make changes in `kiwix-js-main/` source files.
+2. Run `npm run build-src` from `kiwix-js-main/`.
+3. Copy `dist/` output to `KiwixTaskPane/Kiwix.js/`.
+4. Document the change below.
+
+```powershell
+# From repo root — build and copy:
+Set-Location KleiKodeshVsto/Kiwix/kiwix-js-main
+npm run build-src
+Set-Location ..
+
+$src = Resolve-Path "kiwix-js-main/dist"
+$dst = Resolve-Path "KiwixTaskPane/Kiwix.js"
+Get-ChildItem $src -Recurse -File | ForEach-Object {
+    $rel  = $_.FullName.Substring($src.Path.Length + 1)
+    $dest = Join-Path $dst $rel
+    $dir  = Split-Path $dest
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item $_.FullName $dest -Force
+}
+```
+
+### After npm install — restore RTL Bootstrap
+
+`npm install` restores the LTR Bootstrap. Re-run this after any `npm install`:
+
+```powershell
+$wc = New-Object System.Net.WebClient
+$wc.DownloadFile(
+    "https://cdn.rtlcss.com/bootstrap/v4.5.3/css/bootstrap.min.css",
+    (Resolve-Path "kiwix-js-main/node_modules/bootstrap/dist/css/bootstrap.min.css").Path
+)
+```
+
+---
+
+## Changes
+
+### 2026-04 — Hebrew UI + RTL Layout
+
+**Source files changed:**
+
+| File | Change |
+|------|--------|
+| `i18n/he.jsonp.js` | New file. Full Hebrew translation of all UI strings. |
+| `www/js/init.js` | `overrideBrowserLanguage` hardcoded to `'he'` — never reads from localStorage. Ensures Hebrew is the default regardless of browser language. |
+| `www/index.html` | Language selector restored with Hebrew (`עברית`) added as an option. User can switch languages via the dropdown in Configuration. |
+| `www/js/app.js` | Added `he` to the supported-languages regex in `getDefaultLanguageAndTranslateApp()`. |
+| `www/index.html` | Added `dir="rtl" lang="he"` to `<html>` tag. |
+| `node_modules/bootstrap/dist/css/bootstrap.min.css` | Replaced with Bootstrap 4 RTL build v4.5.3 from cdn.rtlcss.com. All margins, paddings, floats and flex directions are mirrored. See note above about restoring after npm install. |
+| `www/css/app.css` | Added RTL override block at end of file. Flips `border-left/right`, `padding-left/right`, `margin-left/right` for snippet indentation, TOC items, navbar, and form controls. |
+
+### 2026-11 — English UI is LTR
+
+**Source files changed:**
+
+| File | Change |
+|------|--------|
+| `www/css/bootstrap-ltr.min.css` | New file. Plain LTR Bootstrap 4.5.3 (jsdelivr), source-map comment removed. The RTL `bootstrap.min.css` is mirrored regardless of `dir`, so English kept an RTL layout. |
+| `www/index.html` | Bootstrap `<link>` got `id="bootstrapCss"`. |
+| `www/js/init.js` | When the host language is not `he`, swaps `#bootstrapCss` to `css/bootstrap-ltr.min.css` (next to the existing `lang`/`dir` setting). |
+| `KiwixTaskPane.csproj` | `bootstrap-ltr.min.css` added as Content (copied to output). |
+
+Only in `KiwixTaskPane/Kiwix.js`: the source copy `kiwix-js-main` does NOT have this LTR swap
+(no `bootstrap-ltr.min.css`, no `id="bootstrapCss"`). The host-theme block in `init.js`
+(`window.__khDarkTheme`, 2026-11) IS mirrored there. Carry both over when re-copying.
+
+---
+
+## C# Host (KiwixWebview.cs)
+
+| Change | Reason |
+|--------|--------|
+| `Load` event instead of `HandleCreated` for `InitAsync()` | `Load` fires after all Win32 handles exist. `HandleCreated` fired too early in the WinForms demo app. |
+| Removed `AddScriptToExecuteOnDocumentCreatedAsync` localStorage injection | Hebrew default is now in `init.js` source. No runtime injection needed. |
+| Injects `window.__khDarkTheme` before the page loads, from the pane's `BackColor` brightness | In Word, OfficeThemeWatcher binds the pane's BackColor to the Office theme, so Kiwix.js uses its own dark theme on a dark Office theme. |
+| `try/catch` around `InitAsync` with `MessageBox` on failure | Prevents infinite splash screen when WebView2 init fails silently. |
+
+---
+
+## Demo App (KiwixTaskPaneDebugger)
+
+| Change | Reason |
+|--------|--------|
+| Converted from WPF to pure WinForms | `KiwixWebview` is a WinForms `UserControl`. WPF wrapper was pointless overhead and caused the splash-stuck bug. |
+| `WebView2Loader.dll` as flat `Content` item in csproj | Native DLL does not propagate transitively through project references. Must be copied explicitly next to the exe. |
+| `--theme office-black` (and the other PaneSnapshot names) sets the viewer's BackColor/ForeColor | Same as the host does in Word, for themed captures. |
+| WebView2 package version updated to `1.0.3912.50` | Only this version is installed in the packages folder. |

@@ -1,0 +1,738 @@
+import { t } from '@/i18n'
+import { watch } from 'vue'
+import type { Ref } from 'vue'
+import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import type { LineItem, LinesTable } from './linesTable'
+import type { TocEntry } from '@/webview-host/queries.types'
+import type { Note } from './useBookViewNotes'
+import type { useTabStore } from '@/stores/tabStore'
+import type { PaneNavigation } from '@/composables/usePaneNavigation'
+import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
+import BookViewAddNoteMenuRow from './BookViewAddNoteMenuRow.vue'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
+import { cleanTextFlagsFor } from '@/utils/hebrewTextProcessing'
+import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
+import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
+import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
+import { buildLineLink } from '@/utils/appDeepLink'
+import {
+  appLinkHtml,
+  applyWordLinkExport,
+  buildWordLinkEndnotesHtml,
+  stripWordLinkMarkers,
+  ENDNOTES_SEPARATOR,
+  type WordLinkEndnote,
+  type WordLinkTargetContent,
+} from './wordLinkExport'
+import type { WordLinkTarget } from './wordLinkAnchors'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { pasteIntoWord } from '@/webview-host/bridge'
+import { triggerCopy } from '@/composables/useLineCopy'
+import { awaitWithinActivationWindow } from '@/utils/clipboard'
+
+type TabStore = ReturnType<typeof useTabStore>
+
+interface CopyMenuOptions {
+  scrollerEl: Ref<HTMLElement | null>
+  lines: () => LinesTable
+  isSelectAll: Ref<boolean>
+  selectAllInContainer: () => void
+  /**
+   * The row index span of the current selection, from the pinned-row tracker. Lets a
+   * copy reach the selected lines that scrolled out of the DOM mid-selection; returns
+   * null when there is no selection in this pane.
+   */
+  selectedRowIndexRange: () => { firstRowIndex: number; lastRowIndex: number } | null
+  bookTitle: string
+  /** The open book — lets the מקור reference link back to the line it names. */
+  bookId?: number
+  tabStore: TabStore
+  paneNavigation?: PaneNavigation
+  getActiveTocEntry?: (lineIndex: number) => TocEntry | null
+  getTocPath?: (entry: TocEntry) => string
+  /** A note by its id, for the endnotes of a copy with notes. */
+  getNoteById?: (noteId: number) => Note | undefined
+  getRenderedLineContent?: (raw: string, lineIndex: number, lineId: number) => string
+  /** The flags the screen renders with (per-book), so model lines copy the same way. */
+  cleanTextFlags?: () => number
+  /** The book is commentary: a short plain heading before the dash is a dibbur hamatchil too. */
+  isCommentary?: () => boolean
+  onHighlight?: (colorArgb: number) => void
+  onClearHighlight?: () => void
+  onAddNote?: () => void
+  onCopyLineLink?: () => void
+  /**
+   * "דיווח על טעות בספר" — opens the report dialog. Takes nothing: the dialog's host
+   * owns the selection and the pressed line, since it is the one that has to keep
+   * them alive after the menu closes.
+   */
+  onReportError?: () => void
+  /** Bookmarks the selection, or the top of the view with none. */
+  onCreateBookmark?: () => void
+  /**
+   * Warms the lazily-loaded notes and citations for a set of lines before an export
+   * reads them. Awaited by the copy actions — see prepareAndCopy for why the
+   * select-all case is additionally warmed the moment the selection is made.
+   */
+  prepareForLines?: (lineIds: number[]) => Promise<void>
+  /**
+   * Reads the lines of [start, end) for a copy, without keeping them in the lines store.
+   * Select-all copies the whole book, so it reads it when the user selects all.
+   */
+  readLines: (start: number, end: number) => Promise<LineItem[]>
+  /** Resolves only the citations already rendered in a fragment — the selection path. */
+  prepareForRenderedHtml?: (html: string) => Promise<void>
+  /** Resolves one point citation's target for its endnote. Synchronous by necessity. */
+  resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
+}
+
+// ── Note marker helpers ───────────────────────────────────────────────────────
+
+/** Strips all user-note-marker superscripts from an HTML string. */
+function stripNoteMarkers(html: string): string {
+  return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
+}
+
+interface EndnoteEntry {
+  number: number
+  noteText: string
+  quote: string
+}
+
+function extractEndnotes(
+  html: string,
+  resolveNote: (noteId: number) => { noteText: string; quote: string } | undefined,
+): { html: string; endnotes: EndnoteEntry[] } {
+  const endnotes: EndnoteEntry[] = []
+  let counter = 0
+  const replaced = html.replace(
+    /<sup[^>]*class="user-note-marker"[^>]*data-note-id="(\d+)"[^>]*>.*?<\/sup>/gs,
+    (_match: string, noteIdStr: string) => {
+      const noteId = parseInt(noteIdStr, 10)
+      const note = resolveNote(noteId)
+      if (!note) return ''
+      counter++
+      endnotes.push({ number: counter, noteText: note.noteText, quote: note.quote })
+      return `<sup><a href="#note-${counter}" id="ref-${counter}" style="color:var(--accent-color,#0078d4);text-decoration:none">${counter}</a></sup>`
+    },
+  )
+  return { html: replaced, endnotes }
+}
+
+function buildNoteEndnoteItems(endnotes: EndnoteEntry[]): string {
+  return endnotes
+    .map((e) => `<div dir="rtl" id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</div>`)
+    .join('\n')
+}
+
+/**
+ * Both endnote sequences under one rule: the user's notes first, then the DB's own
+ * citations. The two are numbered independently on purpose — each keeps the mark it
+ * carries in the line itself, which is what a reader matches them up by.
+ */
+function buildEndnotesHtml(endnotes: EndnoteEntry[], wordLinks: WordLinkEndnote[] = []): string {
+  const blocks = [buildNoteEndnoteItems(endnotes), buildWordLinkEndnotesHtml(wordLinks)].filter(
+    (block) => block !== '',
+  )
+  if (!blocks.length) return ''
+  return `\n${ENDNOTES_SEPARATOR}\n${blocks.join('\n')}`
+}
+
+// ── Hebrew search query extraction ───────────────────────────────────────────
+
+/** Strips everything that isn't a Hebrew letter or whitespace, preserving word integrity. */
+export function toHebrewSearchQuery(html: string): string {
+  const text = html.replace(/<[^>]*>/g, ' ')
+  const stripped = text.replace(/[^א-ת\s]/g, '')
+  return stripped.replace(/\s+/g, ' ').trim()
+}
+
+// ── Selection extraction ──────────────────────────────────────────────────────
+
+interface SelectionResult {
+  joined: string
+  firstLineIndex: number | null
+}
+
+/**
+ * Resolves the source `lineIndex` of the FIRST selected line from a live range.
+ *
+ * Virtualization-safe: a Range's boundary containers are always live DOM nodes —
+ * if a line scrolled out of the virtualized DOM, the browser would have clamped the
+ * selection at that boundary. So `range.startContainer` reliably belongs to the true
+ * first line of the *current* selection. We walk up from it to the nearest
+ * [data-index] row and map that row index to the table's lineIndex.
+ *
+ * Falls back to the old intersect-scan over rendered .line nodes only if the walk-up
+ * fails (e.g. the start boundary sits on the scroller container itself, not a row).
+ */
+function resolveFirstLineIndex(
+  scrollerEl: HTMLElement | null,
+  range: Range,
+  lines: LinesTable,
+): number | null {
+  const indexFromNode = (node: Node | null): number | null => {
+    const el = node instanceof Element ? node : node?.parentElement ?? null
+    const row = el?.closest('[data-index]') as HTMLElement | null
+    const dataIndex = row?.dataset['index']
+    if (dataIndex == null) return null
+    return lines.at(parseInt(dataIndex, 10))?.lineIndex ?? null
+  }
+
+  const fromStart = indexFromNode(range.startContainer)
+  if (fromStart != null) return fromStart
+
+  if (scrollerEl) {
+    for (const el of Array.from(scrollerEl.querySelectorAll('.line'))) {
+      if (range.intersectsNode(el)) return indexFromNode(el)
+    }
+  }
+  return null
+}
+
+function extractSelection(
+  scrollerEl: HTMLElement | null,
+  lines: LinesTable,
+  /** The whole book's lines when the copy is a select-all; null for a live selection. */
+  wholeBook: readonly LineItem[] | null,
+  renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
+): SelectionResult | null {
+  if (wholeBook) {
+    // Wrap each line as its own <div> block so the two copy concerns stay separable:
+    // with copyJoinLines OFF the per-line blocks keep one line break per line on
+    // paste (matching a normal selection), and with it ON the flatten step strips
+    // the <div>s to one continuous run. Callers that want flat text (search query,
+    // quotation re-collect) strip all tags anyway, so the wrappers don't affect them.
+    const parts: string[] = []
+    let firstLineIndex: number | null = null
+    for (const l of wholeBook) {
+      if (l.content == null) continue
+      firstLineIndex ??= l.lineIndex
+      parts.push(`<div class="line">${renderLine ? renderLine(l.content, l.lineIndex, l.id) : l.content}</div>`)
+    }
+    return { joined: parts.join(''), firstLineIndex }
+  }
+
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+  const fragment = range.cloneContents()
+  const tmp = document.createElement('div')
+  tmp.appendChild(fragment)
+
+  let joined = Array.from(tmp.querySelectorAll('.line'))
+    .map((el) => el.innerHTML)
+    .join(' ')
+  if (!joined) joined = tmp.innerHTML
+  if (!joined.trim()) return null
+
+  const firstLineIndex = resolveFirstLineIndex(scrollerEl, range, lines)
+
+  return { joined, firstLineIndex }
+}
+
+/**
+ * The selected lines' HTML, INCLUDING the lines that scrolled out of the virtualized
+ * window mid-selection and are therefore not in the DOM at all.
+ *
+ * A selection can span thousands of lines while only a screenful is rendered. The two
+ * rows holding the selection's ends are always rendered — they are pinned there by
+ * useVirtualizedTextSelection — so those two keep their exact partial text from
+ * the DOM, and every line between them is taken whole from the model instead.
+ *
+ * Returns null when the selection is not one this can stitch (no pinned range, or the
+ * pinned rows are somehow not rendered), leaving the caller on its DOM-only path.
+ */
+function extractSelectionWithUnmountedLines(
+  scrollerEl: HTMLElement | null,
+  lines: LinesTable,
+  rowIndexRange: { firstRowIndex: number; lastRowIndex: number } | null,
+  perLineHtml: boolean,
+  renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
+): SelectionResult | null {
+  if (!scrollerEl || !rowIndexRange) return null
+  const { firstRowIndex, lastRowIndex } = rowIndexRange
+  // A single-row selection is entirely inside one rendered line: nothing to stitch.
+  if (firstRowIndex >= lastRowIndex) return null
+
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
+  const range = selection.getRangeAt(0)
+
+  const firstRowElement = scrollerEl.querySelector(`[data-index="${firstRowIndex}"]`)
+  const lastRowElement = scrollerEl.querySelector(`[data-index="${lastRowIndex}"]`)
+  if (!firstRowElement || !lastRowElement) return null
+
+  // The selection's own partial text on each end line: the full range clipped to that
+  // one row. serializeRangeBalanced repairs tags the clip would otherwise leave open.
+  const firstRowRange = range.cloneRange()
+  firstRowRange.setEndAfter(firstRowElement)
+  const lastRowRange = range.cloneRange()
+  lastRowRange.setStartBefore(lastRowElement)
+
+  const htmlParts: string[] = [serializeRangeBalanced(firstRowRange, scrollerEl)]
+  for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
+    const line = lines.at(rowIndex)
+    if (!line || line.content == null) continue
+    const lineHtml = renderLine ? renderLine(line.content, line.lineIndex, line.id) : line.content
+    htmlParts.push(perLineHtml ? lineHtml : `<div class="line">${lineHtml}</div>`)
+  }
+  htmlParts.push(serializeRangeBalanced(lastRowRange, scrollerEl))
+
+  const joined = htmlParts.filter((part) => part.trim()).join(perLineHtml ? ' ' : '')
+  if (!joined.trim()) return null
+
+  return { joined, firstLineIndex: lines.at(firstRowIndex)?.lineIndex ?? null }
+}
+
+// ── Composable ────────────────────────────────────────────────────────────────
+
+// ── Copy flag semantics ───────────────────────────────────────────────────────
+//
+// ALL copy paths (menu העתק, Ctrl+C) go through useScopedCopy's copy event handler
+// which calls buildFormattedHtml and writes to event.clipboardData.
+// onCopy fires document.execCommand('copy') to trigger that event.
+// onPasteIntoWord goes through the SAME path — triggerCopy with an afterCopy callback
+// that sends the pasteIntoWord bridge message so C# opens Word and calls
+// Selection.Paste(). The callback runs inside the copy event handler, after the
+// clipboard write, so Word can never paste a stale clipboard.
+//
+// copyJoinLines — "העתק כרצף (ללא מעברי שורה)" (independent checkbox)
+//   Controls whether the selected lines keep a line break between them on paste.
+//   ON:  JOIN the selected lines into ONE continuous run of text — the per-line
+//        block structure is removed so nothing breaks between lines. Collected via
+//        extractSelection (each .line's innerHTML) and joined into a single <div>.
+//   OFF: use the raw browser selection HTML directly, which preserves each source
+//        line as its own block (one line break per line on paste).
+//   Has nothing to do with note markers.
+//
+// copySourcePosition (radio pair — at most one active at a time)
+//   'start': prepend <h2 dir="rtl">book, toc path</h2> before the text
+//   'end':   append (book, toc path) after the text
+//   null:    no source decoration
+//
+// copyWithNotes (independent checkbox)
+//   ON:  convert user-note-marker superscripts to numbered endnotes
+//   OFF: strip note markers from the HTML
+//
+// copyCleanFlags (three independent checkboxes: nikkud, teamim, modern punctuation)
+//   cleanHebrewText() with settingsStore.copyCleanFlags; 0 = leave text as-is.
+//   Independent of the toolbar's clean-text view.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void, buildSource: (firstLineIndex: number | null) => string, wholeBookReady: () => Promise<LineItem[]> } {
+  const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
+  const settingsStore = useSettingsStore()
+
+  /**
+   * Applies one copy-flag toggle through the shared exclusivity model and writes
+   * the enforced result back to the store. All four exclusivity-governed checkboxes
+   * go through here so the rules live in ONE place (copyFlagExclusivity.ts) and the
+   * lines + commentary menus can't drift apart. See that file for the rule rationale
+   * (notably: notes ⊗ END-source is intentional, notes + start-source is allowed).
+   */
+  function toggleCopyFlag(toggle: CopyExclusivityToggle, value: boolean): void {
+    const next = applyCopyExclusivity(
+      {
+        copySourcePosition: settingsStore.copySourcePosition,
+        copyWithNotes: settingsStore.copyWithNotes,
+        copyAsSourceWithQuotation: settingsStore.copyAsSourceWithQuotation,
+      },
+      toggle,
+      value,
+    )
+    settingsStore.copySourcePosition = next.copySourcePosition
+    settingsStore.copyWithNotes = next.copyWithNotes
+    settingsStore.copyAsSourceWithQuotation = next.copyAsSourceWithQuotation
+  }
+
+  function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
+    const separator = includeComma ? ', ' : ' '
+    // TOC paths are stored with " · " between segments (search-UI display format).
+    // A מקור reference should read as one continuous title, so collapse the segment
+    // separators to a single space. Not a document format used in the sources.
+    const flattenTocPath = (path: string): string => path.replace(/\s*·\s*/g, ' ')
+    if (firstLineIndex != null && options.getActiveTocEntry && options.getTocPath) {
+      const entry = options.getActiveTocEntry(firstLineIndex)
+      if (entry) return `${bookTitle}${separator}${flattenTocPath(options.getTocPath(entry))}`
+    }
+    const tocPath = tabStore.activeTab.tocPath
+    return tocPath ? `${bookTitle}${separator}${flattenTocPath(tocPath)}` : bookTitle
+  }
+
+  /**
+   * The same reference as HTML, linked back to the exact line it describes — the
+   * reader of a pasted quote can get to its place in the app, and the reference
+   * still reads as plain text everywhere a link means nothing. Falls back to escaped
+   * text when there is no line to point at (nothing resolved a first line index).
+   */
+  function buildSourceHtml(firstLineIndex: number | null, includeComma: boolean = true): string {
+    const source = buildSource(firstLineIndex, includeComma)
+    if (options.bookId == null || options.bookId <= 0 || firstLineIndex == null || firstLineIndex < 0) return escapeHtml(source)
+    return appLinkHtml(source, buildLineLink(options.bookId, firstLineIndex))
+  }
+
+  /** The toolbar's clean-text flags (per-book). */
+  function screenCleanTextFlags(): number {
+    return options.cleanTextFlags?.() ?? settingsStore.cleanTextFlags
+  }
+
+  /**
+   * How a line taken from the MODEL (select-all, or the scrolled-out middle of a long
+   * selection) is rendered for copy. The model holds raw DB text, so even without the
+   * note renderer it must get the screen's diacritics filter and divine-name censor —
+   * otherwise those lines paste niqqud and the full name the screen hides. DOM-read
+   * lines already have both.
+   */
+  function modelLineRenderer(): (raw: string, lineIndex: number, lineId: number) => string {
+    if (settingsStore.copyWithNotes && options.getRenderedLineContent) return options.getRenderedLineContent
+    return (raw) => contentInAnnotationOffsetSpace(raw, screenCleanTextFlags(), settingsStore.censorOptions)
+  }
+
+  /**
+   * Builds the final HTML for the current selection applying all active copy flags.
+   * Returns null when there is no selection.
+   * See the copy flag semantics block above for a full description of each flag.
+   */
+  function buildFormattedHtml(): string | null {
+    // ── Acquire raw HTML and firstLineIndex ───────────────────────────────────
+    // TWO INDEPENDENT decisions — do not conflate them:
+    //   WHICH content  → isSelectAll (select-all/copy-all): the whole document
+    //                    (every line, from the model) vs. just the browser range.
+    //                    This MUST be honoured regardless of copyJoinLines, or a
+    //                    select-all copy would only grab the virtualized-in lines.
+    //   HOW to format  → copyJoinLines (Step 2 below): flatten to one run vs. keep
+    //                    per-line breaks. Purely a formatting concern; it does NOT
+    //                    decide what gets copied.
+    let joined: string
+    let firstLineIndex: number | null = null
+
+    if (isSelectAll.value) {
+      // Copy-all: gather every line from the model (virtualization-independent).
+      const result = extractSelection(scrollerEl.value, lines(), selectAllRows(), modelLineRenderer())
+      if (!result) return null
+      joined = result.joined
+      firstLineIndex = result.firstLineIndex
+    } else {
+      // Normal selection: use the live browser range.
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
+      const range = sel.getRangeAt(0)
+      const renderLine = modelLineRenderer()
+      // A selection long enough to have scrolled its middle out of the DOM is
+      // stitched from the model first; only a selection that lives entirely in the
+      // rendered window falls through to reading the DOM alone.
+      const stitched = extractSelectionWithUnmountedLines(
+        scrollerEl.value,
+        lines(),
+        options.selectedRowIndexRange(),
+        settingsStore.copyJoinLines,
+        renderLine,
+      )
+      if (stitched) {
+        joined = stitched.joined
+        firstLineIndex = stitched.firstLineIndex
+      } else if (settingsStore.copyJoinLines) {
+        // Collect the selected .line innerHTML (optionally via the note renderer).
+        const result = extractSelection(scrollerEl.value, lines(), null, renderLine)
+        if (!result) return null
+        joined = result.joined
+        firstLineIndex = result.firstLineIndex
+      } else {
+        // Use the raw browser selection HTML directly (per-line blocks preserved).
+        // Balanced serialization, not tmp.innerHTML: a selection starting mid-heading
+        // clones without its opening tag and innerHTML repairs it by running the
+        // heading over every following line (see serializeRangeBalanced).
+        joined = serializeRangeBalanced(range, scrollerEl.value)
+        if (!joined.trim()) return null
+        // Resolve firstLineIndex from the selection anchor (virtualization-safe).
+        firstLineIndex = resolveFirstLineIndex(scrollerEl.value, range, lines())
+      }
+    }
+
+    // ── Step 1: note markers ─────────────────────────────────────────────────
+    let html: string
+    let endnotesHtml = ''
+    if (settingsStore.copyWithNotes) {
+      // Resolve a note by its (globally-unique) id from the notes model, not the
+      // DOM: it works identically whether the owning row is mounted or not.
+      function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
+        const found = options.getNoteById?.(noteId)
+        return found ? { noteText: found.note, quote: found.quote } : undefined
+      }
+      const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
+      // The DB's own citations travel with the user's notes: a range citation
+      // becomes a real link on the cited words, a point citation becomes an endnote
+      // in its own sequence. Both need target data prepareForLines already loaded;
+      // anything still unresolved is dropped rather than exported half-formed.
+      const linked = options.resolveWordLinkTarget
+        ? applyWordLinkExport(extracted, options.resolveWordLinkTarget)
+        : { html: extracted, endnotes: [] as WordLinkEndnote[] }
+      html = linked.html
+      endnotesHtml = buildEndnotesHtml(endnotes, linked.endnotes)
+    } else {
+      html = stripWordLinkMarkers(stripNoteMarkers(joined))
+    }
+
+    // ── Step 2: copyJoinLines — flatten to one continuous run ─────────────────
+    // Only when join-lines mode is on. extractSelection gave us the selected lines'
+    // innerHTML joined with a space, so `html` is already the concatenated inline
+    // content. We strip any block-level tags that would force a break between lines
+    // (<div>/<p>/<br>, incl. those coming from a note renderer) and wrap the whole
+    // thing in a SINGLE <span>, so the lines paste as one uninterrupted run with no
+    // line break between them. OFF path keeps the raw per-line blocks (breaks kept).
+    //
+    // <span>, NOT <div>: a <div> IS a paragraph to Word's HTML importer, so it
+    // contributes its own trailing paragraph mark — which is exactly the break
+    // join-lines mode exists to avoid. A <span> is inline content and merges into
+    // the paragraph at the paste caret instead of opening a new one.
+    if (settingsStore.copyJoinLines) {
+      const inline = html
+        .replace(/<\/?(?:div|p)[^>]*>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      html = `<span>${inline}</span>`
+    }
+
+    // ── Step 3: copyCleanFlags ────────────────────────────────────────────────
+    // Clean BOTH the body and the endnotes so a single copy has one consistent
+    // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
+    // purpose — a מקור reference is not book text and must not be stripped.
+    const flags = cleanTextFlagsFor(settingsStore.copyCleanFlags, options.isCommentary?.() ?? false)
+    if (flags) {
+      html = cleanHebrewText(html, flags)
+      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml, flags)
+    }
+
+    // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
+    // Skipped when quotation is on: quotation OWNS the whole output (Step 5) and
+    // uses the same position to lay out its own parenthesised מקור, so decorating
+    // html here would be discarded (and would double-count in Step 5's re-collect).
+    const position = settingsStore.copySourcePosition
+    if (!settingsStore.copyAsSourceWithQuotation) {
+      if (position === 'start') {
+        html = `<h2 dir="rtl">${buildSourceHtml(firstLineIndex, false)}</h2>${html}`
+      } else if (position === 'end') {
+        html = `${html} (${buildSourceHtml(firstLineIndex, true)})`
+      }
+    }
+
+    // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
+    // Produces a single inline line. The source position decides the layout:
+    //   start → (מקור) "ציטוט"      end → "ציטוט" (מקור)
+    // (quotation always has a position — enforced by copyFlagExclusivity). Always
+    // collects the full line content into one inline paragraph regardless of the
+    // copyJoinLines setting.
+    if (settingsStore.copyAsSourceWithQuotation) {
+      // Collect full line content. If copyJoinLines already ran, html is a single
+      // <div> — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
+      let inlineText: string
+      if (settingsStore.copyJoinLines) {
+        inlineText = stripNoteMarkers(html).replace(/<\/?(?:div|span)>/gi, ' ').replace(/\s+/g, ' ').trim()
+      } else {
+        const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null, options.getRenderedLineContent)
+        const blobHtml = blobResult ? blobResult.joined : html
+        inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      }
+      if (flags) inlineText = cleanHebrewText(inlineText, flags)
+      // Decode any surviving HTML entities to real text, then escape once — the
+      // clipboard writer treats the return value as HTML, so bare </>/& must be
+      // escaped (and not double-encoded). The source is escaped inside
+      // buildSourceHtml, which also links it to the line it names.
+      const src = buildSourceHtml(firstLineIndex, true)
+      const quote = escapeHtml(htmlToText(inlineText))
+      const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
+      // <span>, not <div>: quotation mode is a single inline run by design, so it
+      // must not contribute a paragraph mark of its own on paste into Word.
+      return `<span dir="rtl">${body}</span>`
+    }
+
+    return html + endnotesHtml
+  }
+
+  /** The current selection's rendered markup, for resolving the citations inside it. */
+  function selectionHtml(): string {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return ''
+    const holder = document.createElement('div')
+    holder.appendChild(sel.getRangeAt(0).cloneContents())
+    return holder.innerHTML
+  }
+
+  /**
+   * Loads what the export needs, then fires the native copy event — useScopedCopy
+   * intercepts it and applies all active flags (copyJoinLines, copySourcePosition,
+   * copyWithNotes, copyCleanFlags).
+   *
+   * The await is what makes copy-with-notes independent of what happens to be
+   * scrolled into view. It stays inside the browser's user-activation window because
+   * each branch is bounded: a live selection only resolves the citations already in
+   * its markup, and the whole-book case was already warmed when the select-all
+   * happened (watch below). Were the await to outlast that window,
+   * execCommand('copy') would quietly do nothing.
+   */
+  async function prepareAndCopy(afterCopy?: () => void): Promise<void> {
+    if (settingsStore.copyWithNotes) {
+      // A failed warm-up costs endnotes, not the copy itself.
+      try {
+        // Select-all builds from the model, so re-rendering during the await is
+        // harmless there; a live selection must not be re-rendered out from under
+        // itself, hence the narrower branch. See useCopyExportData.
+        // Bounded by the clipboard's activation window, not just by "each branch is
+        // small": a cold service or a hosted bridge can make either branch slow enough
+        // that execCommand('copy') is a no-op by the time it runs, and the Ctrl+C keydown
+        // was already preventDefault()ed - so a slow warm-up meant copying NOTHING. Past
+        // the budget the copy goes ahead with whatever has arrived; the load keeps running
+        // and the next copy has it all.
+        const prepared = isSelectAll.value
+          ? wholeBookReady().then((rows) => options.prepareForLines?.(rows.map((l) => l.id)))
+          : options.prepareForRenderedHtml?.(selectionHtml())
+        if (prepared) await awaitWithinActivationWindow(prepared)
+      } catch { /* export degrades; proceed */ }
+    } else if (isSelectAll.value) {
+      try { await awaitWithinActivationWindow(wholeBookReady()) } catch { /* copy what is loaded */ }
+    }
+    triggerCopy(afterCopy)
+  }
+
+  // The whole book's lines, read once per select-all (started the moment the user
+  // selects all, below, so the copy rarely has to wait) and dropped when the select-all ends.
+  let wholeBook: Promise<LineItem[]> | null = null
+  let wholeBookRows: LineItem[] | null = null
+  function wholeBookReady(): Promise<LineItem[]> {
+    if (wholeBookRows) return Promise.resolve(wholeBookRows)
+    const reading = (wholeBook ??= options.readLines(0, lines().length)
+      .then((rows) => { if (wholeBook === reading) wholeBookRows = rows; return rows })
+      .finally(() => { if (wholeBook === reading) wholeBook = null }))
+    return reading
+  }
+  /** The select-all's lines; before they arrive, the lines that are loaded. */
+  function selectAllRows(): readonly LineItem[] {
+    if (wholeBookRows) return wholeBookRows
+    const table = lines()
+    const loaded: LineItem[] = []
+    for (let i = 0; i < table.length; i++) if (table.contentAt(i) != null) loaded.push(table.at(i)!)
+    return loaded
+  }
+
+  // Select-all is the one case whose warm-up can be big, so it runs here — outside
+  // any clipboard gesture — rather than inside the copy action. Covers both routes
+  // into select-all (Ctrl+A and the menu item), since both set this flag.
+  watch(isSelectAll, (on) => {
+    if (!on) {
+      wholeBook = null
+      wholeBookRows = null
+      return
+    }
+    const loading = wholeBookReady()
+    if (!settingsStore.copyWithNotes || !options.prepareForLines) return
+    void loading.then((rows) => options.prepareForLines?.(rows.map((l) => l.id)))
+  })
+
+  function onCopy(): void {
+    void prepareAndCopy()
+  }
+
+  // Uses the same copy path as onCopy — triggerCopy fires the copy event so useScopedCopy
+  // writes the formatted HTML to the clipboard — then calls pasteIntoWord() from inside
+  // the copy event handler, after the clipboard write is guaranteed complete.
+  function onPasteIntoWord(): void {
+    void prepareAndCopy(() => pasteIntoWord().catch(() => {}))
+  }
+
+  function onSearchInRepository(): void {
+    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null)
+    if (!result) return
+    const query = toHebrewSearchQuery(result.joined)
+    if (!query) return
+    const nav: PaneNavigation | undefined = options.paneNavigation
+    if (nav) {
+      nav.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
+    } else {
+      tabStore.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
+    }
+  }
+
+  const annotationRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAnnotationMenuRow,
+    props: {
+      onHighlight: options.onHighlight ?? (() => {}),
+      onClearHighlight: options.onClearHighlight ?? (() => {}),
+    },
+  }
+
+  const addNoteRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAddNoteMenuRow,
+    props: { onAddNote: options.onAddNote ?? (() => {}) },
+  }
+
+  return {
+    items: [
+      { label: t('bookView.selectAll'), action: selectAllInContainer, shortcut: 'Ctrl+A' },
+      { label: t('bookView.copy.copy'), action: onCopy, shortcut: 'Ctrl+C' },
+      { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+      { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+      { label: t('bookView.copy.link'), action: options.onCopyLineLink ?? (() => {}) },
+      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      addNoteRow,
+      { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
+      { type: 'separator' },
+      {
+        type: 'submenu',
+        label: t('bookView.copy.options'),
+        items: [
+          // Independent checkboxes — all can be active simultaneously
+          {
+            type: 'checkbox',
+            label: t('bookView.copy.joinLines'),
+            get checked() { return settingsStore.copyJoinLines },
+            onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
+          },
+          // start/end are a mutually-exclusive pair rendered as two checkboxes (ticking
+          // one clears the other). All exclusivity is enforced by toggleCopyFlag →
+          // copyFlagExclusivity.ts; do not add ad-hoc clears here.
+          {
+            type: 'checkbox',
+            label: t('bookView.copy.sourceStart'),
+            get checked() { return settingsStore.copySourcePosition === 'start' },
+            onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
+          },
+          {
+            type: 'checkbox',
+            label: t('bookView.copy.sourceEnd'),
+            get checked() { return settingsStore.copySourcePosition === 'end' },
+            onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
+          },
+          {
+            type: 'checkbox',
+            label: t('bookView.copy.quote'),
+            get checked() { return settingsStore.copyAsSourceWithQuotation },
+            onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
+          },
+          {
+            type: 'checkbox',
+            label: t('bookView.copy.withNotes'),
+            get checked() { return settingsStore.copyWithNotes },
+            onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
+          },
+          ...copyCleanMenuItems(),
+        ],
+      },
+      { type: 'separator' },
+      annotationRow,
+    ],
+    buildFormattedHtml,
+    /** The whole book's lines for an export; held until the select-all ends. */
+    wholeBookReady,
+    onCopy,
+    onPasteIntoWord,
+    onSearchInRepository,
+    // Exported so the error report names the line the SAME way a copied מקור does —
+    // one reference format in the app, built in one place.
+    buildSource: (firstLineIndex: number | null) => buildSource(firstLineIndex),
+  }
+}

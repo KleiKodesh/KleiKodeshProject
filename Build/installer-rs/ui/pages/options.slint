@@ -1,0 +1,66 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer, Page } from "../state.slint";
+import { PageTitle, CheckRow } from "../widgets.slint";
+
+// The install folder is fixed (%LOCALAPPDATA%\KleiKodesh): the apps and the service
+// recognise an installed product by that path, so it is not offered here.
+export component OptionsPage inherits VerticalLayout {
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 14px;
+        PageTitle {
+            title: Installer.options-back == Page.manage ? Lang.t("אפשרויות", "Options") : Lang.t("אפשרויות התקנה", "Install options");
+            subtitle: Lang.t("ההתקנה למשתמש הנוכחי בלבד ואינה דורשת הרשאות מנהל.", "Installs for the current user only. No administrator rights needed.");
+        }
+        Rectangle { height: 4px; }
+        CheckRow {
+            text: Lang.t("צור קיצורי דרך בשולחן העבודה", "Create desktop shortcuts");
+            checked: Installer.desktop-shortcut;
+            toggled => { Installer.desktop-shortcut = !Installer.desktop-shortcut; }
+        }
+        if Installer.kitvei-selected: CheckRow {
+            text: Lang.t("הוסף את כתבי הקודש ל\"פתח באמצעות\" עבור קבצי PDF", "Add Kitvei Hakodesh to \"Open with\" for PDF files");
+            detail: Lang.t("לא משנה את תוכנת ברירת המחדל.", "Does not change your default programs.");
+            checked: Installer.file-associations;
+            toggled => { Installer.file-associations = !Installer.file-associations; }
+        }
+        if Installer.kitvei-selected: CheckRow {
+            text: Lang.t("התקן גם את לוח השנה כתוכנה נפרדת", "Also install the calendar as its own app");
+            detail: Lang.t("לוח שנה עם זמני היום ולימוד יומי בחלון משלו, בלי לפתוח את כתבי הקודש. לחיצה על לימוד פותחת אותו בכתבי הקודש.", "The calendar with zmanim and daily learning in its own window, without opening Kitvei Hakodesh. A click on a learning opens it in Kitvei Hakodesh.");
+            checked: Installer.calendar-selected;
+            toggled => { Installer.toggle-calendar(); }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+    // Same OK / Cancel as the add-in options page, from the home page and from Modify alike.
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 12px;
+        height: 42px;
+        spacing: 8px;
+        if Lang.en: Button { text: "OK"; primary: true; min-width: 80px; clicked => { Installer.page = Installer.options-back; } }
+        if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { root.discard(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { root.discard(); } }
+        if !Lang.en: Button { text: "אישור"; primary: true; min-width: 80px; clicked => { Installer.page = Installer.options-back; } }
+    }
+
+    // The values as they were when this page opened; Cancel puts them back.
+    property <bool> opened-desktop-shortcut;
+    property <bool> opened-file-associations;
+    init => {
+        root.opened-desktop-shortcut = Installer.desktop-shortcut;
+        root.opened-file-associations = Installer.file-associations;
+    }
+    function discard() {
+        Installer.desktop-shortcut = root.opened-desktop-shortcut;
+        Installer.file-associations = root.opened-file-associations;
+        Installer.page = Installer.options-back;
+    }
+}

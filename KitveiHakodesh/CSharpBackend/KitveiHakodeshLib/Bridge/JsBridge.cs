@@ -1,0 +1,274 @@
+namespace KitveiHakodeshLib.Bridge
+{
+    /// <summary>
+    /// JavaScript injected before the Vue app loads.
+    /// Exposes Promise-based functions on window:
+    ///   __webviewAction(action, args)      — the bridge for every host action (window, Word,
+    ///                                        files, chrome). Data goes to the service, not here.
+    /// Push events (no pending id) are dispatched via window.__onWebviewEvent(msg).
+    /// </summary>
+    public static class JsBridge
+    {
+        /// <summary>
+        /// Bridge script injected into the top-level frame on document creation.
+        /// Sets up the Promise-based RPC channel between Vue and C#.
+        /// </summary>
+        /// <summary>
+        /// Wraps a document-created script so it runs only in the app's own documents: the top
+        /// frame and the app's frames on http://kitvei* hosts. A Torah website's iframe (web-view
+        /// tab) gets none of the app's bridge or host facts.
+        /// </summary>
+        public static string ForAppFramesOnly(string script) =>
+            "if (window === window.top || /^http:\\/\\/kitvei/i.test(location.origin)) {\n" + script + "\n}";
+
+        public const string Script = @"
+(function () {
+    const pending = new Map();
+    let nextId = 1;
+
+    window.chrome.webview.addEventListener('message', function (e) {
+        const msg = e.data;
+
+        // Push events have no pending id — dispatch to the event handler
+        if (msg.event || msg.type) {
+            if (typeof window.__onWebviewEvent === 'function') window.__onWebviewEvent(msg);
+            return;
+        }
+
+        const cb = pending.get(msg.id);
+        if (!cb) return;
+        pending.delete(msg.id);
+        msg.error ? cb.reject(new Error(msg.error)) : cb.resolve(msg);
+    });
+
+    window.__onWebviewEvent = null;
+
+    function post(payload) {
+        return new Promise(function (resolve, reject) {
+            const id = String(nextId++);
+            pending.set(id, { resolve: resolve, reject: reject });
+            window.chrome.webview.postMessage(Object.assign({ id: id }, payload));
+        });
+    }
+
+    window.__webviewAction         = function (action, args) { return post(Object.assign({ action: action }, args || {})); };
+})();";
+
+        /// <summary>
+        /// Scroll-tracker script injected into every frame (including local file iframes)
+        /// via a separate AddScriptToExecuteOnDocumentCreatedAsync call.
+        ///
+        /// In child frames (local HTML/TXT files served from kitvei-localfile-N):
+        ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
+        ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
+        ///     and calls window.scrollTo() to restore the saved position.
+        ///   - Listens for { type: 'htmlViewScrollbars', hidden } commands from the parent
+        ///     (useIframeScrollbarsHidden in useUiChromeVisibility.ts), so the app-wide
+        ///     hidden-scrollbars setting
+        ///     reaches cross-origin frames too: bars go completely transparent except
+        ///     while scrolling, driven by a capture scroll listener flagging activity on
+        ///     the root element.
+        ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
+        ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
+        ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
+        ///
+        /// In the top frame (the Vue app) this script is a no-op — the early return fires
+        /// immediately.
+        /// </summary>
+        public const string IframeScrollScript = @"
+(function () {
+    if (window === window.top) return;
+    // Only the app's own frames (local files, PDF.js - all on http://kitvei* hosts). A Torah
+    // website's frame is left alone: the host takes its shortcuts (AppViewerSiteShortcuts.cs),
+    // and a site must not be able to post app key events.
+    if (!/^http:\/\/kitvei/i.test(location.origin)) return;
+
+    // Throttled scroll reporter — posts current scrollY to the Vue app parent.
+    var scrollTimer = null;
+    function reportScroll() {
+        scrollTimer = null;
+        var top = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        window.top.postMessage({ type: 'htmlViewScroll', scrollTop: top }, '*');
+    }
+    window.addEventListener('scroll', function () {
+        if (scrollTimer) return;
+        scrollTimer = setTimeout(reportScroll, 200);
+    }, { passive: true });
+
+    // Scroll-activity flag for the hidden-scrollbars style (htmlViewScrollbars
+    // handler below): while any element in the frame scrolls (capture phase catches
+    // inner containers too), the root carries the class and the bars show; it drops
+    // off after a one-second linger. Runs unconditionally — without the injected
+    // style the class has no effect and the cost is negligible.
+    var scrollbarsActivityTimer = null;
+    window.addEventListener('scroll', function () {
+        document.documentElement.classList.add('__kitvei-scrollbars-scrolling');
+        if (scrollbarsActivityTimer) clearTimeout(scrollbarsActivityTimer);
+        scrollbarsActivityTimer = setTimeout(function () {
+            scrollbarsActivityTimer = null;
+            document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
+        }, 1000);
+    }, true);
+
+    // Forward keyboard shortcuts to the parent frame so app-level shortcuts
+    // (Ctrl+W, Ctrl+F, Ctrl+N, F1, F11, etc.) continue to work when focus
+    // is inside the iframe.  The parent reconstructs a synthetic KeyboardEvent
+    // and dispatches it on its own window.
+    // Use capture phase so this fires before any iframe-internal handlers
+    // (e.g. PDF.js) that may call preventDefault() on the same event.
+    var FUNCTION_KEYS = ['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'];
+    window.addEventListener('keydown', function (e) {
+        var isFunctionKey = FUNCTION_KEYS.indexOf(e.code) !== -1;
+        if (!e.ctrlKey && !e.metaKey && !isFunctionKey) return;
+        // Let the browser handle text-editing shortcuts inside the iframe itself
+        // (Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y) — only forward navigation and
+        // app-level shortcuts.  Ctrl+X is NOT excluded here because in the app it
+        // means ""close all tabs"", not cut.
+        var editing = ['KeyA','KeyC','KeyV','KeyZ','KeyY'];
+        if (editing.indexOf(e.code) !== -1 && !e.shiftKey) return;
+        window.top.postMessage({
+            type: 'iframeKeydown',
+            code: e.code,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            metaKey: e.metaKey,
+            altKey: e.altKey
+        }, '*');
+        e.preventDefault();
+    }, true);
+
+    // Listen for scrollTo commands posted by HtmlViewPage.vue on iframe load.
+    window.addEventListener('message', function (e) {
+        if (!e.data) return;
+        if (e.data.type === 'htmlViewScrollTo') {
+            window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
+        }
+        if (e.data.type === 'htmlViewScrollbars') {
+            // Hidden scrollbars (Ctrl+Shift+H / reading mode / settings): completely
+            // transparent except while the scroll-activity class is on the root (set by
+            // the listener registered above). !important so it wins over the
+            // thin-scrollbar style htmlViewTheme re-injects below. The bare html
+            // selector matters: the viewport scrollbar styles come from the root
+            // element itself, which 'html *' alone would miss — and local files
+            // scroll at the viewport.
+            var hiddenId = '__kitvei-hidden-scrollbars';
+            var hiddenExisting = document.getElementById(hiddenId);
+            if (e.data.hidden && !hiddenExisting) {
+                var hiddenStyle = document.createElement('style');
+                hiddenStyle.id = hiddenId;
+                hiddenStyle.textContent =
+                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }';
+                (document.head || document.documentElement).appendChild(hiddenStyle);
+            } else if (!e.data.hidden && hiddenExisting) {
+                hiddenExisting.remove();
+                document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
+            }
+        }
+        if (e.data.type === 'htmlViewTheme') {
+            var c = e.data.colors;
+            if (!c) return;
+            // color-scheme makes the browser's own UI in this frame (native
+            // scrollbars, form-control popups) match the app's light/dark theme.
+            document.documentElement.style.colorScheme = e.data.isDark ? 'dark' : 'light';
+            document.documentElement.style.setProperty('--iframe-bg', c.bgPrimary || '');
+            document.documentElement.style.setProperty('--iframe-text', c.textPrimary || '');
+            document.documentElement.style.setProperty('--iframe-text-secondary', c.textSecondary || '');
+            // Apply directly to body so it works regardless of whether a <style> was injected
+            if (document.body) {
+                document.body.style.background = c.bgPrimary || '';
+                document.body.style.color = c.textPrimary || '';
+            }
+            // Inject scrollbar styling to match the app's thin scrollbar appearance.
+            // Uses the resolved color value sent from the parent (textSecondary).
+            var styleId = '__kitvei-scrollbar-style';
+            var existing = document.getElementById(styleId);
+            if (existing) existing.remove();
+            var scrollbarStyle = document.createElement('style');
+            scrollbarStyle.id = styleId;
+            var thumbColor = c.textSecondary
+                ? 'color-mix(in srgb, ' + c.textSecondary + ' 30%, transparent)'
+                : 'rgba(128,128,128,0.3)';
+            // Standard properties only. ::-webkit-scrollbar-* rules are dead while these
+            // are set (Chrome 121+), and would defeat the hidden-scrollbars style
+            // injected by the htmlViewScrollbars handler above — never add them back.
+            scrollbarStyle.textContent =
+                '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }';
+            (document.head || document.documentElement).appendChild(scrollbarStyle);
+        }
+    });
+})();";
+
+        /// <summary>
+        /// Otzaria addin SDK stub, injected on document creation into every frame and
+        /// self-limited to addin frames: child frames served from a kitvei-localhtml-N
+        /// virtual host (see LocalFileHandler.RegisterServedFolder).
+        ///
+        /// Those hosts are cross-origin from the Vue app, so the Vue side cannot inject
+        /// the stub itself (iframe.contentDocument is null cross-origin) — and even
+        /// same-origin injection would come after the page loaded, too late for addins
+        /// that touch window.Otzaria while their scripts first run. Document-created
+        /// injection solves both: the stub exists before any addin script executes.
+        ///
+        /// The stub only posts postMessage envelopes to window.parent; the Vue side
+        /// (useOtzariaAddinBridge.ts) answers them, and only for tabs flagged
+        /// isOtzariaAddin — on any other local HTML page the stub is inert.
+        ///
+        /// MUST STAY IN SYNC with the dev-mode copy in
+        /// vue-frontend/src/features/html-view/otzariaAddinBridgeStub.ts.
+        /// </summary>
+        public const string OtzariaAddinBridgeStubScript = @"
+(function () {
+    if (window === window.top) return;
+    if (location.hostname.indexOf('kitvei-localhtml-') !== 0) return;
+    if (window.Otzaria) return;
+    var callIdCounter = 0, pendingCalls = {}, eventHandlers = {};
+
+    window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type === 'otzaria-reply') {
+            var resolve = pendingCalls[data.callId]; if (!resolve) return;
+            delete pendingCalls[data.callId];
+            resolve({
+                success: data.success === true,
+                data: data.success === true ? data.data : null,
+                error: data.success === true ? null : (data.error || { code: 'INTERNAL', message: 'unknown error', schemaVersion: 1 })
+            });
+        }
+        if (data.type === 'otzaria-event') {
+            var handlers = eventHandlers[data.event]; if (!handlers) return;
+            for (var i = 0; i < handlers.length; i++) { try { handlers[i](data.payload); } catch (_) {} }
+        }
+    });
+
+    function call(method, payload) {
+        return new Promise(function (resolve) {
+            var id = String(++callIdCounter);
+            pendingCalls[id] = resolve;
+            window.parent.postMessage({ type: 'otzaria-call', callId: id, method: method, params: payload != null ? payload : null }, '*');
+        });
+    }
+    function on(eventName, handler) {
+        if (!eventHandlers[eventName]) eventHandlers[eventName] = [];
+        eventHandlers[eventName].push(handler);
+    }
+    function off(eventName, handler) {
+        if (!eventHandlers[eventName]) return;
+        if (!handler) { eventHandlers[eventName] = []; return; }
+        eventHandlers[eventName] = eventHandlers[eventName].filter(function (h) { return h !== handler; });
+    }
+
+    window.Otzaria = { call: call, on: on, off: off };
+    window.OtzariaAddin = {
+        call: function (method, payload) {
+            return call(method, payload).then(function (reply) {
+                if (!reply.success) return Promise.reject(new Error(reply.error && reply.error.message ? reply.error.message : 'call failed'));
+                return reply.data;
+            });
+        },
+        on: on,
+        off: off
+    };
+})();";
+    }
+}

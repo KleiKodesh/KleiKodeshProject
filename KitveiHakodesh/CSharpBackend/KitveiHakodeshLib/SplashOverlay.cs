@@ -1,0 +1,222 @@
+﻿using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Windows.Forms;
+
+namespace KitveiHakodeshLib
+{
+    internal class SplashOverlay : Control
+    {
+        // Dot config — matches Vue LoadingAnimation.vue exactly
+        // 1.2s cycle @ 60fps = 72 ticks per cycle
+        private const int   DotCount   = 3;
+        private const float DotBaseR   = 9f;
+        private const float DotMinScale = 0.6f;
+        private const float DotMaxScale = 1.0f;
+        private const float DotSpacing = 26f;
+        // cycle = 1.2s @ 60fps → 72 ticks; speed = 2π/72
+        private const float CycleSpeed = (float)(Math.PI * 2 / 72.0);
+        // delays: 0s, 0.2s, 0.4s → in ticks: 0, 12, 24 → in radians
+        private static readonly float[] DotDelays = { 0f, (float)(Math.PI * 2 * 12 / 72.0), (float)(Math.PI * 2 * 24 / 72.0) };
+
+        // Accent #7C5CFC
+        private const int AR = 124, AG = 92, AB = 252;
+
+        private Image _logo;
+        private float _alpha  = 1f;   // always fully opaque — no fade-in
+        private bool  _fading = false;
+        private float _phase  = 0f;   // advances each tick
+        private readonly Timer _timer;
+        private readonly string _versionText;
+        private readonly Font _versionFont;
+        // Snapshot mode: _logo is a capture of the page, drawn pixel for pixel with no
+        // dots, no version line and no timer.
+        private readonly bool _isSnapshot;
+
+        public SplashOverlay(Image logo, string versionText = null, bool isSnapshot = false)
+        {
+            _logo = logo;
+            _isSnapshot = isSnapshot;
+            _versionText = isSnapshot ? null : versionText;
+            if (!isSnapshot) _versionFont = new Font("Segoe UI", 12f);
+            // The page is not interactive yet: say so on hover too.
+            if (isSnapshot) Cursor = Cursors.AppStarting;
+
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.UserPaint |
+                ControlStyles.OptimizedDoubleBuffer, true);
+
+            _timer = new Timer { Interval = 16 };
+            _timer.Tick += OnTick;
+            if (!isSnapshot) _timer.Start();
+        }
+
+        /// <summary>Snapshot mode: the picture to show, once it is ready (blank until then).</summary>
+        public void SetSnapshot(Image snapshot)
+        {
+            _logo = snapshot;
+            Invalidate();
+        }
+
+        public void FadeOut()
+        {
+            // Instant hide — remove from parent immediately instead of fading out.
+            _timer.Stop();
+            var p = Parent;
+            if (p != null) { p.Controls.Remove(this); p.Invalidate(); }
+            Dispose();
+
+            // ── Fade-out animation (commented out) ───────────────────────────────
+            // _fading = true;
+        }
+
+        private void OnTick(object sender, EventArgs e)
+        {
+            _phase += CycleSpeed;
+            if (_phase > (float)(Math.PI * 2)) _phase -= (float)(Math.PI * 2);
+
+            if (_fading)
+            {
+                // ── Fade-out alpha step (commented out) ───────────────────────────
+                // _alpha -= 0.045f;
+                // if (_alpha <= 0f)
+                // {
+                //     _alpha = 0f;
+                //     _timer.Stop();
+                //     var p = Parent;
+                //     if (p != null) { p.Controls.Remove(this); p.Invalidate(); }
+                //     Dispose();
+                //     return;
+                // }
+            }
+            else
+            {
+                // ── Fade-in alpha step (commented out) ────────────────────────────
+                // _alpha = Math.Min(1f, _alpha + 0.035f);
+            }
+
+            // Only the dots move: repainting the whole overlay (background fill, scaled
+            // logo, version text) 60 times a second kept the UI thread in GDI+ for most
+            // of the startup window, which is the thread WebView2 init and the first
+            // service replies run on.
+            Invalidate(DotsBounds());
+        }
+
+        private Rectangle DotsBounds()
+        {
+            float cx = Width / 2f, dotsY = Height / 2f + 108f;
+            float half = (DotCount - 1) * DotSpacing / 2f + DotBaseR + 2f;
+            return Rectangle.Round(new RectangleF(cx - half, dotsY - DotBaseR - 2f, half * 2f, (DotBaseR + 2f) * 2f));
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int a = (int)(_alpha * 255);
+            if (a <= 0) return;
+
+            int w = Width, h = Height, cx = w / 2, cy = h / 2;
+
+            if (_isSnapshot)
+            {
+                g.Clear(BackColor);
+                // Explicit pixel rectangles: DrawImageUnscaled / DrawImage(img, x, y) rescale
+                // by the PNG's stored DPI, which blurs it. Anchored top-right — the app is
+                // RTL, so a resized window keeps its right-hand chrome in place.
+                if (_logo != null)
+                    g.DrawImage(_logo, new Rectangle(w - _logo.Width, 0, _logo.Width, _logo.Height),
+                        0, 0, _logo.Width, _logo.Height, GraphicsUnit.Pixel);
+                return;
+            }
+
+            // ── Background ───────────────────────────────────────────────────────
+            Color bg = BackColor;
+            using (var b = new SolidBrush(Color.FromArgb(a, bg)))
+                g.FillRectangle(b, e.ClipRectangle);
+
+            // ── Logo ─────────────────────────────────────────────────────────────
+            // A dots-only repaint (see OnTick) never touches the logo or the version text.
+            bool dotsOnly = DotsBounds().Contains(e.ClipRectangle);
+
+            if (_logo != null && !dotsOnly)
+            {
+                int sz = Math.Min(148, Math.Min(w, h) / 3);
+                var cm = new ColorMatrix { Matrix33 = _alpha };
+                using (var ia = new ImageAttributes())
+                {
+                    ia.SetColorMatrix(cm);
+                    g.DrawImage(_logo,
+                        new Rectangle(cx - sz / 2, cy - sz / 2 - 24, sz, sz),
+                        0, 0, _logo.Width, _logo.Height,
+                        GraphicsUnit.Pixel, ia);
+                }
+            }
+
+            // ── Bouncing dots ─────────────────────────────────────────────────────
+            DrawDots(g, cx, cy + 108f);
+
+            // ── Version stamp ─────────────────────────────────────────────────────
+            // Unobtrusive current-version line at the bottom edge — updates install
+            // silently, so this is where the user can passively see what they're on.
+            // Muted 55%-alpha text, white on dark backgrounds / black on light.
+            if (!string.IsNullOrEmpty(_versionText) && !dotsOnly)
+            {
+                bool darkBg = BackColor.GetBrightness() < 0.5f;
+                var baseCol = darkBg ? Color.White : Color.Black;
+                var textCol = Color.FromArgb((int)(_alpha * 255 * 0.55f), baseCol);
+
+                var size = g.MeasureString(_versionText, _versionFont);
+                using (var brush = new SolidBrush(textCol))
+                    g.DrawString(_versionText, _versionFont, brush,
+                        cx - size.Width / 2f, h - size.Height - 14f);
+            }
+        }
+
+        // Matches Vue LoadingAnimation.vue: 1.2s, peak at 40% of cycle, scale 0.6→1
+        private void DrawDots(Graphics g, float cx, float dotsY)
+        {
+            float startX = cx - (DotCount - 1) * DotSpacing / 2f;
+            for (int i = 0; i < DotCount; i++)
+            {
+                // position in cycle 0..2π, offset by dot's delay
+                float p = _phase - DotDelays[i];
+                // map sin to 0..1
+                float raw = (float)(Math.Sin(p) * 0.5 + 0.5);
+                // smoothstep — matches ease-in-out
+                float t = raw * raw * (3f - 2f * raw);
+                // scale: 0.6 at trough, 1.0 at peak — but peak is at 40% of cycle
+                // We drive this purely from t which already peaks correctly via sin
+                float scale   = DotMinScale + (DotMaxScale - DotMinScale) * t;
+                float opacity = 0.4f + 0.6f * t;
+                float r       = DotBaseR * scale;
+                int   dotA    = (int)(opacity * _alpha * 255);
+                float dx      = startX + i * DotSpacing;
+
+                using (var brush = new SolidBrush(Color.FromArgb(dotA, AR, AG, AB)))
+                    g.FillEllipse(brush, dx - r, dotsY - r, r * 2, r * 2);
+            }
+        }
+
+        protected override void OnBackColorChanged(EventArgs e)
+        {
+            base.OnBackColorChanged(e);
+            Invalidate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _timer.Dispose();
+                _logo?.Dispose();
+                _logo = null;
+                _versionFont?.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+}

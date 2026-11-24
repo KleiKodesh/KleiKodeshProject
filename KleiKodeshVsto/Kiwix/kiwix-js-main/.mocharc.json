@@ -1,0 +1,8 @@
+{
+  "extension": ["js"],
+  "timeout": 5000,
+  "recursive": true,
+  "exit": true,
+  "node-option": ["import=./tests/unit/setup.js"],
+  "spec": ["tests/unit/spec/**/*.test.js"]
+}

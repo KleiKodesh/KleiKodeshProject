@@ -1,0 +1,185 @@
+import { describe, it, expect } from 'vitest'
+import { cleanHebrewText } from './hebrewTextCleaning'
+import { MARK_MODE, MARK_COLON, MARK_PASSAGE_END_COLON, MARK_QUOTES, MARK_COMMA, PUNCTUATION_PRESETS, withMarkMode } from './punctuationModes'
+import { CLEAN_TEXT, CLEAN_TEXT_LEGACY } from './hebrewTextProcessing'
+
+const KEEP_COLONS = withMarkMode(CLEAN_TEXT_LEGACY, MARK_COLON, MARK_MODE.KEEP)
+
+describe('cleanHebrewText — colon handling', () => {
+  it('keeps chapter:verse citation colons between Hebrew letters', () => {
+    expect(cleanHebrewText('(ירושלמי סוטה ט:יג)')).toBe('(ירושלמי סוטה ט:יג)')
+    expect(cleanHebrewText('(דברים ח:טו)')).toBe('(דברים ח:טו)')
+  })
+
+  it('keeps citation colons between digits and in mixed letter/digit refs', () => {
+    expect(cleanHebrewText('12:5')).toBe('12:5')
+    expect(cleanHebrewText('ג:2')).toBe('ג:2')
+    expect(cleanHebrewText('2:ב')).toBe('2:ב')
+  })
+
+  it('keeps every mid-line colon when colons are set to keep', () => {
+    expect(cleanHebrewText('הוא : שני', KEEP_COLONS)).toBe('הוא : שני')
+    expect(cleanHebrewText('הוא: שני', KEEP_COLONS)).toBe('הוא: שני')
+  })
+
+  it('colon "to period": a sentence colon becomes a period, loose artifacts go', () => {
+    const toPeriod = withMarkMode(0, MARK_COLON, MARK_MODE.CONVERT)
+    expect(cleanHebrewText('הוא: שני', toPeriod)).toBe('הוא. שני')
+    expect(cleanHebrewText('הוא : שני', toPeriod)).toBe('הוא שני')
+    expect(cleanHebrewText('הוא :שני', toPeriod)).toBe('הוא שני')
+  })
+
+  it('still keeps end-of-line colons', () => {
+    expect(cleanHebrewText('סוף הפסוק:', KEEP_COLONS)).toBe('סוף הפסוק:')
+    expect(cleanHebrewText('סוף הפסוק:<br>', KEEP_COLONS)).toBe('סוף הפסוק:<br>')
+    expect(cleanHebrewText('סוף הפסוק: <span>', KEEP_COLONS)).toBe('סוף הפסוק: <span>')
+  })
+
+  it('keeps a colon that is followed by a tag (pre-existing end-of-line branch)', () => {
+    // Neither neighbour is a citation char here ('>' and '<'), so the citation
+    // rule does not fire — but the colon is immediately followed by '<', which
+    // the end-of-line branch already kept before this change. Asserted so the
+    // two rules' interaction stays pinned.
+    expect(cleanHebrewText('<b>ט</b>:<b>יג</b>')).toBe('<b>ט</b>:<b>יג</b>')
+  })
+
+  // The reported bug: Rashi on Ezekiel 3:9. Two citations (ט:יג and ח:טו) were
+  // being collapsed to טיג / חטו by the old "mid-line colon ⇒ artifact" rule.
+  it('preserves both citations in the reported Rashi passage', () => {
+    const input =
+      'כְּשָׁמִיר. מִין תּוֹלַעַת הוּא, שֶׁמַּרְאִין אוֹתוֹ עַל הָאֶבֶן וְהִיא נִבְקַעַת כְּנֶגְדּוֹ ' +
+      '(ירושלמי סוטה ט:יג). (הגה: לָשׁוֹן אַחֵר שָׁמִיר לְשׁוֹן סֶלַע חָזָק, וּבְתַרְגּוּם יְרוּשַׁלְמִי ' +
+      'הוּא תַּרְגּוּם שֶׁל צוּר, וְכֵן תַּרְגּוּם ״מִצּוּר הַחַלָּמִישׁ״ (דברים ח:טו) ״שָׁמִיר טְנָרָא״.'
+
+    const output = cleanHebrewText(input)
+
+    expect(output).toContain('(ירושלמי סוטה ט:יג)')
+    expect(output).toContain('(דברים ח:טו)')
+    expect(output).not.toContain('טיג')
+    expect(output).not.toContain('חטו')
+    // The 'הגה:' colon closes a label, so it stays.
+    expect(output).toContain('הגה:')
+    // Nikkud is gone.
+    expect(output).toContain('כשמיר')
+  })
+})
+
+describe('cleanHebrewText — gershayim / quote handling', () => {
+  it('keeps gershayim that sit between the last two letters (ראשי תיבות)', () => {
+    expect(cleanHebrewText('רשב"א')).toBe('רשב"א')
+    expect(cleanHebrewText('שליט"א')).toBe('שליט"א')
+    expect(cleanHebrewText('אמר רשב״א כאן')).toBe('אמר רשב״א כאן')
+  })
+
+  it('drops a mid-word quote that opens a quoted particle, not an acronym', () => {
+    // The mark sits after the first letter — two letters follow before the
+    // word ends, so this is not ראשי תיבות and the quote must go.
+    expect(cleanHebrewText('ו״אין דקאמרי ליה קושטא הוא')).toBe('ואין דקאמרי ליה קושטא הוא')
+    expect(cleanHebrewText('ו"אין')).toBe('ואין')
+  })
+
+  it('applies the same rule to &quot; entities', () => {
+    expect(cleanHebrewText('רשב&quot;א')).toBe('רשב"א')
+    expect(cleanHebrewText('ו&quot;אין')).toBe('ואין')
+  })
+
+  it('still drops quotes at word boundaries', () => {
+    expect(cleanHebrewText('"שלום"')).toBe('שלום')
+  })
+})
+
+describe('cleanHebrewText - separate options', () => {
+  const NONE = PUNCTUATION_PRESETS.find((p) => p.key === 'none')!.value
+  const ALEF = 'א'
+  const BET = 'ב'
+  const PATAH = 'ַ'
+  const TIPCHA = '֖'
+
+  it('removes nikkud alone, keeping teamim and punctuation', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${TIPCHA} - ${BET}?`, CLEAN_TEXT.NIKKUD)).toBe(`${ALEF}${TIPCHA} - ${BET}?`)
+  })
+
+  it('removes teamim alone, keeping nikkud', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${TIPCHA}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF}${PATAH}`)
+  })
+
+
+  it('remove punctuation keeps only the line-end period and parenthesized marks', () => {
+    const input = `${ALEF}, ${BET}; ${ALEF}! ${BET}. ${ALEF} — ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`
+    expect(cleanHebrewText(input, NONE)).toBe(
+      `${ALEF} ${BET} ${ALEF} ${BET} ${ALEF} ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`,
+    )
+  })
+
+  it('keeps an acronym quote under remove punctuation', () => {
+    expect(cleanHebrewText(`${ALEF}${BET}"${ALEF} "${BET}"`, NONE)).toBe(`${ALEF}${BET}"${ALEF} ${BET}`)
+  })
+
+  const MODERN = PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+  /** Modern-only plus quotes removed, with mid-line colons kept. */
+  const N = withMarkMode(withMarkMode(MODERN, MARK_QUOTES, MARK_MODE.REMOVE), MARK_COLON, MARK_MODE.KEEP)
+
+  it('passage-end colon can become a period while citations stay', () => {
+    const flags = withMarkMode(0, MARK_PASSAGE_END_COLON, MARK_MODE.CONVERT)
+    expect(cleanHebrewText(`${ALEF}:`, flags)).toBe(`${ALEF}.`)
+    expect(cleanHebrewText(`${ALEF}:</b><br>${BET}`, flags)).toBe(`${ALEF}.</b><br>${BET}`)
+    expect(cleanHebrewText(`(${ALEF}:${BET})`, flags)).toBe(`(${ALEF}:${BET})`)
+    expect(cleanHebrewText(`<b>${ALEF}</b>:<b>${BET}</b>`, withMarkMode(0, MARK_COLON, MARK_MODE.REMOVE))).toBe(`<b>${ALEF}</b>:<b>${BET}</b>`)
+  })
+
+  it('quotes "keep" leaves every quote mark', () => {
+    const flags = withMarkMode(N, MARK_QUOTES, MARK_MODE.KEEP)
+    expect(cleanHebrewText(`"${ALEF}${BET}"`, flags)).toBe(`"${ALEF}${BET}"`)
+    expect(cleanHebrewText(`&quot;${ALEF}&quot;`, flags)).toBe(`&quot;${ALEF}&quot;`)
+  })
+
+  it('each mark is set on its own', () => {
+    expect(cleanHebrewText(`${ALEF}, ${BET}; ${ALEF}?`, withMarkMode(0, MARK_COMMA, MARK_MODE.REMOVE))).toBe(`${ALEF} ${BET}; ${ALEF}?`)
+  })
+
+  it('modern-only turns ?! and a mid-line colon into periods, ; into a comma, keeps quotes', () => {
+    expect(cleanHebrewText(`"${ALEF}": ${BET}; ${ALEF}?`, MODERN)).toBe(`"${ALEF}". ${BET}, ${ALEF}.`)
+    expect(cleanHebrewText(`${ALEF}:`, MODERN)).toBe(`${ALEF}:`)
+  })
+
+  it('original level leaves punctuation untouched', () => {
+    expect(cleanHebrewText(`${ALEF}, ${BET}; "${ALEF}": ${BET}?`, CLEAN_TEXT.NIKKUD)).toBe(`${ALEF}, ${BET}; "${ALEF}": ${BET}?`)
+  })
+  const GERESH = '\u05F3'
+  const GERSHAYIM = '\u05F4'
+
+  it('keeps a sentence colon after a footnote tag or bracket', () => {
+    expect(cleanHebrewText(`${ALEF}<sup>1</sup>: ${BET}`, N)).toBe(`${ALEF}<sup>1</sup>: ${BET}`)
+    expect(cleanHebrewText(`(${ALEF}): ${BET}`, N)).toBe(`(${ALEF}): ${BET}`)
+  })
+
+  it('keeps a citation colon next to a geresh', () => {
+    expect(cleanHebrewText(`(${ALEF}${GERESH}:${BET}${GERESH})`, N)).toBe(`(${ALEF}${GERESH}:${BET}${GERESH})`)
+  })
+
+  it('keeps an acronym quote with vowel points or a direction mark beside it', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${BET}${PATAH}"${ALEF}${PATAH}`, N)).toBe(`${ALEF}${PATAH}${BET}${PATAH}"${ALEF}${PATAH}`)
+    expect(cleanHebrewText(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`, N)).toBe(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`)
+  })
+
+
+  it('removes a paseq without leaving a double space', () => {
+    expect(cleanHebrewText(`${ALEF} \u05C0 ${BET}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF} ${BET}`)
+  })
+
+  it('remove punctuation keeps marks inside square brackets', () => {
+    expect(cleanHebrewText(`${ALEF} [${BET}:${ALEF}.] ${BET}.`, NONE)).toBe(`${ALEF} [${BET}:${ALEF}.] ${BET}.`)
+  })
+
+  it('remove punctuation turns a glued long dash into a space', () => {
+    expect(cleanHebrewText(`${ALEF}\u2013${BET}`, NONE)).toBe(`${ALEF} ${BET}`)
+  })
+
+  it('remove punctuation drops a period before an inline tag mid-line', () => {
+    expect(cleanHebrewText(`<b>${ALEF}.</b> ${BET}.`, NONE)).toBe(`<b>${ALEF}</b> ${BET}.`)
+  })
+
+  it('does nothing with no flags', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}, ${BET}`, 0)).toBe(`${ALEF}${PATAH}, ${BET}`)
+  })
+})
