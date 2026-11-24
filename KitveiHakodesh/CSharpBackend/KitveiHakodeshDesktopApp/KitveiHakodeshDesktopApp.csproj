@@ -151,6 +151,8 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Program.TabMoves.cs" />
+    <Compile Include="Program.SnapLayout.cs" />
+    <Compile Include="Program.SnapDebug.cs" />
     <Compile Include="Program.SideBySide.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">

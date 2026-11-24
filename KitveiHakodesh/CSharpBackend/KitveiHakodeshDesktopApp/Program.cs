@@ -47,6 +47,15 @@ namespace KitveiHakodeshDesktopApp
         static void Main()
         {
             string[] args = Environment.GetCommandLineArgs();
+#if DEBUG
+            // Debug builds: an error on the UI thread is written beside the exe (and still shown).
+            Application.ThreadException += (s, e) =>
+            {
+                try { System.IO.File.AppendAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "snap-debug.txt"), "UNHANDLED " + e.Exception + Environment.NewLine); }
+                catch (Exception) { }
+                MessageBox.Show(e.Exception.ToString());
+            };
+#endif
 
             // Debug harness: `--plain` hosts the viewer in a bare Form with no chrome-tabs
             // strip / mirror, to isolate whether the strip steals web-content focus. Runs
@@ -498,6 +507,7 @@ namespace KitveiHakodeshDesktopApp
             }
 #if DEBUG
             if (DebugTabMoves.TryRun(request)) return;
+            if (TryRunSnapDebug(request)) return;
 #endif
             // Every window is closing: the request gets a window of its own rather than a
             // tab in one that is about to go.

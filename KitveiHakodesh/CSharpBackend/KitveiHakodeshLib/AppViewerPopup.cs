@@ -114,7 +114,7 @@ namespace KitveiHakodeshLib
                         closingByPage = request.ClosingByPage;
                         form.StartPosition = FormStartPosition.Manual;
                         if (pageKeepsBounds && x != -1) form.ClientSize = new Size(width, height);
-                        else form.Size = FindForm()?.Size ?? form.Size;
+                        else form.Size = OwnNormalBounds()?.Size ?? form.Size;
                     }
                 }
                 if (form == null)
@@ -328,12 +328,21 @@ namespace KitveiHakodeshLib
         // A new app window with nothing saved: a little down and across from this one.
         private Point CascadeFrom(Size size)
         {
-            Form mine = FindForm();
+            Rectangle? mine = OwnNormalBounds();
             if (mine == null) return CenterOnScreen(size);
-            var area = Screen.FromControl(this).WorkingArea;
-            var place = new Point(mine.Left + 32, mine.Top + 32);
+            var area = Screen.FromRectangle(mine.Value).WorkingArea;
+            var place = new Point(mine.Value.Left + 32, mine.Value.Top + 32);
             if (place.X + size.Width > area.Right || place.Y + size.Height > area.Bottom) return CenterOnScreen(size);
             return place;
+        }
+
+        // This viewer's window as it is when neither minimized nor maximized: a minimized
+        // window sits off screen at a caption's size, which a new window must not copy.
+        private Rectangle? OwnNormalBounds()
+        {
+            Form mine = FindForm();
+            if (mine == null) return null;
+            return mine.WindowState == FormWindowState.Normal ? mine.Bounds : mine.RestoreBounds;
         }
 
         private Point CenterOnScreen(Size size)

@@ -33,20 +33,21 @@ namespace KitveiHakodeshDesktopApp
         private const double DropZoneShare = 0.3;
         // The same for a screen, off the app: a smaller share, the screen being much larger.
         private const double ScreenZoneShare = 0.2;
-        // Neither window of a pair is resized narrower than this (device pixels).
-        private const int MinSharedWidth = 320;
-        // Neither window of a stacked pair is resized lower than this (device pixels).
-        private const int MinSharedHeight = 200;
 
         // IntoWindow: the middle of a window - the tab joins its tabs, at the end, as on its strip.
-        private enum DropKind { None, Strip, IntoWindow, BesideWindow, ScreenHalf }
+        // ScreenCell: a screen's half or quarter (Program.SnapLayout).
+        private enum DropKind { None, Strip, IntoWindow, BesideWindow, ScreenCell }
 
         // The tab drag in progress (one at a time: there is one mouse).
         private static TabDragGhost _ghost;
         private static DropKind _dropKind;
         private static FluentChromeTabsForm _dropWindow;       // Strip: that window's strip; BesideWindow: that window
         private static DropSide _dropSide;
-        private static Rectangle _dropArea;        // ScreenHalf: the half
+        private static Rectangle _dropArea;        // ScreenCell: the cell
+        private static SnapCell _dropCell;         // ScreenCell: which one
+        private static SnapCell _dropCellAtDrop;
+        private static Screen _dropScreenAtDrop;
+        private static Screen _dropScreen;         // ScreenCell: on which screen
         private static DropZonePreview _dropPreview;
         // A window started (off screen) when the tab left the strip, so a drop that opens a
         // window shows one whose page is already up; closed unused when the drop goes elsewhere.
@@ -56,26 +57,7 @@ namespace KitveiHakodeshDesktopApp
         private static FluentChromeTabsForm _stripTarget;
         private static FluentChromeTabsForm _mergingWindow;
 
-        // Windows placed side by side here: [left, right] and the gap between their window
-        // rectangles when placed (negative: their invisible borders overlap).
         private enum DropSide { Left, Right, Top, Bottom }
-
-        // Two windows placed side by side (or one above the other) here. First is the left
-        // (or upper) one; Gap is between their window rectangles (negative: their invisible
-        // borders overlap).
-        private sealed class SideBySidePair
-        {
-            public FluentChromeTabsForm First, Second;
-            public bool Stacked;
-            public int Gap;
-        }
-        private static readonly List<SideBySidePair> SideBySidePairs = new List<SideBySidePair>();
-
-        // Ends any pair the window is in.
-        private static void UnpairWindow(FluentChromeTabsForm window)
-        {
-            SideBySidePairs.RemoveAll(p => p.First == window || p.Second == window);
-        }
 
         // ── A tab dragged out of a strip (FluentChromeTabsForm.TabDragOutside) ──────────
 
@@ -105,6 +87,8 @@ namespace KitveiHakodeshDesktopApp
                     FluentChromeTabsForm target = _dropWindow;
                     DropSide side = _dropSide;
                     Rectangle area = _dropArea;
+                    _dropCellAtDrop = _dropCell;
+                    _dropScreenAtDrop = _dropScreen;
                     EndTabDragVisuals();
                     if (e.Tab.Tag is string tabId) DropTab(source, tabId, e.Tab.Title, e.ScreenPoint, kind, target, side, area);
                     break;
@@ -145,7 +129,7 @@ namespace KitveiHakodeshDesktopApp
                 // A window's only tab dropped on its own window has nothing to be beside.
                 bool alone = under == source && TabCountOf(source) <= 1;
                 // Only where two windows fit (SplitArea): otherwise the middle's rule applies.
-                if (side.HasValue && !alone && SplitArea(under, side.Value).HasValue)
+                if (side.HasValue && !alone && DockBesidePreview(under, side.Value).HasValue)
                     SetDropTarget(DropKind.BesideWindow, under, side.Value, Rectangle.Empty);
                 else if (under != source && IsDropTarget(under))
                     SetDropTarget(DropKind.IntoWindow, under, DropSide.Left, Rectangle.Empty);
@@ -154,17 +138,43 @@ namespace KitveiHakodeshDesktopApp
                 return;
             }
 
-            // Off the app: the zone at the screen's nearest edge gives that half of the screen,
-            // like a window's zones; the middle opens a window where the tab is let go.
-            Rectangle work = Screen.FromPoint(cursor).WorkingArea;
-            DropSide? screenSide = EdgeZone(work, cursor, ScreenZoneShare);
-            if (screenSide.HasValue)
+            // Off the app: a screen's corner gives that quarter, the zone at its nearest edge that
+            // half (Windows Snap's places); the middle opens a window where the tab is let go.
+            Screen screen = Screen.FromPoint(cursor);
+            SnapCell? cell = ScreenZone(screen.WorkingArea, cursor);
+            if (cell.HasValue)
             {
-                SetDropTarget(DropKind.ScreenHalf, null, screenSide.Value, HalfOf(work, screenSide.Value));
+                _dropCell = cell.Value;
+                _dropScreen = screen;
+                SetDropTarget(DropKind.ScreenCell, null, DropSide.Left, ScreenCellRect(screen, cell.Value));
                 return;
             }
 
             SetDropTarget(DropKind.None, null, DropSide.Left, Rectangle.Empty);
+        }
+
+        // How close to a screen's corner (a share of its width and of its height) gives a quarter.
+        private const double ScreenCornerShare = 0.12;
+
+        private static SnapCell? ScreenZone(Rectangle work, Point cursor)
+        {
+            double x = (cursor.X - work.Left) / (double)Math.Max(1, work.Width);
+            double y = (cursor.Y - work.Top) / (double)Math.Max(1, work.Height);
+            bool left = x <= ScreenCornerShare, right = x >= 1 - ScreenCornerShare;
+            bool top = y <= ScreenCornerShare, bottom = y >= 1 - ScreenCornerShare;
+            if (top && left) return SnapCell.TopLeft;
+            if (top && right) return SnapCell.TopRight;
+            if (bottom && left) return SnapCell.BottomLeft;
+            if (bottom && right) return SnapCell.BottomRight;
+            DropSide? side = EdgeZone(work, cursor, ScreenZoneShare);
+            if (!side.HasValue) return null;
+            switch (side.Value)
+            {
+                case DropSide.Left: return SnapCell.Left;
+                case DropSide.Right: return SnapCell.Right;
+                case DropSide.Top: return SnapCell.Top;
+                default: return SnapCell.Bottom;
+            }
         }
 
         // The edge zone of a window the cursor is in (the nearest edge, when within its
@@ -191,8 +201,8 @@ namespace KitveiHakodeshDesktopApp
             // Strip and window drops mark the strip too: that is where the tab will appear.
             SetStripTarget(kind == DropKind.Strip || kind == DropKind.IntoWindow ? window : null);
             if (kind == DropKind.IntoWindow) ShowDropPreview(VisibleBounds(window));
-            else if (kind == DropKind.BesideWindow) ShowDropPreview(HalfOf(SplitArea(window, side).Value, side));
-            else if (kind == DropKind.ScreenHalf) ShowDropPreview(area);
+            else if (kind == DropKind.BesideWindow) ShowDropPreview(DockBesidePreview(window, side).Value);
+            else if (kind == DropKind.ScreenCell) ShowDropPreview(area);
             else HideDropPreview();
         }
 
@@ -223,20 +233,16 @@ namespace KitveiHakodeshDesktopApp
                     return;
 
                 case DropKind.BesideWindow:
-                    if (target == null || target.IsDisposed || !SplitArea(target, side).HasValue) return;
-                    if (onlyTab) PlaceSideBySide(source, target, side);
-                    else OpenWindowForTab(source, tabId, window => PlaceSideBySide(window, target, side));
+                    if (target == null || target.IsDisposed || !DockBesidePreview(target, side).HasValue) return;
+                    if (onlyTab) DockBeside(source, target, side);
+                    else OpenWindowForTab(source, tabId, window => DockBeside(window, target, side));
                     return;
 
-                case DropKind.ScreenHalf:
-                    Action<FluentChromeTabsForm> toHalf = window =>
-                    {
-                        if (window.WindowState != FormWindowState.Normal) window.WindowState = FormWindowState.Normal;
-                        SetVisibleBounds(window, area);
-                        window.Activate();
-                    };
-                    if (onlyTab) toHalf(source);
-                    else OpenWindowForTab(source, tabId, toHalf);
+                case DropKind.ScreenCell:
+                    Screen screen = _dropScreenAtDrop;
+                    SnapCell cell = _dropCellAtDrop;
+                    if (onlyTab) DockToScreen(source, screen, cell);
+                    else OpenWindowForTab(source, tabId, window => DockToScreen(window, screen, cell));
                     return;
 
                 default:
@@ -375,9 +381,6 @@ namespace KitveiHakodeshDesktopApp
 
         internal static void OnWindowMoving(FluentChromeTabsForm window)
         {
-            // Any move of a window that was placed side by side takes it out of its pair.
-            UnpairWindow(window);
-
             // Over another window's tab strip: this window's tabs go in there on release.
             FluentChromeTabsForm strip = FluentChromeTabsForm.FormWithStripAt(Cursor.Position, window.Handle);
             if (strip != null && strip != window && IsDropTarget(strip))
@@ -430,61 +433,13 @@ namespace KitveiHakodeshDesktopApp
             if (strip != null) strip.DropHintVisible = true;
         }
 
-        /// <summary>A window is being resized by an edge: its partner follows the shared edge.</summary>
+        /// <summary>A window is being resized by an edge: a docked one moves the lines it is on (Program.SnapLayout).</summary>
         internal static void OnWindowSizing(FluentChromeTabsForm window, int edge, ref RECT proposed)
         {
-            foreach (SideBySidePair pair in SideBySidePairs)
-            {
-                bool isFirst = pair.First == window, isSecond = pair.Second == window;
-                if (!isFirst && !isSecond) continue;
-                FluentChromeTabsForm other = isFirst ? pair.Second : pair.First;
-                if (other.IsDisposed || other.WindowState != FormWindowState.Normal) return;
-                Rectangle o = other.Bounds;
-
-                if (!pair.Stacked)
-                {
-                    bool sharedEdgeMoves = isFirst
-                        ? edge == WMSZ_RIGHT || edge == WMSZ_TOPRIGHT || edge == WMSZ_BOTTOMRIGHT
-                        : edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT;
-                    if (!sharedEdgeMoves) return;
-                    if (isFirst)
-                    {
-                        // The shared edge may not push the partner below its minimum width.
-                        proposed.Right = Math.Min(proposed.Right, o.Right - MinSharedWidth - pair.Gap);
-                        proposed.Right = Math.Max(proposed.Right, proposed.Left + MinSharedWidth);
-                        other.Bounds = Rectangle.FromLTRB(proposed.Right + pair.Gap, o.Top, o.Right, o.Bottom);
-                    }
-                    else
-                    {
-                        proposed.Left = Math.Max(proposed.Left, o.Left + MinSharedWidth - pair.Gap);
-                        proposed.Left = Math.Min(proposed.Left, proposed.Right - MinSharedWidth);
-                        other.Bounds = Rectangle.FromLTRB(o.Left, o.Top, proposed.Left - pair.Gap, o.Bottom);
-                    }
-                }
-                else
-                {
-                    bool sharedEdgeMoves = isFirst
-                        ? edge == WMSZ_BOTTOM || edge == WMSZ_BOTTOMLEFT || edge == WMSZ_BOTTOMRIGHT
-                        : edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT;
-                    if (!sharedEdgeMoves) return;
-                    if (isFirst)
-                    {
-                        proposed.Bottom = Math.Min(proposed.Bottom, o.Bottom - MinSharedHeight - pair.Gap);
-                        proposed.Bottom = Math.Max(proposed.Bottom, proposed.Top + MinSharedHeight);
-                        other.Bounds = Rectangle.FromLTRB(o.Left, proposed.Bottom + pair.Gap, o.Right, o.Bottom);
-                    }
-                    else
-                    {
-                        proposed.Top = Math.Max(proposed.Top, o.Top + MinSharedHeight - pair.Gap);
-                        proposed.Top = Math.Min(proposed.Top, proposed.Bottom - MinSharedHeight);
-                        other.Bounds = Rectangle.FromLTRB(o.Left, o.Top, o.Right, proposed.Top - pair.Gap);
-                    }
-                }
-                return;
-            }
+            OnDockedWindowSizing(window, edge, ref proposed);
         }
 
-        /// <summary>A window was activated: the upper window of a stacked pair goes back beneath the lower one.</summary>
+        /// <summary>A window was activated: a docked window goes back beneath the one below it (its shadow).</summary>
         internal static void OnWindowActivated(FluentChromeTabsForm window)
         {
             KeepUpperBelowLower(window);
@@ -508,33 +463,21 @@ namespace KitveiHakodeshDesktopApp
         {
             const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
             if ((pos.flags & SWP_NOZORDER) != 0) return;
-            SideBySidePair pair = SideBySidePairs.Find(p => p.Stacked && p.First == window);
-            if (pair == null || pair.Second.IsDisposed || !pair.Second.IsHandleCreated) return;
-            if (pair.Second.WindowState == FormWindowState.Minimized) return;
-            IntPtr lower = pair.Second.Handle;
+            FluentChromeTabsForm below = WindowBelow(window);
+            if (below == null || below.IsDisposed || !below.IsHandleCreated) return;
+            if (below.WindowState == FormWindowState.Minimized) return;
+            IntPtr lower = below.Handle;
             if (pos.hwndInsertAfter == lower) return;
 
-            // To the front (HWND_TOP / HWND_TOPMOST): the lower window first.
+            // To the front (HWND_TOP / HWND_TOPMOST): the window below first.
             if (pos.hwndInsertAfter == IntPtr.Zero || pos.hwndInsertAfter == new IntPtr(-1))
                 SetWindowPos(lower, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
             pos.hwndInsertAfter = lower;
         }
 
-        // Windows draws a window's shadow under any window above it. The upper window of a
-        // stacked pair casts its strongest shadow downward, onto the lower one; kept directly
-        // beneath the lower window, that shadow falls under it and is not seen. It stays the
-        // active window - only its place in the window order changes.
-        private static void KeepUpperBelowLower(FluentChromeTabsForm window)
-        {
-            SideBySidePair pair = SideBySidePairs.Find(p => p.Stacked && p.First == window);
-            if (pair == null || pair.Second.IsDisposed || !pair.Second.IsHandleCreated || !window.IsHandleCreated) return;
-            const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
-            SetWindowPos(window.Handle, pair.Second.Handle, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-        }
-
         internal static void ForgetSideBySide(FluentChromeTabsForm window)
         {
-            UnpairWindow(window);
+            Undock(window, restoreSize: false);
             if (_dropWindow == window) EndTabDragVisuals();
             if (_mergingWindow == window) { _mergingWindow = null; SetStripTarget(null); }
             if (_stripTarget == window) SetStripTarget(null);
@@ -705,52 +648,6 @@ namespace KitveiHakodeshDesktopApp
                 try { return string.IsNullOrEmpty(hex) ? fallback : ColorTranslator.FromHtml(hex.StartsWith("#") ? hex : "#" + hex); }
                 catch (Exception) { return fallback; }
             }
-        }
-
-        // ── Placing ───────────────────────────────────────────────────────────────
-
-        // The area the two windows share: the target's place, or the whole working area of its
-        // screen when it was maximized (the same two halves Snap would give) or when its place
-        // is too small to halve. Null when not even the screen fits two of them that way.
-        private static Rectangle? SplitArea(FluentChromeTabsForm target, DropSide side)
-        {
-            Rectangle screen = Screen.FromHandle(target.Handle).WorkingArea;
-            Rectangle area = target.WindowState == FormWindowState.Maximized ? screen : VisibleBounds(target);
-            if (!HalvesFit(target, area, side)) area = screen;
-            return HalvesFit(target, area, side) ? area : (Rectangle?)null;
-        }
-
-        // Both halves at least as large as a window can be made (the strip sets the width).
-        private static bool HalvesFit(FluentChromeTabsForm window, Rectangle area, DropSide side)
-        {
-            bool stacked = side == DropSide.Top || side == DropSide.Bottom;
-            return stacked
-                ? area.Height / 2 >= Math.Max(MinSharedHeight, SystemInformation.MinimumWindowSize.Height)
-                : area.Width / 2 >= Math.Max(MinSharedWidth, window.MinimumWindowWidthPx);
-        }
-
-        // `dropped` takes the `side` half of the target's place; the target takes the other half.
-        private static void PlaceSideBySide(FluentChromeTabsForm dropped, FluentChromeTabsForm target, DropSide side)
-        {
-            if (dropped.IsDisposed || target.IsDisposed) return;
-            Rectangle? split = SplitArea(target, side);
-            if (!split.HasValue) return;
-            Rectangle area = split.Value;
-            if (target.WindowState != FormWindowState.Normal) target.WindowState = FormWindowState.Normal;
-            if (dropped.WindowState != FormWindowState.Normal) dropped.WindowState = FormWindowState.Normal;
-
-            bool droppedFirst = side == DropSide.Left || side == DropSide.Top;
-            bool stacked = side == DropSide.Top || side == DropSide.Bottom;
-            FluentChromeTabsForm first = droppedFirst ? dropped : target, second = droppedFirst ? target : dropped;
-
-            UnpairWindow(first);
-            UnpairWindow(second);
-            SetVisibleBounds(dropped, HalfOf(area, side));
-            SetVisibleBounds(target, HalfOf(area, Opposite(side)));
-            int gap = stacked ? second.Bounds.Top - first.Bounds.Bottom : second.Bounds.Left - first.Bounds.Right;
-            SideBySidePairs.Add(new SideBySidePair { First = first, Second = second, Stacked = stacked, Gap = gap });
-            dropped.Activate();
-            if (stacked) KeepUpperBelowLower(first);
         }
 
         // A window's rectangle includes invisible resize borders; what the eye sees is the

@@ -331,7 +331,13 @@ export const useTabStore = defineStore('tabs', () => {
   // it activates that tab in its own window and makes that window the focused one.
   const activeByWindow = ref<Record<string, string>>({ '': '1' })
   const focusedWindow = ref('')
-  let windowCounter = 0
+  // A new extra window takes the lowest number not in use: a closed window's number is free
+  // again (each number keeps its window's size and place in the saved settings).
+  function freeWindowKey(): string {
+    let n = 1
+    while (String(n) in activeByWindow.value) n++
+    return String(n)
+  }
   // The reader closed the main window while extra windows stay: it holds no tabs from here on
   // and nothing opens there (the host keeps it hidden). Not saved: the next start shows it again.
   let mainWindowClosed = false
@@ -377,7 +383,7 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return ''
     const from = tab.windowKey ?? ''
-    const to = toWindow ?? String(++windowCounter)
+    const to = toWindow ?? freeWindowKey()
     if (from === to) return to
     tabs.value.splice(tabs.value.indexOf(tab), 1)
     const moved: Tab = { ...tab }
@@ -418,7 +424,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   /** Opens another window of this page with a new home tab in it. Returns its key. */
   function openNewWindow(): string {
-    const key = String(++windowCounter)
+    const key = freeWindowKey()
     openTab({ title: t('stores.tabTitle.home'), route: '/', windowKey: key })
     return key
   }
@@ -499,7 +505,6 @@ export const useTabStore = defineStore('tabs', () => {
       for (const tab of tabs.value) {
         const key = tab.windowKey ?? ''
         if (!windows[key]) windows[key] = saved.activeByWindow?.[key] ?? tab.id
-        windowCounter = Math.max(windowCounter, Number(key) || 0)
       }
       if (!windows['']) {
         // Every saved tab was in an extra window (the main window had been closed before the
