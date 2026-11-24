@@ -63,7 +63,7 @@ function pickCity(id: number) {
   <div data-section="section-calendar" :data-section-label="$t('settings.calendar.section')">
     <div id="section-calendar" class="section-label">{{ $t('settings.calendar.section') }}</div>
 
-    <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHint')">
+    <SettingRow wrap :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHint')">
       <div ref="cityBoxRef" class="city-select-box" tabindex="0" @click="toggleCityDropdown">
         <span class="city-select-display">{{ activeCityName }}</span>
         <component
@@ -117,7 +117,8 @@ function pickCity(id: number) {
 </template>
 
 <style scoped>
-.city-tree { margin-top: 6px; }
+/* Own full line under the search box (the row wraps). */
+.city-tree { flex: 1 1 100%; }
 .city-select-box {
   display: flex;
   align-items: center;
