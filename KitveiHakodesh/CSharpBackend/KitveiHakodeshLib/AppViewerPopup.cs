@@ -36,6 +36,14 @@ namespace KitveiHakodeshLib
         public Action ClosingByPage { get; set; }
     }
 
+    /// <summary>A tool window (widget or commentary pop-out) of the page opened.</summary>
+    public sealed class ToolWindowOpenedEventArgs : EventArgs
+    {
+        public ToolWindowOpenedEventArgs(Form window) { Window = window; }
+
+        public Form Window { get; }
+    }
+
     public partial class AppViewer
     {
         /// <summary>
@@ -172,12 +180,17 @@ namespace KitveiHakodeshLib
                             form.ClientSize.Width, form.ClientSize.Height);
                 };
                 form.FormClosed += (s, _) => popupView.Dispose();
-                // A widget window let go over one of our tab strips becomes a tab there; a
-                // commentary pop-out let go over its own window's strip goes back into its book.
+                // A widget's or a commentary panel's window docks like the app's other windows
+                // (the host's screen docking); let go on a tab strip it becomes a tab there.
                 bool isWidget = name.StartsWith(WidgetWindowPrefix, StringComparison.Ordinal);
                 bool isCommentary = name.StartsWith(CommentaryWindowPrefix, StringComparison.Ordinal);
                 if (isWidget || isCommentary)
-                    HandleDropOnStrip(form, isWidget ? name.Substring(WidgetWindowPrefix.Length) : null);
+                {
+                    Form toolWindow = form;
+                    _toolWindowWidgets[toolWindow] = isWidget ? name.Substring(WidgetWindowPrefix.Length) : null;
+                    toolWindow.FormClosed += (s, _) => _toolWindowWidgets.Remove(toolWindow);
+                    ToolWindowOpened?.Invoke(this, new ToolWindowOpenedEventArgs(toolWindow));
+                }
 
                 e.NewWindow = popupView.CoreWebView2;
                 e.Handled = true;
@@ -219,64 +232,33 @@ namespace KitveiHakodeshLib
         private const string CommentaryWindowPrefix = "commentary-";
 
         /// <summary>
-        /// Lets a pop-out window be dropped onto a tab strip: while it is moved, the strip under
-        /// the cursor is outlined; on release there, a widget (<paramref name="widgetId"/> set)
-        /// opens as a tab in that window, and a commentary pop-out (null) closes - which docks
-        /// the panel back into its book. A commentary panel belongs to this viewer's book, so
-        /// only this viewer's own strip takes it.
+        /// Raised when a tool window (a widget's or a commentary panel's pop-out) opens: a host
+        /// with screen docking lets it dock and tile like its other windows.
         /// </summary>
-        private void HandleDropOnStrip(Form popup, string widgetId)
-        {
-            FluentChromeTabs.FluentChromeTabsForm hinted = null;
-            Action<FluentChromeTabs.FluentChromeTabsForm> hint = target =>
-            {
-                if (hinted == target) return;
-                if (hinted != null && !hinted.IsDisposed) hinted.DropHintVisible = false;
-                hinted = target;
-                if (hinted != null) hinted.DropHintVisible = true;
-            };
-            Func<FluentChromeTabs.FluentChromeTabsForm> stripUnderCursor = () =>
-            {
-                var strip = FluentChromeTabs.FluentChromeTabsForm.FormWithStripAt(Cursor.Position, popup.Handle);
-                if (strip == null) return null;
-                AppViewer viewer = ViewerIn(strip);
-                if (viewer == null) return null;
-                return widgetId != null || viewer == this ? strip : null;
-            };
+        public event EventHandler<ToolWindowOpenedEventArgs> ToolWindowOpened;
 
-            Point placeBeforeMove = Point.Empty;
-            bool moving = false;
-            popup.ResizeBegin += (s, _) => { placeBeforeMove = popup.Location; moving = true; };
-            popup.Move += (s, _) => { if (moving) hint(stripUnderCursor()); };
-            popup.FormClosed += (s, _) => hint(null);
-            popup.ResizeEnd += (s, _) =>
-            {
-                moving = false;
-                hint(null);
-                if (popup.Location == placeBeforeMove) return; // a resize, not a move
-                var strip = stripUnderCursor();
-                if (strip == null) return;
-                if (widgetId != null) ViewerIn(strip).OpenWidgetAsTab(widgetId);
-                strip.Activate();
-                popup.Close();
-            };
+        // The widget each open widget window shows (null: a commentary pop-out).
+        private readonly System.Collections.Generic.Dictionary<Form, string> _toolWindowWidgets = new System.Collections.Generic.Dictionary<Form, string>();
+
+        /// <summary>
+        /// A tool window of this viewer's page let go on a tab strip (or with no place left on its
+        /// screen): a widget opens as a tab of <paramref name="target"/>'s page and its window closes;
+        /// a commentary pop-out closes, which docks the panel back into its book - only into this
+        /// viewer's own window, where its book is. False when the window stays.
+        /// </summary>
+        public bool MergeToolWindowIntoTabs(Form toolWindow, AppViewer target)
+        {
+            if (toolWindow == null || toolWindow.IsDisposed || target == null) return false;
+            if (!_toolWindowWidgets.TryGetValue(toolWindow, out string widgetId)) return false;
+            if (widgetId != null) target.OpenWidgetAsTab(widgetId);
+            else if (target != this) return false;
+            toolWindow.Close();
+            return true;
         }
 
         /// <summary>Opens a widget (by its id) as a tab of this viewer's page: a widget window was dropped on its strip.</summary>
         public void OpenWidgetAsTab(string widgetId)
             => _bridge?.PushEvent(new { @event = "openWidgetAsTab", widgetId });
-
-        // The viewer that fills a window, if any.
-        private static AppViewer ViewerIn(Control parent)
-        {
-            foreach (Control child in parent.Controls)
-            {
-                if (child is AppViewer viewer) return viewer;
-                AppViewer nested = ViewerIn(child);
-                if (nested != null) return nested;
-            }
-            return null;
-        }
 
         // Reachable if a reasonable part of its title bar is on some screen.
         private static bool IsOnScreen(Rectangle bounds)
