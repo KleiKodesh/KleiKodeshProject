@@ -61,12 +61,14 @@ html[data-fixed-line-height='true'] .reading-column-line font {
   font-family: var(--header-font);
   font-weight: calc(var(--font-weight, 400) + 300);
 }
-.reading-column-line mark.search-match {
+.reading-column-line mark.search-match,
+.reading-column-line mark.search-match-continued {
   background: rgba(255, 165, 0, 0.4);
   color: inherit;
   border-radius: 2px;
 }
-.reading-column-line mark.search-match.current {
+.reading-column-line mark.search-match.current,
+.reading-column-line mark.search-match-continued.current {
   background: rgba(255, 165, 0, 0.9);
   color: #000;
 }
