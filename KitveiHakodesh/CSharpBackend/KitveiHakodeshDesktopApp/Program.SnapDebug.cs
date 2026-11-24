@@ -33,38 +33,34 @@ namespace KitveiHakodeshDesktopApp
                 switch (p[0])
                 {
                     case "screen":
-                        DockToScreen(w, Screen.FromHandle(w.Handle), (SnapCell)Enum.Parse(typeof(SnapCell), p[2]));
+                        ScreenDocking.Dock(w, Screen.FromHandle(w.Handle), (ScreenDocking.SnapCell)Enum.Parse(typeof(ScreenDocking.SnapCell), p[2]));
                         break;
                     case "beside":
-                        DockBeside(w, SnapDebugWindow(p[2]), (DropSide)Enum.Parse(typeof(DropSide), p[3]));
+                        ScreenDocking.DockNextTo(w, SnapDebugWindow(p[2]), (ScreenDocking.DropSide)Enum.Parse(typeof(ScreenDocking.DropSide), p[3]));
                         break;
                     case "size":
                     {
                         int edge = int.Parse(p[2]), dx = int.Parse(p[3]), dy = int.Parse(p[4]);
                         Rectangle b = w.Bounds;
-                        var r = new RECT { Left = b.Left, Top = b.Top, Right = b.Right, Bottom = b.Bottom };
-                        bool l = edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT;
-                        bool rr = edge == WMSZ_RIGHT || edge == WMSZ_TOPRIGHT || edge == WMSZ_BOTTOMRIGHT;
-                        bool t = edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT;
-                        bool bb = edge == WMSZ_BOTTOM || edge == WMSZ_BOTTOMLEFT || edge == WMSZ_BOTTOMRIGHT;
-                        if (l) r.Left += dx; if (rr) r.Right += dx; if (t) r.Top += dy; if (bb) r.Bottom += dy;
-                        OnWindowSizing(w, edge, ref r);
-                        w.Bounds = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+                        int left = b.Left, top = b.Top, right = b.Right, bottom = b.Bottom;
+                        bool l = edge == 1 || edge == 4 || edge == 7, rr = edge == 2 || edge == 5 || edge == 8;
+                        bool t = edge == 3 || edge == 4 || edge == 5, bb = edge == 6 || edge == 7 || edge == 8;
+                        if (l) left += dx; if (rr) right += dx; if (t) top += dy; if (bb) bottom += dy;
+                        w.Bounds = ScreenDocking.ResizeEdge(w, edge, Rectangle.FromLTRB(left, top, right, bottom));
                         break;
                     }
                     case "move":
                     {
                         int dx = int.Parse(p[2]), dy = int.Parse(p[3]);
                         Rectangle b = w.Bounds;
-                        var r = new RECT { Left = b.Left + dx, Top = b.Top + dy, Right = b.Right + dx, Bottom = b.Bottom + dy };
-                        OnWindowMovingRect(w, ref r);
-                        w.Bounds = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
-                        OnWindowMoving(w);
+                        w.Bounds = ScreenDocking.MoveBy(w, new Rectangle(b.Left + dx, b.Top + dy, b.Width, b.Height));
                         break;
                     }
                     case "close": w.Close(); break;
                     case "max": w.WindowState = FormWindowState.Maximized; break;
                     case "min": w.WindowState = FormWindowState.Minimized; break;
+                    case "tabs": log.Append(SnapDebugTabs()); break;
+                    case "front": w.Activate(); break;
                     case "restore": w.WindowState = FormWindowState.Normal; break;
                 }
             }
@@ -102,8 +98,31 @@ namespace KitveiHakodeshDesktopApp
         private static string SnapDebugName(FluentChromeTabsForm w)
         {
             if (w is MainForm) return "m";
+            foreach (PageWindowForm open in PageWindows)
+                if (!open.IsDisposed && !SnapDebugNames.ContainsValue(open)) SnapDebugNames[SnapDebugNames.Count + 1] = open;
             foreach (var kv in SnapDebugNames) if (kv.Value == w) return kv.Key.ToString();
             return "key" + ((PageWindowForm)w).WindowKey;
+        }
+
+        // Each window's tabs as screen points (their centres), and its strip's height: for driving
+        // the real mouse. Read through the strip's private layout (debug only).
+        private static string SnapDebugTabs()
+        {
+            var sb = new StringBuilder();
+            var tabRect = typeof(FluentChromeTabsForm).GetMethod("TabRect", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            foreach (FluentChromeTabsForm w in AllAppWindows())
+            {
+                if (w.IsDisposed || !w.Visible) continue;
+                sb.Append("TABS " + SnapDebugName(w) + " h=" + w.Handle.ToInt64());
+                for (int i = 0; i < w.Tabs.Count; i++)
+                {
+                    var r = (Rectangle)tabRect.Invoke(w, new object[] { i });
+                    Point c = w.PointToScreen(new Point(r.Left + r.Width / 2, r.Top + r.Height / 2));
+                    sb.Append(" " + c.X + "," + c.Y);
+                }
+                sb.AppendLine();
+            }
+            return sb.ToString();
         }
 
         private static string SnapDebugDump()
@@ -112,13 +131,11 @@ namespace KitveiHakodeshDesktopApp
             foreach (FluentChromeTabsForm w in AllAppWindows())
             {
                 if (w.IsDisposed) continue;
-                SnapGroup g = GroupOf(w, out int slot, out int part);
                 string name = SnapDebugName(w);
-                sb.AppendLine("  " + name + " visible=" + w.Visible + " state=" + w.WindowState + " seen=" + VisibleBounds(w)
-                    + (g == null ? " free" : " docked " + CellAt(g.Rows, slot, part) + " split=" + g.Split.ToString("0.00")
-                        + " slotSplit=" + g.Slots[slot].Split.ToString("0.00") + " cell=" + RectOf(g, slot, part < 0 ? 0 : part)));
+                sb.AppendLine("  " + name + " visible=" + w.Visible + " state=" + w.WindowState + " seen=" + ScreenDocking.VisibleBoundsOf(w)
+                    + " " + ScreenDocking.Describe(w));
             }
-            sb.AppendLine("  groups=" + SnapGroups.Count);
+            sb.AppendLine("  groups=" + ScreenDocking.GroupCount);
             return sb.ToString();
         }
     }

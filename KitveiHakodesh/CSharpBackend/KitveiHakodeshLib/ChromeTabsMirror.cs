@@ -121,16 +121,6 @@ namespace KitveiHakodeshLib
         // host's tab-move coordinator). These keep each strip from fighting that move with
         // snapshots of a page that has not caught up yet.
 
-        /// <summary>
-        /// Lets tabs be dragged out of the strip, with the host deciding where they go and
-        /// moving them (FluentChromeTabsForm.TabDragOutside).
-        /// </summary>
-        public void EnableTabMovesBetweenWindows()
-        {
-            _form.AllowTabDetach = true;
-            _form.HostMovesTabsBetweenWindows = true;
-        }
-
         /// <summary>How many tabs this window's page has (both panes), from its last snapshot.</summary>
         public int PageTabCount => _lastState?.Tabs.Count ?? 0;
 

@@ -44,41 +44,6 @@ namespace KitveiHakodeshDesktopApp
             base.OnFormClosing(e);
         }
 
-        // A move or an edge resize by the user: windows placed side by side keep their shared
-        // edge (Program.SideBySide), as MainForm does.
-        protected override void OnResize(System.EventArgs e)
-        {
-            base.OnResize(e);
-            Program.OnDockedWindowResized(this);
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            const int WM_SIZING = 0x0214, WM_MOVING = 0x0216, WM_EXITSIZEMOVE = 0x0232, WM_WINDOWPOSCHANGING = 0x0046;
-            if (m.Msg == WM_WINDOWPOSCHANGING && m.LParam != System.IntPtr.Zero)
-            {
-                var pos = (Program.WINDOWPOS)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(Program.WINDOWPOS));
-                System.IntPtr before = pos.hwndInsertAfter;
-                Program.OnWindowPosChanging(this, ref pos);
-                if (pos.hwndInsertAfter != before)
-                    System.Runtime.InteropServices.Marshal.StructureToPtr(pos, m.LParam, false);
-            }
-            if (m.Msg == WM_SIZING)
-            {
-                var proposed = (Program.RECT)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(Program.RECT));
-                Program.OnWindowSizing(this, m.WParam.ToInt32(), ref proposed);
-                System.Runtime.InteropServices.Marshal.StructureToPtr(proposed, m.LParam, false);
-            }
-            if (m.Msg == WM_MOVING && m.LParam != System.IntPtr.Zero)
-            {
-                var moving = (Program.RECT)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(Program.RECT));
-                Program.OnWindowMovingRect(this, ref moving);
-                System.Runtime.InteropServices.Marshal.StructureToPtr(moving, m.LParam, false);
-            }
-            base.WndProc(ref m);
-            if (m.Msg == WM_MOVING) Program.OnWindowMoving(this);
-            else if (m.Msg == WM_EXITSIZEMOVE) Program.OnWindowMoveEnded(this);
-        }
 
         internal PageWindowForm(MainForm pageOwner, string windowKey)
         {

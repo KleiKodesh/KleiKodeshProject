@@ -1,4 +1,5 @@
 ﻿using KitveiHakodeshLib;
+using FluentChromeTabs;
 using KitveiHakodesh.Core.Settings;
 using System;
 using System.IO;
@@ -198,14 +199,14 @@ namespace KitveiHakodeshDesktopApp
             form.Activated += (s, e) =>
             {
                 lock (EarlyRequestsLock) _activeWindow = form;
-                OnWindowActivated(form);
             };
             // Every close completes (AppViewer holds the first one only to save), so the
             // window stops being a target the moment it starts.
             form.FormClosing += (s, e) => OnWindowClosing(form);
             form.FormClosed += (s, e) => OnWindowClosed(form);
-            // Tabs drag between windows and off into new ones; the pages move them (TabMoves).
-            form.TabsMirror.EnableTabMovesBetweenWindows();
+            // Tabs drag between windows and dock on the screen (FluentChromeTabs.ScreenDocking);
+            // the pages move them (Program.Docking, Program.TabMoves).
+            AttachDocking(form);
             // The page opens extra windows of itself (VS Code model): full app windows with their own strip.
             form.Viewer.AppWindowRequested += (s, e) =>
             {
@@ -215,7 +216,6 @@ namespace KitveiHakodeshDesktopApp
                 e.ClosingByPage = () => window.ClosingByPage = true;
                 AddPageWindow(form, window);
             };
-            form.TabDragOutside += (s, e) => OnTabDragOutside(form, e);
             OpenWindows.Add(form);
             return form;
         }
@@ -271,6 +271,7 @@ namespace KitveiHakodeshDesktopApp
         {
             if (!PageWindows.Exists(w => w.PageOwner == form && !w.IsDisposed && w.Visible)) return false;
             form.ClosedWhileOthersStay = true;
+            ScreenDocking.Forget(form); // it leaves its place: the others take the space
             form.Viewer.CloseAppWindow("");
             return true;
         }
@@ -333,7 +334,6 @@ namespace KitveiHakodeshDesktopApp
                 drawn.Close();
             }
             OpenWindows.Remove(form);
-            ForgetSideBySide(form);
             ClosingWindows.Remove(form);
             WindowsClosingForGood.Remove(form);
             WindowsEmptiedByMove.Remove(form);
