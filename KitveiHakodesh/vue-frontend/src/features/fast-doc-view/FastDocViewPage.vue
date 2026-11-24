@@ -31,7 +31,7 @@ import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
 import type { WindowedScrollerApi, WindowedScrollerMoveSource } from '@/components/windowedScrollerTypes'
 import { slotForSearchMode, type CommentarySlot, type SearchMode } from '@/components/readingSearchModes'
 import { useFastDocViewSearch } from './useFastDocViewSearch'
-import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
+import { highlightFastDocViewSearchMatches } from './fastDocViewSearchHighlight'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
@@ -281,7 +281,7 @@ function blockHtml(index: number): string {
   // The book view's clean-text (Ctrl+D, global setting) first, then the search marks, as its line renderer;
   // the picture sources last (never searched or cleaned).
   const html = cleanHebrewText(fastDocument.blockAt(index)?.html ?? '', settingsStore.cleanTextFlags)
-  const marked = search.query.value.trim() && searchVisible.value && !isNotesSearch.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
+  const marked = search.query.value.trim() && searchVisible.value && !isNotesSearch.value ? highlightFastDocViewSearchMatches(html, search.query.value) : html
   return pictures.withPictureSources(marked)
 }
 
