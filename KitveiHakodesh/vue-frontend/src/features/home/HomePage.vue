@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useBookCatalogCategoryNavigation } from '@/features/book-catalog/useBookCatalogCategoryNavigation'
 import { ref, computed, onMounted } from 'vue'
 import { useEventListener, useElementSize } from '@vueuse/core'
@@ -20,6 +21,8 @@ import { useHomeSuggestionCards } from './useHomeSuggestionCards'
 import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const settingsStore = useSettingsStore()
 
@@ -143,7 +146,7 @@ function focusSearchInput() {
   const input = searchBarInputRef.value
   if (!input) return
   if (document.hasFocus()) input.focus()
-  else useEventListener(window, 'focus', () => input.focus(), { once: true })
+  else useEventListener(hostWindow, 'focus', () => input.focus(), { once: true })
 }
 
 onMounted(focusSearchInput)

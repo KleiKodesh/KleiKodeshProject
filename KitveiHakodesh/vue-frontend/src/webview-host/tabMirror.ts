@@ -165,6 +165,10 @@ export function initTabMirror(): void {
           typeof msg.position === 'number' ? msg.position : -1,
         )
         break
+      case 'closeAppWindow':
+        // The reader closed a window this page draws (its X): its tabs close with it.
+        if (typeof msg.windowKey === 'string') tabStore.closeWindow(msg.windowKey)
+        break
       case 'openNewAppWindow':
         tabStore.openNewWindow()
         break

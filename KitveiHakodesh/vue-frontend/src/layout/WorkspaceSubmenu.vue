@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import WorkspaceMenu from './WorkspaceMenu.vue'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 /**
  * `WorkspaceMenu` as a dropdown: a panel that hangs straight DOWN from the button that
@@ -226,8 +229,8 @@ function followAnchor() {
   place()
 }
 
-useEventListener(window, 'resize', followAnchor)
-useEventListener(window, 'scroll', followAnchor, true)
+useEventListener(hostWindow, 'resize', followAnchor)
+useEventListener(hostWindow, 'scroll', followAnchor, true)
 
 // The panel's own height changes as rows are added, deleted, or swapped for a rename box
 // or a delete confirmation - each of which can push it past the bottom of a short window.

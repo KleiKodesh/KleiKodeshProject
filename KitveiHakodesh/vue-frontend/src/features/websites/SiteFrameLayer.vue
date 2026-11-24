@@ -8,6 +8,8 @@ import SiteLeavePrompt from './SiteLeavePrompt.vue'
 import { refreshSiteFrameFocus } from './siteFrameFocus'
 import { forgetSiteFrame, reloadSiteFrame, siteFrames, type SiteFrame } from './siteFrames'
 import { displayHost, websiteForUrl, websiteName } from './websitesList'
+import { activeHostWindow, useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { useAppWindowKey } from '@/composables/appWindow'
 
 /**
  * Every live website iframe, mounted ONCE here at the app root and never moved (moving an iframe
@@ -19,7 +21,15 @@ import { displayHost, websiteForUrl, websiteName } from './websitesList'
  */
 const tabStore = useTabStore()
 const bookViewStore = useBookViewStore()
-const liveFrames = computed(() => [...siteFrames.values()].filter((f) => f.live))
+// One layer per app window (App.vue for the main one, AppWindowShell.vue for each extra one):
+// it holds the frames of that window's tabs, in that window's document. A website tab moved to
+// another window reloads there - an iframe cannot cross documents.
+const hostWindow = useHostWindow()
+const document = hostWindow.document
+const appWindowKey = useAppWindowKey()
+const isMainLayer = appWindowKey === ''
+const liveFrames = computed(() => [...siteFrames.values()].filter((f) =>
+  f.live && (tabStore.tabs.find((t) => t.id === f.tabId)?.windowKey ?? '') === appWindowKey))
 
 const isHosted = typeof window.__webviewAction === 'function'
 /** Hosted the iframe loads the site itself; the dev browser goes through vite's dev proxy (websitesDevProxy.ts). */
@@ -41,11 +51,13 @@ function frameStyle(frame: SiteFrame): string {
   ].join('; ')
 }
 
+// (The main layer alone does the page-wide work below: forgetting frames, host events.)
 // A closed tab: its iframe goes. A tab that moved on to another page keeps it (hidden), so Back
 // returns to the live site, like a browser's back-forward cache; low memory still unloads it.
 watch(
   () => tabStore.tabs.map((tab) => tab.id).join('|'),
   () => {
+    if (!isMainLayer) return
     const tabIds = new Set(tabStore.tabs.map((tab) => tab.id))
     for (const tabId of [...siteFrames.keys()]) if (!tabIds.has(tabId)) forgetSiteFrame(tabId)
   },
@@ -60,14 +72,14 @@ function onFrameFocus(frame: SiteFrame) {
   refreshSiteFrameFocus()
 }
 const onFrameBlur = () => setTimeout(refreshSiteFrameFocus)
-useEventListener(window, 'blur', () => setTimeout(() => {
+useEventListener(hostWindow, 'blur', () => setTimeout(() => {
   const frame = frameOf(document.activeElement)
   if (frame) onFrameFocus(frame)
 }))
-useEventListener(window, 'focus', () => setTimeout(refreshSiteFrameFocus))
+useEventListener(hostWindow, 'focus', () => setTimeout(refreshSiteFrameFocus))
 
 // F5 / Ctrl+R while a site has focus (taken from the site by the host): reload the site, not the app.
-useEventListener(window, 'keydown', (e: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   const frame = frameOf(document.activeElement)
   if (!frame) return
   if (e.code === 'F5' || (e.ctrlKey && !e.altKey && e.code === 'KeyR')) {
@@ -78,7 +90,7 @@ useEventListener(window, 'keydown', (e: KeyboardEvent) => {
 }, { capture: true })
 
 // The reader typed in a site (siteFrameActivity script): protected from automatic unloading.
-useEventListener(window, 'message', (e: MessageEvent) => {
+useEventListener(hostWindow, 'message', (e: MessageEvent) => {
   if (e.data?.type !== 'kitveiSiteInput') return
   for (const el of document.querySelectorAll<HTMLIFrameElement>('iframe.site-frame')) {
     if (el.contentWindow === e.source) {
@@ -90,14 +102,15 @@ useEventListener(window, 'message', (e: MessageEvent) => {
 
 // Divider drags (side panels): an iframe under the pointer would swallow the drag.
 const dragging = ref(false)
-useEventListener(document, 'pointerdown', (e: PointerEvent) => {
+useEventListener(hostWindow.document, 'pointerdown', (e: PointerEvent) => {
   if ((e.target as Element | null)?.closest?.('[data-split-divider]')) dragging.value = true
 }, { capture: true })
-useEventListener(document, ['pointerup', 'pointercancel'], () => (dragging.value = false), { capture: true })
-useEventListener(window, 'blur', () => (dragging.value = false))
+useEventListener(hostWindow.document, ['pointerup', 'pointercancel'], () => (dragging.value = false), { capture: true })
+useEventListener(hostWindow, 'blur', () => (dragging.value = false))
 
 // Host: where the reader went inside the site (the tab follows it), and new-window links.
 onWebviewEvent((msg) => {
+  if (!isMainLayer) return
   if (msg.event === 'siteFrameNavigated' && typeof msg.url === 'string') {
     const frame = [...siteFrames.values()].find((f) => f.name === msg.frame)
     // A login page (OpenAthens) is not a site: the tab keeps the site's address.
@@ -107,7 +120,8 @@ onWebviewEvent((msg) => {
     tabStore.updateTab(frame.tabId, { webUrl: msg.url })
   }
   if (msg.event === 'siteOpenInNewTab' && typeof msg.url === 'string') {
-    const frame = frameOf(document.activeElement)
+    // The site the reader is in: its tab's window gets the new tab (openTab follows the focus).
+    const frame = [...siteFrames.values()].find((f) => f.name === msg.frame) ?? frameOf(activeHostWindow().document.activeElement)
     if (!frame) return
     const site = websiteForUrl(msg.url)
     const tab = { route: '/web-view' as const, title: site ? websiteName(site) : displayHost(msg.url), webUrl: msg.url }

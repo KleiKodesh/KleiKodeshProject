@@ -30,6 +30,13 @@ namespace KitveiHakodeshLib
             _ = RegisterKiwixFactsAsync();
         }
 
+        // An extra app window's view reaches the Kiwix reader the same way.
+        private void MapKiwixIfInstalled(CoreWebView2 core)
+        {
+            if (!IsKiwixInstalled) return;
+            core.SetVirtualHostNameToFolderMapping(KiwixHost, KiwixDir, CoreWebView2HostResourceAccessKind.Allow);
+        }
+
         /// <summary>
         /// Kiwix.js reads its UI language and light/dark theme at startup from window.__khUiLanguage /
         /// window.__khDarkTheme (www/js/init.js - the Word Kiwix pane, KiwixWebview.cs, sets them the

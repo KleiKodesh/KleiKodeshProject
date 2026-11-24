@@ -409,11 +409,48 @@ namespace KitveiHakodeshLib.LocalFile
                 if (m.RefCount <= 0)
                 {
                     _hosts.Remove(folder);
-                    try { _webView.CoreWebView2.ClearVirtualHostNameToFolderMapping(m.HostName); } catch { }
+                    foreach (var core in AllCores())
+                        try { core.ClearVirtualHostNameToFolderMapping(m.HostName); } catch { }
                 }
                 else _hosts[folder] = m;
             }
             _bridge.Reply(id, new { ok = true });
+        }
+
+        // The views of the extra app windows the page draws (AppViewer.AppWindowRequested): a
+        // file opened in a tab there loads through that window's view, so every folder this
+        // handler maps is mapped there too.
+        private readonly List<CoreWebView2> _extraCores = new List<CoreWebView2>();
+
+        private IEnumerable<CoreWebView2> AllCores()
+        {
+            if (_webView.CoreWebView2 != null) yield return _webView.CoreWebView2;
+            foreach (var core in _extraCores) yield return core;
+        }
+
+        /// <summary>An extra app window's view: gets every folder mapped now and from here on.</summary>
+        public void AddCore(CoreWebView2 core)
+        {
+            if (core == null || _extraCores.Contains(core)) return;
+            _extraCores.Add(core);
+            foreach (var m in _hosts.Values)
+                try { core.SetVirtualHostNameToFolderMapping(m.HostName, FolderOfHost(m.HostName), CoreWebView2HostResourceAccessKind.Allow); } catch { }
+            if (_servedHandlerInstalled) core.WebResourceRequested += OnServedResourceRequested;
+            foreach (string host in _servedFolderByHost.Keys)
+                core.AddWebResourceRequestedFilter("http://" + host + "/*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+        }
+
+        /// <summary>The extra app window closed.</summary>
+        public void RemoveCore(CoreWebView2 core)
+        {
+            if (!_extraCores.Remove(core)) return;
+            try { core.WebResourceRequested -= OnServedResourceRequested; } catch { }
+        }
+
+        private string FolderOfHost(string host)
+        {
+            foreach (var kvp in _hosts) if (kvp.Value.HostName == host) return kvp.Key;
+            return null;
         }
 
         /// <summary>
@@ -424,7 +461,8 @@ namespace KitveiHakodeshLib.LocalFile
         {
             foreach (var kvp in _hosts)
             {
-                try { _webView.CoreWebView2?.ClearVirtualHostNameToFolderMapping(kvp.Value.HostName); } catch { }
+                foreach (var core in AllCores())
+                    try { core.ClearVirtualHostNameToFolderMapping(kvp.Value.HostName); } catch { }
             }
             // Served hosts are backed by a WebResourceRequested handler rather than a folder
             // mapping, so clearing the dictionaries is not enough — the handler keeps this
@@ -432,7 +470,8 @@ namespace KitveiHakodeshLib.LocalFile
             // RegisterServedFolder would skip re-subscribing and silently serve nothing.
             if (_servedHandlerInstalled)
             {
-                try { _webView.CoreWebView2.WebResourceRequested -= OnServedResourceRequested; } catch { }
+                foreach (var core in AllCores())
+                    try { core.WebResourceRequested -= OnServedResourceRequested; } catch { }
                 _servedHandlerInstalled = false;
             }
             _hosts.Clear();
@@ -452,8 +491,8 @@ namespace KitveiHakodeshLib.LocalFile
             if (!_hosts.TryGetValue(folder, out var m))
             {
                 string host = "kitvei-localfile-" + (++_hostCounter);
-                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    host, folder, CoreWebView2HostResourceAccessKind.Allow);
+                foreach (var core in AllCores())
+                    core.SetVirtualHostNameToFolderMapping(host, folder, CoreWebView2HostResourceAccessKind.Allow);
                 m = new FolderMapping { HostName = host, RefCount = 0 };
                 _hosts[folder] = m;
             }
@@ -488,7 +527,7 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 if (!_servedHandlerInstalled)
                 {
-                    _webView.CoreWebView2.WebResourceRequested += OnServedResourceRequested;
+                    foreach (var core in AllCores()) core.WebResourceRequested += OnServedResourceRequested;
                     _servedHandlerInstalled = true;
                 }
                 string host = "kitvei-localhtml-" + (++_hostCounter);
@@ -497,9 +536,10 @@ namespace KitveiHakodeshLib.LocalFile
                 // every CSS/JS/image subresource of a served addin page fell through to
                 // real DNS and died with ERR_NAME_NOT_RESOLVED — pages rendered unstyled,
                 // scriptless HTML (diagnosed live 2026-08-27).
-                _webView.CoreWebView2.AddWebResourceRequestedFilter(
-                    "http://" + host + "/*", CoreWebView2WebResourceContext.All,
-                    CoreWebView2WebResourceRequestSourceKinds.All);
+                foreach (var core in AllCores())
+                    core.AddWebResourceRequestedFilter(
+                        "http://" + host + "/*", CoreWebView2WebResourceContext.All,
+                        CoreWebView2WebResourceRequestSourceKinds.All);
                 m = new FolderMapping { HostName = host, RefCount = 0 };
                 _servedFolderByHost[host] = folder;
             }

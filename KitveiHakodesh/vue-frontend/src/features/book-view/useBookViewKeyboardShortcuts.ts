@@ -17,6 +17,7 @@ import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 
 // Only `$el` is used here (see below) — the scroller API is not part of this
 // composable's contract.
@@ -37,6 +38,8 @@ export function useBookViewKeyboardShortcuts(
   /** Enter: select the caret's line. True when it did (commentary open, caret in a line). */
   selectLineAtCaret: () => boolean,
 ) {
+  // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+  const hostWindow = useHostWindow()
   function isTypingField(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]') != null
   }
@@ -44,7 +47,7 @@ export function useBookViewKeyboardShortcuts(
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
 
-  useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
     // Only respond when the active tab is a book view.
     if (paneNavigation.activeTab.route !== '/book-view') return
     const ctrl = event.ctrlKey || event.metaKey

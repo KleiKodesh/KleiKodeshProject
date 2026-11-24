@@ -45,18 +45,6 @@ namespace KitveiHakodeshDesktopApp
         /// </summary>
         internal MainForm OpenedFrom { get; set; }
 
-        /// <summary>
-        /// Where a window opened for a torn-off tab appears: under the cursor, so the drag
-        /// carries on with it. Wins over <see cref="OpenedFrom"/> and the saved size.
-        /// </summary>
-        internal Rectangle? PlaceAt { get; set; }
-
-        /// <summary>
-        /// For a window opened for a torn-off tab: completes with that tab's id in this page
-        /// once the page has it, or null when it never arrived (AppViewer.StartWithMovedTab).
-        /// </summary>
-        internal Task<string> ArrivingTab { get; set; }
-
         /// <summary>This window's page (tabs move between windows through it, Program.TabMoves).</summary>
         internal AppViewer Viewer => _viewer;
 
@@ -134,13 +122,6 @@ namespace KitveiHakodeshDesktopApp
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            if (PlaceAt.HasValue)
-            {
-                StartPosition = FormStartPosition.Manual;
-                Bounds = PlaceAt.Value;
-                _lastNormalBounds = Bounds;
-                return;
-            }
             if (OpenedFrom != null && !OpenedFrom.IsDisposed)
             {
                 Rectangle from = OpenedFrom.WindowState == FormWindowState.Normal ? OpenedFrom.Bounds : OpenedFrom._lastNormalBounds;

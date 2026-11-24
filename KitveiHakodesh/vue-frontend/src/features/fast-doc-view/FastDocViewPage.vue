@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDebounceFn, useElementSize, useEventListener, useStyleTag } from '@vueuse/core'
 import WindowedScroller from '@/components/WindowedScroller.vue'
@@ -45,6 +46,8 @@ import { vFastDocViewShapeText } from './fastDocViewShapeText'
 import { vFastDocViewMath } from './fastDocViewMath'
 import { vFastDocViewTabs } from './fastDocViewTabs'
 import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
@@ -411,7 +414,7 @@ function navigateToAdjacentHeading(direction: 'next' | 'previous') {
 }
 // Ctrl+= / - / 0 with the focus in neither scroller zoom both, as the book view's
 // page shortcuts (a focused scroller's own handler zooms only its pane). The browser's page zoom is blocked.
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey)) return
   const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
   const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
@@ -425,14 +428,14 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   zoomBoth(isZoomIn ? zoomIn : isZoomOut ? zoomOut : () => ZOOM_CONFIG.DEFAULT)
 })
 // Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
   if (paneNavigation.activeTab.id !== tabId) return
   event.preventDefault()
   settingsStore.toggleCleanText()
 })
 // Ctrl+Arrow, as in the book view (RTL: Ctrl+Left = next). On the text, outside inputs.
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
   if (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight') return
   if (!pageElement.value?.contains(document.activeElement) || (document.activeElement as HTMLElement | null)?.closest('input, textarea')) return

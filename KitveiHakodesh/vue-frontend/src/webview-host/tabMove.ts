@@ -97,19 +97,11 @@ export function markLocalFileRestoreReady(): void {
 
 // ── Host entry points ────────────────────────────────────────────────────────
 
-/** A tab a new window starts with, injected before boot (AppViewer.StartWithMovedTab). */
-interface ArrivingTab {
-  requestId: string
-  moved: MovedTab
-}
-
 declare global {
   interface Window {
     __khsPackTab?: (requestId: string, tabId: string) => 'pending'
     __khsUnpackTab?: (requestId: string, movedJson: string, position: number) => 'pending'
     __khsCloseMovedTab?: (tabId: string) => 'closed'
-    __khsKeepOnlyActiveTab?: () => 'closed'
-    __khsArrivingTab?: ArrivingTab
   }
 }
 
@@ -132,29 +124,5 @@ export function installTabMoveHost(): void {
     closeMovedTab(String(tabId))
     return 'closed'
   }
-  // A window started ahead of a drop, now holding the dropped tab: its starter tab goes.
-  window.__khsKeepOnlyActiveTab = () => {
-    const tabStore = useTabStore()
-    for (const id of tabStore.tabs.map((t) => t.id)) if (id !== tabStore.activeTabId) tabStore.closeTab(id)
-    return 'closed'
-  }
 }
 
-/**
- * A new window opened for a torn-off tab starts with that tab instead of a home tab.
- * Called by main.ts after the stores are initialised and before mount, so the first
- * view drawn is the arrived tab. The window is new, so whatever else its tab list
- * holds (a home tab) goes. The host learns the result like any unpack.
- */
-export function unpackArrivingTab(): void {
-  const arriving = window.__khsArrivingTab
-  if (!arriving?.requestId) return
-  delete window.__khsArrivingTab
-  const tabStore = useTabStore()
-  const others = tabStore.tabs.map((t) => t.id)
-  // unpackTab opens the tab synchronously (its first await comes after), so the others
-  // are gone before anything renders.
-  const work = unpackTab(arriving.moved, -1)
-  if (tabStore.tabs.length > others.length) for (const id of others) tabStore.closeTab(id)
-  postResult(arriving.requestId, work)
-}

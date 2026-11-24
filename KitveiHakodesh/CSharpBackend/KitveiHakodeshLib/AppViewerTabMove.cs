@@ -16,10 +16,6 @@ namespace KitveiHakodeshLib
             new Dictionary<string, TaskCompletionSource<string>>();
         private int _tabMoveRequestCounter;
 
-        // A new window's first tab, injected before the page boots (StartWithMovedTab).
-        private Task<string> _arrivingTabJson;
-        private string _arrivingTabRequestId;
-        private string _arrivingTabScriptId;
 
         /// <summary>
         /// Asks the page for everything a restart would restore for one tab (its entry, its
@@ -48,65 +44,12 @@ namespace KitveiHakodeshLib
         /// <summary>Completes once the page has mounted and can take requests ('appReady').</summary>
         public Task PageReady => _pageReady.Task;
 
-        /// <summary>Closes every tab of this page but the active one. Fire and forget.</summary>
-        public void KeepOnlyActiveTab()
-        {
-            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
-            try { _ = _webView.CoreWebView2.ExecuteScriptAsync("window.__khsKeepOnlyActiveTab&&window.__khsKeepOnlyActiveTab()"); }
-            catch (Exception) { /* the page went away */ }
-        }
-
         /// <summary>Closes the source copy of a tab another window now has. Fire and forget.</summary>
         public void CloseMovedTab(string tabId)
         {
             if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
             try { _ = _webView.CoreWebView2.ExecuteScriptAsync("window.__khsCloseMovedTab&&window.__khsCloseMovedTab(" + JsonString(tabId) + ")"); }
             catch (Exception) { /* the page went away: its tabs go with it */ }
-        }
-
-        /// <summary>
-        /// For a window opened for a torn-off tab, set before the viewer initialises: the page
-        /// boots with that tab instead of its home tab. <paramref name="movedJson"/> may still be
-        /// running (the pack); the viewer waits for it just before loading the page. The result
-        /// completes with the new tab's id once the page has stored it, or null when there was
-        /// nothing to open or the page did not take it.
-        /// </summary>
-        public Task<string> StartWithMovedTab(Task<string> movedJson, int timeoutMs = 20000)
-        {
-            _arrivingTabJson = movedJson;
-            _arrivingTabRequestId = NextTabMoveRequestId();
-            var arrived = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _tabMoveRequests[_arrivingTabRequestId] = arrived;
-            string requestId = _arrivingTabRequestId;
-            _ = Task.Delay(timeoutMs).ContinueWith(_ => arrived.TrySetResult(null), TaskScheduler.Default);
-            return arrived.Task.ContinueWith(t =>
-            {
-                _tabMoveRequests.Remove(requestId);
-                return ParseTabId(t.Result);
-            }, TaskScheduler.FromCurrentSynchronizationContext());
-        }
-
-        // Called from InitAsyncCore just before the page is navigated to.
-        private async Task InjectArrivingTabAsync()
-        {
-            if (_arrivingTabJson == null) return;
-            string json = null;
-            try { json = await _arrivingTabJson; } catch (Exception) { }
-            if (string.IsNullOrEmpty(json))
-            {
-                CompleteTabMoveRequest(_arrivingTabRequestId, null);
-                return;
-            }
-            // One-shot (removed on 'appReady'): a reload must not open the tab again.
-            _arrivingTabScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                "if(window===window.top)window.__khsArrivingTab={requestId:" + JsonString(_arrivingTabRequestId) + ",moved:" + json + "};");
-        }
-
-        private void RemoveArrivingTabScript()
-        {
-            if (_arrivingTabScriptId == null) return;
-            _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_arrivingTabScriptId);
-            _arrivingTabScriptId = null;
         }
 
         private async Task<string> CallTabMoveAsync(string pageFunction, string argumentsJs, int timeoutMs)

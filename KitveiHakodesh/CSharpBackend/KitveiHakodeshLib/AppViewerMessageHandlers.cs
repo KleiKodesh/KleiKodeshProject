@@ -369,7 +369,6 @@ namespace KitveiHakodeshLib
                 _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_startupEventsScriptId);
                 _startupEventsScriptId = null;
             }
-            RemoveArrivingTabScript();
             if (_pendingFilePaths.Count > 0)
             {
                 string[] paths = _pendingFilePaths.ToArray();

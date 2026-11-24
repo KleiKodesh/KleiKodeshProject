@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useEventListener, useElementSize } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
@@ -21,6 +22,8 @@ import SettingsPageAdvancedSection from './SettingsPageAdvancedSection.vue'
 import SettingsPageResetSection from './SettingsPageResetSection.vue'
 import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcutsSection.vue'
 import SettingsPageAboutSection from './SettingsPageAboutSection.vue'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
@@ -101,7 +104,7 @@ function focusSearchInput() {
     input.setSelectionRange(caretPosition, caretPosition)
   }
   if (document.hasFocus()) focusAtEndOfQuery()
-  else useEventListener(window, 'focus', focusAtEndOfQuery, { once: true })
+  else useEventListener(hostWindow, 'focus', focusAtEndOfQuery, { once: true })
 }
 
 onMounted(() => {

@@ -22,6 +22,25 @@ namespace KitveiHakodeshDesktopApp
         /// <summary>The page's key for this window (its tabs carry it).</summary>
         internal string WindowKey { get; }
 
+        /// <summary>
+        /// Set when the page itself closes the window (its last tab left, or the reader's
+        /// close went through the page), or when the owner window goes: the close goes ahead.
+        /// </summary>
+        internal bool ClosingByPage { get; set; }
+
+        // The reader's close goes through the page: it closes the window's tabs (asking about
+        // unsaved work first) and then the window. Its tabs are gone for good.
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!ClosingByPage && e.CloseReason == CloseReason.UserClosing && !PageOwner.IsDisposed)
+            {
+                e.Cancel = true;
+                PageOwner.Viewer.CloseAppWindow(WindowKey);
+                return;
+            }
+            base.OnFormClosing(e);
+        }
+
         // A move or an edge resize by the user: windows placed side by side keep their shared
         // edge (Program.SideBySide), as MainForm does.
         protected override void WndProc(ref Message m)

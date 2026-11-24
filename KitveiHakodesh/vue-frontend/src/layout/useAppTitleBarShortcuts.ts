@@ -1,4 +1,5 @@
 import { WIDGET_ITEMS } from '@/features/widgets/widgetItems'
+import { useTabStore } from '@/stores/tabStore'
 import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
 import { computed, onScopeDispose, type ComputedRef, type Ref } from 'vue'
 import { hasHostBridge } from '@/webview-host/seforimDb'
@@ -15,6 +16,8 @@ import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiCh
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { useAppWindowKey } from '@/composables/appWindow'
 
 type Pane = ReturnType<typeof useAppShellPane>
 
@@ -54,6 +57,9 @@ export function useAppTitleBarShortcuts(options: {
   /** F8. Owned by the component, which holds the picker's open state. */
   toggleWorkspaces: () => void
 }) {
+  // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+  const hostWindow = useHostWindow()
+  const appWindowKey = useAppWindowKey()
   const { pane, titleBarVisible } = options
   const bookViewStore = useBookViewStore()
   const settingsStore = useSettingsStore()
@@ -88,8 +94,8 @@ export function useAppTitleBarShortcuts(options: {
   //    it could only be the site itself faking app shortcuts.
   {
     const replay = (d: { code: string; key?: string; repeat?: boolean; ctrlKey?: boolean; shiftKey?: boolean; metaKey?: boolean; altKey?: boolean }) =>
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', {
+      hostWindow.dispatchEvent(
+        new hostWindow.KeyboardEvent('keydown', {
           code: d.code,
           key: d.key ?? '',
           repeat: !!d.repeat,
@@ -101,13 +107,15 @@ export function useAppTitleBarShortcuts(options: {
           cancelable: true,
         }),
       )
-    useEventListener('message', (e: MessageEvent) => {
+    useEventListener(hostWindow, 'message', (e: MessageEvent) => {
       if (!e.data || e.data.type !== 'iframeKeydown') return
       if (hasHostBridge && isFromWebsiteFrame(e.source)) return
       replay(e.data)
     })
     onScopeDispose(onWebviewEvent((msg) => {
-      if (msg.event === 'siteFrameShortcut') replay(msg as unknown as Parameters<typeof replay>[0])
+      // The host pushes these to the page, not to a window: the window the reader is in takes them.
+      if (msg.event === 'siteFrameShortcut' && useTabStore().focusedWindow === appWindowKey)
+        replay(msg as unknown as Parameters<typeof replay>[0])
     }))
   }
 
@@ -325,8 +333,7 @@ export function useAppTitleBarShortcuts(options: {
     return false
   }
 
-  useEventListener(
-    'keydown',
+  useEventListener(hostWindow, 'keydown',
     (e: KeyboardEvent) => {
       if (handlePageShortcut(e)) {
         e.preventDefault()

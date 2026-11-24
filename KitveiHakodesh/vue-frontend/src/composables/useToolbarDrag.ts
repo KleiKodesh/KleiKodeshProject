@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { ToolbarPosition } from '@/stores/bookViewStore'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 
 /** Pointer travel before a press on the toolbar background counts as a drag, not a click. */
 const DRAG_START_THRESHOLD_PX = 5
@@ -17,6 +18,8 @@ export function useToolbarDrag(
   toolbarPosition: Ref<ToolbarPosition>,
   pageSelector: string,
 ) {
+  // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+  const hostWindow = useHostWindow()
   const dropTarget = ref<ToolbarPosition | null>(null)
   const viewRect = ref<DOMRect | null>(null)
   let pressX = 0
@@ -58,7 +61,7 @@ export function useToolbarDrag(
   }
   useEventListener(toolbarEl, 'pointerup', () => endDrag(true))
   useEventListener(toolbarEl, 'pointercancel', () => endDrag(false))
-  useEventListener(window, 'keydown', (e: KeyboardEvent) => {
+  useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
     if (e.key === 'Escape' && dropTarget.value) endDrag(false)
   })
 

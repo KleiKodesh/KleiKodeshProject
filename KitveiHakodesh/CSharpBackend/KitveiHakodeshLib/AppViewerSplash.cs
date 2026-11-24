@@ -66,10 +66,6 @@ namespace KitveiHakodeshLib
             return true;
         }
 
-        // True for a window opened for a tab dragged out of another window: its splash is
-        // that tab's picture, and it stays up until the page has drawn the tab.
-        private bool _splashIsMovedTabPicture;
-
         /// <summary>
         /// A picture of what this page shows now, as it is drawn (the tab being dragged out
         /// of the window). Null when the page is not up or the capture took too long.
@@ -88,30 +84,6 @@ namespace KitveiHakodeshLib
                 return Image.FromStream(stream);
             }
             catch (Exception) { return null; }
-        }
-
-        /// <summary>
-        /// For a window opened for a tab dragged out of another window: shows that tab's
-        /// picture in place of the loading splash, from the first frame until this page has
-        /// drawn the tab itself - so the reader keeps looking at the tab they are dragging.
-        /// Call right after construction, before the window shows.
-        /// </summary>
-        public async void ShowMovedTabPictureUntilDrawn(Task<Image> picture)
-        {
-            if (picture == null || _splash == null) return;
-            _splashIsMovedTabPicture = true;
-            Controls.Remove(_splash);
-            _splash.Dispose();
-            var overlay = new SplashOverlay(null, isSnapshot: true) { Dock = DockStyle.Fill };
-            _splash = overlay;
-            Controls.Add(overlay);
-            _SyncSplashBackColor();
-            overlay.BringToFront();
-
-            Image image = null;
-            try { image = await picture; } catch (Exception) { }
-            // Still the same splash, still up: the page may have drawn already.
-            if (image != null && _splash == overlay && !overlay.IsDisposed) overlay.SetSnapshot(image);
         }
 
         /// <summary>

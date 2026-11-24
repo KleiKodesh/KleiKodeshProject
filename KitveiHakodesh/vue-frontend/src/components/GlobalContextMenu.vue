@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * App-wide fallback right-click menu. Mounted once at the app root, it offers
  * "העתק" (Copy), "העתק לתוך וורד" (Copy into Word) and the persistent
@@ -22,6 +23,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 import { useI18n } from 'vue-i18n'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -30,7 +33,7 @@ const settingsStore = useSettingsStore()
 const menuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
 function hasTextSelection(): boolean {
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   return (
     !!sel &&
     sel.rangeCount > 0 &&
@@ -44,7 +47,7 @@ function onCopy(): boolean {
   // browser's native copy picks up exactly what the user had highlighted
   // (preserving both text/plain and text/html).
   try {
-    return document.execCommand('copy')
+    return hostWindow.document.execCommand('copy')
   } catch {
     return false // clipboard unavailable
   }
@@ -69,7 +72,7 @@ const items = computed<ContextMenuItem[]>(() => [
 // bubble listener, so every specialized scoped-copy handler (book view, commentary,
 // txt, FTS — element-level, they preventDefault once they commit a payload) runs first
 // and wins; editable fields keep their native copy untouched.
-useEventListener(document, 'copy', (event: ClipboardEvent) => {
+useEventListener(hostWindow.document, 'copy', (event: ClipboardEvent) => {
   if (event.defaultPrevented) return // a scoped copy handler already wrote the payload
   const flags = settingsStore.copyCleanFlags
   if (!flags) return // native copy is fine as-is
@@ -77,11 +80,11 @@ useEventListener(document, 'copy', (event: ClipboardEvent) => {
   const target = event.target as HTMLElement | null
   if (target?.closest('input, textarea, [contenteditable]')) return
 
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return
 
   const fragment = sel.getRangeAt(0).cloneContents()
-  const tmp = document.createElement('div')
+  const tmp = hostWindow.document.createElement('div')
   tmp.appendChild(fragment)
 
   const html = cleanHebrewText(tmp.innerHTML, flags)
@@ -98,8 +101,8 @@ function onContextMenu(event: MouseEvent): void {
   menuRef.value?.show(event)
 }
 
-onMounted(() => document.addEventListener('contextmenu', onContextMenu))
-onBeforeUnmount(() => document.removeEventListener('contextmenu', onContextMenu))
+onMounted(() => hostWindow.document.addEventListener('contextmenu', onContextMenu))
+onBeforeUnmount(() => hostWindow.document.removeEventListener('contextmenu', onContextMenu))
 </script>
 
 <template>

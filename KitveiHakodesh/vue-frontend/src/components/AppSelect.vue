@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="T extends string">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, nextTick } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import { useEventListener } from '@vueuse/core'
@@ -14,6 +15,9 @@ export interface AppSelectOption<V extends string> {
   value: V
   label: string
 }
+
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const props = defineProps<{ options: AppSelectOption<T>[] }>()
 const model = defineModel<T>({ required: true })
@@ -38,8 +42,8 @@ const closer = useDropdownClose(listRef, () => (isOpen.value = false), {
 function closeUnlessInsideList(e: Event) {
   if (isOpen.value && !listRef.value?.contains(e.target as Node)) isOpen.value = false
 }
-useEventListener(window, 'scroll', closeUnlessInsideList, { capture: true, passive: true })
-useEventListener(window, 'resize', closeUnlessInsideList)
+useEventListener(hostWindow, 'scroll', closeUnlessInsideList, { capture: true, passive: true })
+useEventListener(hostWindow, 'resize', closeUnlessInsideList)
 
 const GAP = 2
 const MARGIN = 8

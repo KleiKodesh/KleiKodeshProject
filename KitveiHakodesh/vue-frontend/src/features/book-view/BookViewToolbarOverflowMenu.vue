@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useEventListener, useResizeObserver } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 /**
  * The toolbar buttons a too-narrow pane could not show, as a labelled flyout off the
@@ -124,7 +127,7 @@ function place() {
 // A resize can hand back the room the toolbar was missing, at which point the parent hides
 // the "more" button and closes this panel - but until it does, the panel must stay placed
 // against wherever its anchor moved to.
-useEventListener(window, 'resize', () => props.open && place())
+useEventListener(hostWindow, 'resize', () => props.open && place())
 
 // The panel's row count is not fixed while it is open: a resize that takes more room away
 // collapses another control into it, making the sheet taller. Every such change needs the

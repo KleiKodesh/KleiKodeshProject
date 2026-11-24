@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref } from 'vue'
 import { useDraggable, useEventListener } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -16,6 +17,8 @@ import {
 import { READ_ALOUD_RATE_MIN, READ_ALOUD_RATE_MAX, READ_ALOUD_RATE_STEP, type BookViewReadAloud } from './useBookViewReadAloud'
 import BookViewReadAloudVoicePicker from './BookViewReadAloudVoicePicker.vue'
 import BookViewReadAloudSkipDropdown from './BookViewReadAloudSkipDropdown.vue'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 /**
  * The read-aloud controls: a small horizontal bar floating over the text, at its top left
@@ -70,8 +73,8 @@ function onSpaceUp(e: KeyboardEvent) {
   e.preventDefault()
   e.stopPropagation()
 }
-useEventListener(window, 'keydown', onSpaceDown, { capture: true })
-useEventListener(window, 'keyup', onSpaceUp, { capture: true })
+useEventListener(hostWindow, 'keydown', onSpaceDown, { capture: true })
+useEventListener(hostWindow, 'keyup', onSpaceUp, { capture: true })
 
 const rateLabel = computed(() => `${r.rate.value.toFixed(1)}×`)
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, inject, ref, watch, nextTick, useId } from 'vue'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -50,6 +51,8 @@ import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { LinesTable } from './lines/linesTable'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -246,7 +249,7 @@ const toolbarEl = ref<HTMLElement | null>(null)
 // moving window edge reads as the toolbar lagging and wobbling behind the drag.
 const isWindowResizing = ref(false)
 const endWindowResize = useDebounceFn(() => { isWindowResizing.value = false }, 150)
-useEventListener(window, 'resize', () => {
+useEventListener(hostWindow, 'resize', () => {
   isWindowResizing.value = true
   void endWindowResize()
 })

@@ -1,3 +1,4 @@
+using KitveiHakodeshLib.Bridge;
 using Dark.Net;
 using KitveiHakodesh.Core.Settings;
 using Microsoft.Web.WebView2.Core;
@@ -30,6 +31,9 @@ namespace KitveiHakodeshLib
 
         /// <summary>Set by the host: the control the window's page fills.</summary>
         public Control ContentHost { get; set; }
+
+        /// <summary>Set by the host: runs just before the page closes the window itself.</summary>
+        public Action ClosingByPage { get; set; }
     }
 
     public partial class AppViewer
@@ -60,7 +64,7 @@ namespace KitveiHakodeshLib
             {
                 e.Handled = true;
                 if (_webSites.IsWebsiteAddress(e.Uri))
-                    _bridge?.PushEvent(new { @event = "siteOpenInNewTab", url = e.Uri });
+                    _bridge?.PushEvent(new { @event = "siteOpenInNewTab", url = e.Uri, frame = e.OriginalSourceFrameInfo?.Name ?? "" });
                 else if (Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri external) &&
                          (external.Scheme == Uri.UriSchemeHttp || external.Scheme == Uri.UriSchemeHttps))
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = external.AbsoluteUri, UseShellExecute = true });
@@ -97,6 +101,7 @@ namespace KitveiHakodeshLib
                 // An extra app window of this page: the host makes the window (with its strip).
                 Control contentHost = null;
                 bool isAppWindow = false;
+                Action closingByPage = null;
                 if (name.StartsWith(AppWindowPrefix, StringComparison.Ordinal) && AppWindowRequested != null)
                 {
                     var request = new AppWindowRequestedEventArgs(name.Substring(AppWindowPrefix.Length));
@@ -106,6 +111,7 @@ namespace KitveiHakodeshLib
                         form = request.Window;
                         contentHost = request.ContentHost;
                         isAppWindow = true;
+                        closingByPage = request.ClosingByPage;
                         form.StartPosition = FormStartPosition.Manual;
                         if (pageKeepsBounds && x != -1) form.ClientSize = new Size(width, height);
                         else form.Size = FindForm()?.Size ?? form.Size;
@@ -143,9 +149,14 @@ namespace KitveiHakodeshLib
                 else form.Show();
 
                 await popupView.EnsureCoreWebView2Async(_webView.CoreWebView2.Environment);
+                if (isAppWindow) ConfigureAppWindowView(popupView.CoreWebView2, form);
                 popupView.CoreWebView2.DocumentTitleChanged += (s, _) =>
                     form.Text = popupView.CoreWebView2.DocumentTitle;
-                popupView.CoreWebView2.WindowCloseRequested += (s, _) => form.Close();
+                popupView.CoreWebView2.WindowCloseRequested += (s, _) =>
+                {
+                    closingByPage?.Invoke();
+                    form.Close();
+                };
                 popupView.CoreWebView2.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 form.FormClosing += (s, _) =>
                 {
@@ -180,6 +191,26 @@ namespace KitveiHakodeshLib
             {
                 deferral.Complete();
             }
+        }
+
+        /// <summary>
+        /// An extra app window's view gets what the main view has for the frames inside it:
+        /// the app's own folder, files opened in tabs, the Torah websites (frame headers,
+        /// navigation, activity), the frame scripts, and no browser context menu.
+        /// </summary>
+        private void ConfigureAppWindowView(CoreWebView2 core, Form window)
+        {
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.SetVirtualHostNameToFolderMapping("kitveihakodesh-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+            MapKiwixIfInstalled(core);
+            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
+            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(SiteFrameActivityScript);
+            KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.Attach(core, AppDir);
+            core.FrameCreated += OnAppChildFrameCreated;
+            // New-window links inside a site there: a tab, or the system browser (as in the main view).
+            core.NewWindowRequested += OnNewWindowRequested;
+            _localFile?.AddCore(core);
+            window.FormClosed += (s, e) => _localFile?.RemoveCore(core);
         }
 
         // The page names a widget's window "widget-<id>" (WidgetWindow.vue) and a commentary

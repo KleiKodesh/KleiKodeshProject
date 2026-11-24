@@ -204,6 +204,10 @@ namespace KitveiHakodeshLib
         public void MoveTabToAppWindow(string tabId, string windowKey, int position)
             => _bridge?.PushEvent(new { @event = "moveTabToAppWindow", tabId, windowKey, position });
 
+        /// <summary>The reader closed a window this page draws: the page closes its tabs, then the window.</summary>
+        public void CloseAppWindow(string windowKey)
+            => _bridge?.PushEvent(new { @event = "closeAppWindow", windowKey });
+
         /// <summary>Opens another window of this page, with a new tab in it.</summary>
         public void OpenNewAppWindow()
             => _bridge?.PushEvent(new { @event = "openNewAppWindow" });

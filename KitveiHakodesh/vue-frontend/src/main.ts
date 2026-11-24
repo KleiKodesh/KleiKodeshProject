@@ -21,7 +21,7 @@ import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
 import { installBrowserPersistenceFlush, installHostPersistenceFlush } from './webview-host/persistenceFlush'
 import { whenStartupContentDrawn } from './webview-host/serviceIdle'
-import { installTabMoveHost, markLocalFileRestoreReady, unpackArrivingTab } from './webview-host/tabMove'
+import { installTabMoveHost, markLocalFileRestoreReady } from './webview-host/tabMove'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -49,9 +49,6 @@ useSettingsStore().init()
 useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
-
-// A window opened for a tab torn off another window starts with that tab (tabMove.ts).
-if (hasHostBridge) unpackArrivingTab()
 
 // Mirror the tab store to the native chrome tab strip (no-op in dev / VSTO).
 initTabMirror()

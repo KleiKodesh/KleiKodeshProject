@@ -48,49 +48,6 @@ namespace KitveiHakodeshDesktopApp
             return newTabId != null;
         }
 
-        /// <summary>
-        /// Opens a tab of <paramref name="source"/> in a new window at <paramref name="bounds"/>
-        /// and returns that window. It shows at once, with the tab's picture until its page
-        /// has drawn the tab (packed meanwhile). Should the tab never arrive, the window closes
-        /// again and the tab stays where it was.
-        /// </summary>
-        internal static MainForm TearOffTab(MainForm source, string tabId, Rectangle bounds, string title)
-        {
-            source.TabsMirror.HoldDepartingTab(tabId);
-            source.TabsMirror.Resync();
-            // The picture first: packing does not change what the page shows, but the capture
-            // must be of the tab as the reader sees it now.
-            Task<System.Drawing.Image> picture = source.Viewer.CapturePagePictureAsync();
-            Task<string> packed = source.Viewer.PackTabAsync(tabId);
-            MainForm window = OpenNewWindow(source, null, bounds, packed, picture);
-
-            // Until the page is up, the strip shows the tab that is coming.
-            FluentTab label = window.AddTab(title ?? "");
-            label.Tag = null;
-            window.TabsMirror.HoldArrivingLabel(label);
-
-            _ = FinishTearOffAsync(source, tabId, window, label);
-            return window;
-        }
-
-        private static async Task<MainForm> FinishTearOffAsync(MainForm source, string tabId, MainForm window, FluentTab label)
-        {
-            string newTabId = null;
-            try { newTabId = await window.ArrivingTab; } catch (Exception) { }
-
-            if (!window.IsDisposed) window.TabsMirror.SettleArrivingLabel(label, newTabId);
-            FinishSourceSide(source, tabId, moved: newTabId != null, sourceKeepsNoTab: false);
-            if (newTabId != null) return window;
-
-            // Nothing arrived: the new window is empty and goes, the tab stays where it was.
-            if (!window.IsDisposed)
-            {
-                WindowsEmptiedByMove.Add(window);
-                window.Close();
-            }
-            return null;
-        }
-
         // The tab is in the target now (or the move failed): the source closes its copy, or
         // its whole window when that was its only tab; a failed move gives the label back.
         private static void FinishSourceSide(MainForm source, string tabId, bool moved, bool sourceKeepsNoTab)
@@ -117,31 +74,19 @@ namespace KitveiHakodeshDesktopApp
     /// Debug builds only: drives the same move code the strip's drag events call, from a
     /// forwarded launch argument, so a move can be tested without a real mouse drag.
     ///   --debug-tab-move=&lt;sourceWindow&gt;|&lt;tabId&gt;|&lt;targetWindow&gt;|&lt;position&gt;
-    ///   --debug-tab-tearoff=&lt;sourceWindow&gt;|&lt;tabId&gt;
     /// A window id "-" is the first window (""). No strip label travels (that part is the drag's).
     /// </summary>
     internal static class DebugTabMoves
     {
         internal static bool TryRun(string request)
         {
-            const string move = "--debug-tab-move=", tearOff = "--debug-tab-tearoff=";
+            const string move = "--debug-tab-move=";
             if (request.StartsWith(move, StringComparison.Ordinal))
             {
                 string[] parts = request.Substring(move.Length).Split('|');
                 MainForm source = Program.FindWindowForDebug(parts[0]), target = Program.FindWindowForDebug(parts.Length > 2 ? parts[2] : null);
                 if (source != null && target != null && parts.Length > 3)
                     _ = Program.MoveTabToWindowAsync(source, parts[1], target, int.Parse(parts[3], System.Globalization.CultureInfo.InvariantCulture), null);
-                return true;
-            }
-            if (request.StartsWith(tearOff, StringComparison.Ordinal))
-            {
-                string[] parts = request.Substring(tearOff.Length).Split('|');
-                MainForm source = Program.FindWindowForDebug(parts[0]);
-                if (source != null && parts.Length > 1)
-                {
-                    var at = new Rectangle(source.Left + 60, source.Top + 60, source.Width, source.Height);
-                    Program.TearOffTab(source, parts[1], at, source.TabsMirror.TitleOf(parts[1]));
-                }
                 return true;
             }
             return false;

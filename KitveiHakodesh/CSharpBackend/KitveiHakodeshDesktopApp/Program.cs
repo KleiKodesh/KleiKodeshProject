@@ -197,6 +197,7 @@ namespace KitveiHakodeshDesktopApp
                 var window = new PageWindowForm(form, e.WindowKey);
                 e.Window = window;
                 e.ContentHost = window.Content;
+                e.ClosingByPage = () => window.ClosingByPage = true;
                 AddPageWindow(form, window);
             };
             form.TabDragOutside += (s, e) => OnTabDragOutside(form, e);
@@ -220,9 +221,7 @@ namespace KitveiHakodeshDesktopApp
             return id;
         }
 
-        private static MainForm OpenNewWindow(MainForm openedFrom, string initialRequest = null,
-            System.Drawing.Rectangle? placeAt = null, System.Threading.Tasks.Task<string> movedTab = null,
-            System.Threading.Tasks.Task<System.Drawing.Image> movedTabPicture = null)
+        private static MainForm OpenNewWindow(MainForm openedFrom, string initialRequest = null)
         {
             var used = new System.Collections.Generic.HashSet<string>();
             foreach (MainForm open in OpenWindows) used.Add(open.WindowId);
@@ -232,11 +231,6 @@ namespace KitveiHakodeshDesktopApp
 
             MainForm form = CreateWindow(id, initialRequest);
             form.OpenedFrom = openedFrom;
-            form.PlaceAt = placeAt;
-            // Before Show: the viewer reads it just before it loads the page.
-            if (movedTab != null) form.ArrivingTab = form.Viewer.StartWithMovedTab(movedTab);
-            // The window shows the dragged tab's picture until its own page has drawn it.
-            if (movedTabPicture != null) form.Viewer.ShowMovedTabPictureUntilDrawn(movedTabPicture);
             form.Show();
             form.Activate();
             SetForegroundWindow(form.Handle);
@@ -296,6 +290,12 @@ namespace KitveiHakodeshDesktopApp
 
         private static void OnWindowClosed(MainForm form)
         {
+            // The windows its page drew go with it; their tabs stay saved for the next start.
+            foreach (PageWindowForm drawn in PageWindows.FindAll(w => w.PageOwner == form))
+            {
+                drawn.ClosingByPage = true;
+                drawn.Close();
+            }
             OpenWindows.Remove(form);
             ForgetSideBySide(form);
             ClosingWindows.Remove(form);

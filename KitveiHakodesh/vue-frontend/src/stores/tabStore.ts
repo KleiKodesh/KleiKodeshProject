@@ -247,8 +247,6 @@ const TRANSIENT_FIELDS = [
   'localFileLoadingType',
   'localFileDownloadProgress',
   'pdfInitialOutlineTarget',
-  // Extra windows are not restored yet: their tabs come back in the main window.
-  'windowKey',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
@@ -262,6 +260,7 @@ const TRANSIENT_FIELDS = [
  */
 const WATCHED_FIELDS = [
   'id',
+  'windowKey',
   'title',
   'route',
   'localFileName',
@@ -291,6 +290,8 @@ function withoutTransientFields(tab: Tab): Tab {
 interface PersistedTabList {
   tabs: Omit<Tab, 'localFileVirtualUrl'>[]
   activeTabId: string
+  /** Each extra window's active tab, by window key (the main window's is activeTabId). */
+  activeByWindow?: Record<string, string>
   nextId: number
   /**
    * Tab-id → access stamp, most-recently-active = highest. Optional: a list saved
@@ -415,14 +416,15 @@ export const useTabStore = defineStore('tabs', () => {
     return key
   }
 
-  /** The reader closed this window: its tabs close with it. */
+  /**
+   * The reader closed this window: its tabs close with it, and the window goes with its last
+   * tab (leaveWindowIfEmpty). A tab with unsaved work asks first and keeps the window open.
+   */
   function closeWindow(windowKey: string) {
     if (windowKey === '' || !(windowKey in activeByWindow.value)) return
-    for (const tab of tabsIn(windowKey)) closeTab(tab.id)
-    const next = { ...activeByWindow.value }
-    delete next[windowKey]
-    activeByWindow.value = next
-    if (focusedWindow.value === windowKey) focusedWindow.value = ''
+    const closing = tabsIn(windowKey)
+    if (guardPdfClose(closing, () => closeWindow(windowKey))) return
+    for (const tab of closing) closeTab(tab.id)
   }
 
   // Access order (MRU) — see the mruTabs section below. Declared up here
@@ -477,9 +479,27 @@ export const useTabStore = defineStore('tabs', () => {
       })
       // Normally the saved active tab; only when it was dropped above (or was already
       // missing from the list) does the survivor take over.
-      activeTabId.value = tabs.value.some((t) => t.id === saved.activeTabId)
-        ? saved.activeTabId
-        : tabs.value[0]!.id
+      // Extra windows come back with their tabs (each tab names its window); a host without
+      // a tab strip shows one window only.
+      if (!hasNativeChromeTabs) for (const tab of tabs.value) delete tab.windowKey
+      const windows: Record<string, string> = { '': '' }
+      for (const tab of tabs.value) {
+        const key = tab.windowKey ?? ''
+        if (!windows[key]) windows[key] = saved.activeByWindow?.[key] ?? tab.id
+        windowCounter = Math.max(windowCounter, Number(key) || 0)
+      }
+      if (!windows['']) {
+        // Every saved tab was in an extra window: the main window still needs one.
+        const home: Tab = { id: String(saved.nextId + 1), title: t('stores.tabTitle.home'), route: '/' }
+        saved.nextId++
+        tabs.value.unshift(home)
+        windows[''] = home.id
+      }
+      activeByWindow.value = windows
+      const mainTabs = tabs.value.filter((t) => !t.windowKey)
+      if (mainTabs.some((t) => t.id === saved.activeTabId)) windows[''] = saved.activeTabId
+      focusedWindow.value = ''
+      activeTabId.value = windows['']!
       nextId = saved.nextId
       if (saved.accessOrder) {
         // Drop stamps for tabs that no longer exist (singletons were stripped on
@@ -561,9 +581,10 @@ export const useTabStore = defineStore('tabs', () => {
         if (import.meta.env.DEV) assertWatched(t)
         return t
       }),
-      activeTabId: persistable.some((t) => t.id === activeTabId.value)
-        ? activeTabId.value
-        : (persistable[0]?.id ?? activeTabId.value),
+      activeTabId: persistable.some((t) => t.id === activeIdIn(''))
+        ? activeIdIn('')
+        : (persistable.find((t) => !t.windowKey)?.id ?? activeIdIn('')),
+      activeByWindow: Object.fromEntries(extraWindowKeys.value.map((k) => [k, activeIdIn(k)])),
       nextId,
       // Only for tabs actually being saved — a stamp for a stripped singleton would
       // be dead weight that init() discards anyway.
@@ -871,7 +892,7 @@ export const useTabStore = defineStore('tabs', () => {
   // the whole recents list.
   let pendingTabsWorkspaceId = ''
   const tabsWrite = useCoalescedWrite(() => persistTabs(pendingTabsWorkspaceId))
-  watch([_persistedSnapshot, activeTabId, accessOrder], () => {
+  watch([_persistedSnapshot, activeByWindow, accessOrder], () => {
     const wsId = useWorkspaceStore().storageId
     // A write still pending for the previous workspace goes out as-is first.
     if (pendingTabsWorkspaceId !== wsId) tabsWrite.flush()
@@ -1302,7 +1323,7 @@ export const useTabStore = defineStore('tabs', () => {
       }
     }
     // A moved tab arrives on its own, never as part of a pair (and drops the old model's `pane`).
-    const { pane: _oldPane, ...moved } = withoutTransientFields(entry) as Tab & { pane?: unknown }
+    const { pane: _oldPane, windowKey: _theirWindow, ...moved } = withoutTransientFields(entry) as Tab & { pane?: unknown }
     const tab: Tab = { ...moved, id: String(++nextId) }
     seedState(tab.id)
     const visible = tabs.value

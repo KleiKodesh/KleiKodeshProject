@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
@@ -7,6 +8,8 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { APP_NAV_UPDATE_KEY, useAppNavUpdateItem } from './appNavUpdateItem'
 import { useI18n } from 'vue-i18n'
+// The window this is drawn in (an extra app window draws its own, hostWindow.ts).
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -139,7 +142,7 @@ function place() {
 // A resize can hand back the room the rail was missing, at which point the parent unmounts
 // the "more" button and closes this panel - but until it does, the panel must stay placed
 // against wherever its anchor moved to.
-useEventListener(window, 'resize', () => props.open && place())
+useEventListener(hostWindow, 'resize', () => props.open && place())
 
 // The row count changes with the window height while the panel is open - a shrink feeds it
 // more rows - so a re-place on the keys is a re-place on the panel's own height.

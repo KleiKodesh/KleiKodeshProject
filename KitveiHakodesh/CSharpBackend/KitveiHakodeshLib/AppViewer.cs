@@ -851,7 +851,6 @@ namespace KitveiHakodeshLib
             AttachSiteFrameNavigation();
 
             await InjectStartupOpenEventsAsync();
-            await InjectArrivingTabAsync();
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;

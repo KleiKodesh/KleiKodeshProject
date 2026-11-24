@@ -2,6 +2,8 @@
 /** The inside of an extra app window: the app shell for that window's tabs. */
 import { useEventListener } from '@vueuse/core'
 import AppShell from '@/layout/AppShell.vue'
+import SiteFrameLayer from '@/features/websites/SiteFrameLayer.vue'
+import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useTabStore } from '@/stores/tabStore'
 
@@ -15,6 +17,9 @@ useEventListener(useHostWindow(), 'focus', () => tabStore.focusWindow(props.wind
 <template>
   <div class="app-window-shell">
     <AppShell />
+    <!-- This window's website frames (after the shell: their CSS anchors come first) and right-click menu. -->
+    <SiteFrameLayer />
+    <GlobalContextMenu />
   </div>
 </template>
 
