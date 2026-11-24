@@ -9,6 +9,8 @@
     { "id": "hameshiv", "name": "המשיב", "url": "https://hameshiv.com/", "domains": ["hameshiv.com"], "icon": "https://hameshiv.com/static/favicon-48.png" },
     { "id": "responsa", "name": "פרויקט השו\"ת", "nameEn": "Bar-Ilan Responsa Project", "url": "https://www.responsa.co.il/", "domains": ["responsa.co.il"], "icon": "https://www.responsa.co.il/NetisUtils/images/HomePage/logo.gif" },
     { "id": "hebrewbooks", "name": "היברו-בוקס", "nameEn": "HebrewBooks", "url": "https://hebrewbooks.org/", "domains": ["hebrewbooks.org"] },
+    { "id": "hebrewbooks-beta", "name": "היברו-בוקס בטא", "nameEn": "HebrewBooks Beta", "url": "https://beta.hebrewbooks.org/", "domains": ["beta.hebrewbooks.org"] },
+    { "id": "itimlabina", "name": "עיתים לבינה", "nameEn": "Itim Labina", "url": "https://itimlabina.co.il/", "domains": ["itimlabina.co.il"] },
     { "id": "wikisource", "name": "ויקיטקסט", "nameEn": "Hebrew Wikisource", "url": "https://he.wikisource.org/", "domains": ["he.wikisource.org"] },
     { "id": "dicta", "name": "הספרייה של דיקטה", "nameEn": "Dicta Library", "url": "https://library.dicta.org.il/", "domains": ["library.dicta.org.il"], "icon": "https://library.dicta.org.il/favicon.png" },
     { "id": "shitufta", "name": "שיתופתא", "url": "https://shitufta.org.il/", "domains": ["shitufta.org.il"], "icon": "https://shitufta.org.il/logo.svg" },
