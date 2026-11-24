@@ -14,6 +14,8 @@ namespace OfficePaneChrome
 
         /// <summary>Hide the side pane (ChromeMinimize).</summary>
         public const char HidePane = '';
+        /// <summary>Dock the side pane to the left / right edge (DockLeft / DockRight).</summary>
+        public const char DockLeft = '', DockRight = '';
 
         public static readonly string IconFont = new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" }
             .FirstOrDefault(n => { using (var f = new Font(n, 10)) return f.Name == n; }) ?? "Segoe UI Symbol";

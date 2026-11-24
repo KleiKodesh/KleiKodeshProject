@@ -59,10 +59,10 @@ namespace OfficePaneChrome
             int Px(int v) => (int)Math.Round(v * scale);
 
             ChromeToolTip tip = null;
-            var menu = new ContextMenuStrip
+            var menu = new ToolStripDropDown   // not ContextMenuStrip: its menu layout forces an 8 px check-mark margin, so rows could not reach the edges
             {
                 RightToLeft = RightToLeft.No,                  // the window stays put; content is drawn RTL by the renderer
-                ShowImageMargin = false, ShowCheckMargin = false, Renderer = new Renderer(c), BackColor = c.Back,
+                Renderer = new Renderer(c), BackColor = c.Back,
                 DropShadowEnabled = true, Padding = new Padding(1), Font = RowFont,
             };
             if (!string.IsNullOrEmpty(header))
@@ -105,10 +105,11 @@ namespace OfficePaneChrome
                     ? TextRenderer.MeasureText(i.Text ?? "", HeaderFont).Width + 2 * Px(HeaderInsetDip)
                     : TextRenderer.MeasureText(i.Text ?? "", RowFont).Width + Px(TextStartDip) + Px(TextEndDip));
             int width = Math.Max(content, anchor.Width - menu.Padding.Horizontal - 2);
-            int height = menu.Padding.Vertical + 2;
+            // The 1px padding is where the border is drawn: rows fill everything inside it, edge to edge.
+            int height = menu.Padding.Vertical;
             foreach (ToolStripItem i in menu.Items) { i.Width = width; height += i.Height; }
             menu.AutoSize = false;
-            menu.Size = new Size(width + menu.Padding.Horizontal + 2, height);
+            menu.Size = new Size(width + menu.Padding.Horizontal, height);
             if (menu.IsHandleCreated) Native.SetWindowLongPtr(menu.Handle, Native.GWLP_HWNDPARENT, owner);
 
             var work = Screen.FromRectangle(anchor).WorkingArea;

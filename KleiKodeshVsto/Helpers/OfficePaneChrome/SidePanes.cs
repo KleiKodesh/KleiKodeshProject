@@ -40,6 +40,9 @@ namespace OfficePaneChrome
         public static Func<bool, string> MenuTitle = rtl => rtl ? "חלוניות" : "Panes";
         /// <summary>Description shown under "open new side pane" in its tooltip (e.g. the ribbon button's supertip).</summary>
         public static Func<bool, string> NewPaneSuperTip = _ => null;
+        /// <summary>The menu's dock rows (RTL = Hebrew by default).</summary>
+        public static Func<bool, string> DockRightText = rtl => rtl ? "הצמד לימין" : "Dock right";
+        public static Func<bool, string> DockLeftText = rtl => rtl ? "הצמד לשמאל" : "Dock left";
         public static Func<bool, string> NewPaneText = rtl => rtl ? "פתח חלונית צד חדשה" : "Open new side pane";
 
         /// <summary>Tooltips of the title strip's parts, by reading direction (RTL = Hebrew by default).</summary>
@@ -337,7 +340,30 @@ namespace OfficePaneChrome
             }
             rows.Add(PaneMenu.Row.Separator);
             rows.Add(new PaneMenu.Row { Text = NewPaneText(rtl), Glyph = Fluent.NewPane, SuperTip = NewPaneSuperTip(rtl), Click = () => { if (!side.Closing) OpenNewPane(side); } });
+            var dock = DockOf(side);
+            rows.Add(new PaneMenu.Row { Text = DockRightText(rtl), Glyph = Fluent.DockRight, Current = !side.IsPoppedOut && dock == Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight,
+                Click = () => Dock(side, Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight) });
+            rows.Add(new PaneMenu.Row { Text = DockLeftText(rtl), Glyph = Fluent.DockLeft, Current = !side.IsPoppedOut && dock == Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionLeft,
+                Click = () => Dock(side, Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionLeft) });
             PaneMenu.Show(MenuTitle(rtl), rows, anchor, owner, titleBack, rtl, scale, closed);
+        }
+
+        static Microsoft.Office.Core.MsoCTPDockPosition? DockOf(SidePane side)
+        {
+            try { return side.Pane.DockPosition; } catch { return null; }
+        }
+
+        /// <summary>Docks the side pane to a Word edge; popped out, it comes back in docked there.</summary>
+        static void Dock(SidePane side, Microsoft.Office.Core.MsoCTPDockPosition where)
+        {
+            if (side.Closing) return;
+            try
+            {
+                if (side.IsPoppedOut) PopIn(side);
+                if (side.Pane.DockPosition != where) side.Pane.DockPosition = where;   // Office rebuilds the frame; the strip re-hooks
+                Reveal(side);
+            }
+            catch (Exception ex) { Log("dock: " + ex.Message); }
         }
 
         // ================= pop-out =================
