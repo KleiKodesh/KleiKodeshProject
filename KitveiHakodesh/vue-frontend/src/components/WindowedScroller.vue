@@ -366,7 +366,9 @@ function onViewportScroll() {
   rememberAnchor()
   bar.syncFromViewport()
   fill()
-  if (!isOwnHold) emit('move', currentMoveSource())
+  if (isOwnHold) return
+  hasMovedSinceMoveEnd = true
+  emit('move', currentMoveSource())
 }
 
 // ── Move end ─────────────────────────────────────────────────────────────────────
@@ -377,6 +379,14 @@ function onViewportScroll() {
 let landingsInFlight = 0
 let isBarPressed = false
 let landingScrollEndOwed: WindowedScrollerMoveSource | null = null
+/**
+ * A scroll that was not our own hold happened since the last moveend. A layout change after a
+ * landing (rows mounting above, a picture arriving) is held by moving scrollTop; the browser then
+ * sends a scrollend for that hold alone - it is the scroller keeping the view still, not the
+ * reader moving, so it must not be reported as moveend('reader') (that re-armed the search's
+ * first step and made the next Enter land on the same match again).
+ */
+let hasMovedSinceMoveEnd = false
 /** The source of the landing in flight (the latest, when several overlap). */
 let landingSource: WindowedScrollerMoveSource = 'landing'
 /** Who is moving the view right now - see the `move` event. */
@@ -387,9 +397,10 @@ function currentMoveSource(): WindowedScrollerMoveSource {
 }
 function onViewportScrollEnd() {
   if (landingsInFlight > 0 || isBarPressed) return
-  const source = landingScrollEndOwed ?? 'reader'
+  const source = landingScrollEndOwed ?? (hasMovedSinceMoveEnd ? 'reader' : null)
   landingScrollEndOwed = null
-  emit('moveend', source)
+  hasMovedSinceMoveEnd = false
+  if (source) emit('moveend', source)
 }
 
 const hostWindow = useHostWindow()
@@ -405,6 +416,7 @@ function onBarPointerUp() {
   if (!isBarPressed) return
   isBarPressed = false
   landingScrollEndOwed = null
+  hasMovedSinceMoveEnd = false
   if (landingsInFlight === 0) emit('moveend', 'reader')
 }
 onBeforeUnmount(onBarPointerUp)
@@ -424,7 +436,7 @@ async function runLanding<T>(land: () => Promise<T>, byReader = false): Promise<
   }
   if (landingsInFlight > 0 || isBarPressed) return result
   if (viewport && viewport.scrollTop !== before) landingScrollEndOwed = source
-  else emit('moveend', source)
+  else { hasMovedSinceMoveEnd = false; emit('moveend', source) }
   return result
 }
 
