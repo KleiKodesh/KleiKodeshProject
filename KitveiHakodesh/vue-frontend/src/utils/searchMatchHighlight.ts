@@ -87,10 +87,18 @@ export function highlightSearchMatches(
 }
 
 /**
+ * A match's later part where it had to be split (the FastDocView page's phonetic guides, read guide first but drawn base
+ * first): not counted as a match; it shares its first mark's `data-search-part` and is current with it.
+ */
+export const SEARCH_MATCH_CONTINUED_CLASS = 'search-match-continued'
+
+/**
  * Move the `.current` class to the nth `<mark class="search-match">` inside
  * the rendered line at `lineIndex` within `container`. Scopes the query to
  * the scroller's row element with `data-index` so `occurrence` is per-line,
- * matching `occurrenceInLine` from the search scan.
+ * matching `occurrenceInLine` from the search scan. Where the row's first marks carry `data-search-part` (numbered in
+ * reading order, which may differ from the page order), the nth is the one numbered n, and its continuations become
+ * current too.
  *
  * Pass `lineIndex = -1` to clear all `.current` marks across the container.
  *
@@ -100,7 +108,7 @@ export function highlightSearchMatches(
  */
 export function setCurrentMark(container: HTMLElement, lineIndex: number, occurrence: number): void {
   // Clear any existing .current marks across the whole scroller first.
-  container.querySelectorAll<HTMLElement>('mark.search-match.current').forEach((mark) => {
+  container.querySelectorAll<HTMLElement>(`mark.search-match.current, mark.${SEARCH_MATCH_CONTINUED_CLASS}.current`).forEach((mark) => {
     mark.classList.remove('current')
   })
   if (lineIndex === -1) return
@@ -108,6 +116,11 @@ export function setCurrentMark(container: HTMLElement, lineIndex: number, occurr
   const row = container.querySelector<HTMLElement>(`[data-index="${lineIndex}"]`)
   if (!row) return
 
-  const marks = row.querySelectorAll<HTMLElement>('mark.search-match')
-  marks[occurrence]?.classList.add('current')
+  const numbered = row.querySelector<HTMLElement>(`mark.search-match[data-search-part="${occurrence}"]`)
+  const mark = numbered ?? row.querySelectorAll<HTMLElement>('mark.search-match')[occurrence]
+  if (!mark) return
+  mark.classList.add('current')
+  if (numbered) {
+    row.querySelectorAll<HTMLElement>(`mark.${SEARCH_MATCH_CONTINUED_CLASS}[data-search-part="${occurrence}"]`).forEach((part) => part.classList.add('current'))
+  }
 }
