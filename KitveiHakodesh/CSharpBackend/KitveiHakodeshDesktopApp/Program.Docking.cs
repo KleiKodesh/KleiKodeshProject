@@ -20,7 +20,7 @@ namespace KitveiHakodeshDesktopApp
         private static readonly List<PageWindowForm> PageWindows = new List<PageWindowForm>();
 
         // The window a page opens next for a dropped tab is placed by this, once shown.
-        private static Action<FluentChromeTabsForm> _pendingPlacement;
+        private static Action<Form> _pendingPlacement;
 
         /// <summary>A main window takes part in tab drags and screen docking.</summary>
         private static void AttachDocking(MainForm window)
@@ -35,10 +35,21 @@ namespace KitveiHakodeshDesktopApp
             ScreenDocking.Attach(window, Docking);
             window.Activated += (s, e) => { lock (EarlyRequestsLock) _activeWindow = owner; };
             window.FormClosed += (s, e) => PageWindows.Remove(window);
-            Action<FluentChromeTabsForm> place = _pendingPlacement;
+            Action<Form> place = _pendingPlacement;
             _pendingPlacement = null;
             if (place != null) window.Shown += (s, e) => place(window);
         }
+
+        /// <summary>A tool window (widget, commentary pop-out) of a page: it docks and tiles like the others.</summary>
+        private static void AttachToolWindow(MainForm owner, Form window)
+        {
+            ToolWindowPages[window] = owner;
+            window.FormClosed += (s, e) => ToolWindowPages.Remove(window);
+            ScreenDocking.AttachWindow(window, Docking);
+        }
+
+        // The main window whose page draws each open tool window.
+        private static readonly Dictionary<Form, MainForm> ToolWindowPages = new Dictionary<Form, MainForm>();
 
         // The main window whose page shows this window's tabs.
         private static MainForm PageOf(FluentChromeTabsForm window)
@@ -67,7 +78,7 @@ namespace KitveiHakodeshDesktopApp
             }
 
             // A new window of the source's page for the tab, placed once it shows (AddPageWindow).
-            public void OpenWindowForTab(FluentChromeTabsForm source, FluentTab tab, Action<FluentChromeTabsForm> place)
+            public void OpenWindowForTab(FluentChromeTabsForm source, FluentTab tab, Action<Form> place)
             {
                 MainForm page = PageOf(source);
                 if (!(tab?.Tag is string tabId) || page == null || page.IsDisposed) return;
@@ -75,11 +86,22 @@ namespace KitveiHakodeshDesktopApp
                 page.Viewer.MoveTabToAppWindow(tabId, null, -1);
             }
 
-            public bool AcceptsDrops(FluentChromeTabsForm window)
+            public bool AcceptsDrops(Form window)
             {
+                if (ToolWindowPages.TryGetValue(window, out MainForm toolOwner)) return !window.IsDisposed && AcceptsDrops(toolOwner);
                 if (window is PageWindowForm page) return PageWindows.Contains(page) && AcceptsDrops(page.PageOwner);
                 var main = window as MainForm;
                 return main != null && main.Visible && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
+            }
+
+            // A tool window let go on a strip: a widget becomes a tab there (any of our windows),
+            // a commentary pop-out goes back into its book (its own window only).
+            public void MergeIntoTabs(Form window, FluentChromeTabsForm target)
+            {
+                if (!ToolWindowPages.TryGetValue(window, out MainForm owner) || owner.IsDisposed) return;
+                MainForm into = PageOf(target);
+                if (into == null || into.IsDisposed) return;
+                if (owner.Viewer.MergeToolWindowIntoTabs(window, into.Viewer)) target.Activate();
             }
 
             public int TabCount(FluentChromeTabsForm window)

@@ -29,7 +29,7 @@ namespace KitveiHakodeshDesktopApp
             var log = new StringBuilder("> " + string.Join(" ", p) + Environment.NewLine);
             try
             {
-                FluentChromeTabsForm w = p.Length > 1 ? SnapDebugWindow(p[1]) : null;
+                Form w = p.Length > 1 ? SnapDebugWindow(p[1]) : null;
                 switch (p[0])
                 {
                     case "screen":
@@ -61,6 +61,7 @@ namespace KitveiHakodeshDesktopApp
                     case "min": w.WindowState = FormWindowState.Minimized; break;
                     case "tabs": log.Append(SnapDebugTabs()); break;
                     case "front": w.Activate(); break;
+                    case "merge": Docking.MergeIntoTabs(w, (FluentChromeTabsForm)SnapDebugWindow(p[2])); break;
                     case "restore": w.WindowState = FormWindowState.Normal; break;
                 }
             }
@@ -80,9 +81,10 @@ namespace KitveiHakodeshDesktopApp
             return true;
         }
 
-        private static FluentChromeTabsForm SnapDebugWindow(string id)
+        private static Form SnapDebugWindow(string id)
         {
             if (id == "m") return OpenWindows.Count > 0 ? OpenWindows[0] : null;
+            if (id.StartsWith("t")) return new System.Collections.Generic.List<Form>(ToolWindowPages.Keys)[int.Parse(id.Substring(1)) - 1];
             int n = int.Parse(id);
             if (!SnapDebugNames.ContainsKey(n))
             {
@@ -95,9 +97,11 @@ namespace KitveiHakodeshDesktopApp
 
         private static readonly System.Collections.Generic.Dictionary<int, PageWindowForm> SnapDebugNames = new System.Collections.Generic.Dictionary<int, PageWindowForm>();
 
-        private static string SnapDebugName(FluentChromeTabsForm w)
+        private static string SnapDebugName(Form w)
         {
             if (w is MainForm) return "m";
+            int t = new System.Collections.Generic.List<Form>(ToolWindowPages.Keys).IndexOf(w);
+            if (t >= 0) return "t" + (t + 1);
             foreach (PageWindowForm open in PageWindows)
                 if (!open.IsDisposed && !SnapDebugNames.ContainsValue(open)) SnapDebugNames[SnapDebugNames.Count + 1] = open;
             foreach (var kv in SnapDebugNames) if (kv.Value == w) return kv.Key.ToString();
@@ -128,7 +132,9 @@ namespace KitveiHakodeshDesktopApp
         private static string SnapDebugDump()
         {
             var sb = new StringBuilder();
-            foreach (FluentChromeTabsForm w in AllAppWindows())
+            var all = new System.Collections.Generic.List<Form>(AllAppWindows());
+            all.AddRange(ToolWindowPages.Keys);
+            foreach (Form w in all)
             {
                 if (w.IsDisposed) continue;
                 string name = SnapDebugName(w);

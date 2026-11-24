@@ -207,6 +207,7 @@ namespace KitveiHakodeshDesktopApp
             // Tabs drag between windows and dock on the screen (FluentChromeTabs.ScreenDocking);
             // the pages move them (Program.Docking, Program.TabMoves).
             AttachDocking(form);
+            form.Viewer.ToolWindowOpened += (s, e) => AttachToolWindow(form, e.Window);
             // The page opens extra windows of itself (VS Code model): full app windows with their own strip.
             form.Viewer.AppWindowRequested += (s, e) =>
             {
