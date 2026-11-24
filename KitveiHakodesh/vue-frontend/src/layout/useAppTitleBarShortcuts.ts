@@ -283,8 +283,8 @@ export function useAppTitleBarShortcuts(options: {
 
   /** Returns true when the event was consumed. */
   function handleAppWide(e: KeyboardEvent): boolean {
-    // Ctrl+Shift+1..6 — the widgets & tools (dictionary, calendar, halachic units, world
-    // clock, zmanim, daily learning). App-wide: focus may sit inside a widget, outside the page.
+    // Ctrl+Shift+1..7 — the widgets & tools (dictionary, calendar, halachic units, world
+    // clock, zmanim, daily learning, keep screen on). App-wide: focus may sit inside a widget, outside the page.
     if (e.ctrlKey && e.shiftKey && !e.altKey && e.code.startsWith('Digit')) {
       const widget = WIDGET_ITEMS[Number(e.code.slice(5)) - 1]
       if (!widget) return false

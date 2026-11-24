@@ -1,5 +1,5 @@
 import { defineAsyncComponent, type Component } from 'vue'
-import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled } from '@iconify-prerendered/vue-fluent'
+import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled, IconLightbulb24Filled } from '@iconify-prerendered/vue-fluent'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
 import type { TabRoute } from '@/stores/tabStore'
@@ -47,7 +47,7 @@ function barWidget(id: 'worldClock' | 'zmanim' | 'learning', icon: Component, co
   }
 }
 
-/** The widgets & tools menu, in order. Ctrl+Shift+1..6 toggle them. */
+/** The widgets & tools menu, in order. Ctrl+Shift+1..7 toggle them. */
 export const WIDGET_ITEMS: WidgetItem[] = [
   pageWidget('dict', 'Ctrl+Shift+1', defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue'))),
   pageWidget('calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue')),
@@ -58,6 +58,12 @@ export const WIDGET_ITEMS: WidgetItem[] = [
   barWidget('worldClock', IconClock24Filled, '#2b88d8', 'Ctrl+Shift+4', defineAsyncComponent(() => import('./WorldClockWidget.vue'))),
   barWidget('zmanim', IconWeatherSunnyLow24Filled, '#e3a21a', 'Ctrl+Shift+5', defineAsyncComponent(() => import('./ZmanimWidget.vue'))),
   barWidget('learning', IconBookClock24Filled, '#c1440e', 'Ctrl+Shift+6', defineAsyncComponent(() => import('./DailyLearningWidget.vue'))),
+  {
+    id: 'keepScreenOn', route: '/', shortcut: 'Ctrl+Shift+7', icon: IconLightbulb24Filled, color: '#f2c811',
+    text: t('settings.keepScreenOn.label'),
+    description: t('settings.keepScreenOn.hint'),
+    page: defineAsyncComponent(() => import('./KeepScreenOnWidget.vue')),
+  },
 ]
 
 const CustomHtmlWidget = defineAsyncComponent(() => import('./CustomHtmlWidget.vue'))

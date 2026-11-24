@@ -48,6 +48,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>4</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.worldClockWidget') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>5</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.zmanimWidget') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>6</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.learningWidget') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">{{ $t('settings.keepScreenOn.label') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F1</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.settings') }}</span></div>
     <!-- Book view -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.bookView') }}</div>
