@@ -1032,6 +1032,8 @@ export interface MirroredTab {
 
 /** Full snapshot of the Vue tab store for the native chrome tab strip. */
 export interface TabsSnapshot {
+  /** The app window these tabs belong to ('' = main, else an extra window this page draws). */
+  windowKey?: string
   tabs: MirroredTab[]
   activeTabId: string
 }

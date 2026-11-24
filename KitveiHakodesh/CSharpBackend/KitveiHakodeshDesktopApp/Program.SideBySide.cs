@@ -44,18 +44,17 @@ namespace KitveiHakodeshDesktopApp
         // The tab drag in progress (one at a time: there is one mouse).
         private static TabDragGhost _ghost;
         private static DropKind _dropKind;
-        private static MainForm _dropWindow;       // Strip: that window's strip; BesideWindow: that window
+        private static FluentChromeTabsForm _dropWindow;       // Strip: that window's strip; BesideWindow: that window
         private static DropSide _dropSide;
         private static Rectangle _dropArea;        // ScreenHalf: the half
         private static DropZonePreview _dropPreview;
         // A window started (off screen) when the tab left the strip, so a drop that opens a
         // window shows one whose page is already up; closed unused when the drop goes elsewhere.
-        private static MainForm _prewarmed;
 
         // A window whose tab strip a window being MOVED (title bar) is over: on release the
         // moved window's tabs go in there.
-        private static MainForm _stripTarget;
-        private static MainForm _mergingWindow;
+        private static FluentChromeTabsForm _stripTarget;
+        private static FluentChromeTabsForm _mergingWindow;
 
         // Windows placed side by side here: [left, right] and the gap between their window
         // rectangles when placed (negative: their invisible borders overlap).
@@ -66,32 +65,31 @@ namespace KitveiHakodeshDesktopApp
         // borders overlap).
         private sealed class SideBySidePair
         {
-            public MainForm First, Second;
+            public FluentChromeTabsForm First, Second;
             public bool Stacked;
             public int Gap;
         }
         private static readonly List<SideBySidePair> SideBySidePairs = new List<SideBySidePair>();
 
         // Ends any pair the window is in.
-        private static void UnpairWindow(MainForm window)
+        private static void UnpairWindow(FluentChromeTabsForm window)
         {
             SideBySidePairs.RemoveAll(p => p.First == window || p.Second == window);
         }
 
         // ── A tab dragged out of a strip (FluentChromeTabsForm.TabDragOutside) ──────────
 
-        private static void OnTabDragOutside(MainForm source, FluentTabDragOutsideEventArgs e)
+        private static void OnTabDragOutside(FluentChromeTabsForm source, FluentTabDragOutsideEventArgs e)
         {
             switch (e.Phase)
             {
                 case FluentTabDragPhase.Started:
                     EndTabDragVisuals();
                     // A window's only tab moves its own window: nothing to start.
-                    if (source.TabsMirror.PageTabCount > 1) StartPrewarmedWindow(source);
                     _ghost = new TabDragGhost(e.Tab.Title, e.Tab.Icon, source.DeviceDpi);
                     _ghost.MoveTo(e.ScreenPoint);
                     _ghost.Show();
-                    ShowPicture(_ghost, source.Viewer.CapturePagePictureAsync());
+                    ShowPicture(_ghost, CapturePicture(source));
                     UpdateTabDropTarget(source, e.ScreenPoint);
                     break;
                 case FluentTabDragPhase.Moved:
@@ -101,17 +99,14 @@ namespace KitveiHakodeshDesktopApp
                 case FluentTabDragPhase.Returned:
                 case FluentTabDragPhase.Cancelled:
                     EndTabDragVisuals();
-                    DiscardPrewarmedWindow();
                     break;
                 case FluentTabDragPhase.Dropped:
                     DropKind kind = _dropKind;
-                    MainForm target = _dropWindow;
+                    FluentChromeTabsForm target = _dropWindow;
                     DropSide side = _dropSide;
                     Rectangle area = _dropArea;
                     EndTabDragVisuals();
                     if (e.Tab.Tag is string tabId) DropTab(source, tabId, e.Tab.Title, e.ScreenPoint, kind, target, side, area);
-                    // Whatever the drop did not use goes.
-                    DiscardPrewarmedWindow();
                     break;
             }
         }
@@ -123,12 +118,12 @@ namespace KitveiHakodeshDesktopApp
             if (image != null && !ghost.IsDisposed) ghost.SetPicture(image);
         }
 
-        private static void UpdateTabDropTarget(MainForm source, Point cursor)
+        private static void UpdateTabDropTarget(FluentChromeTabsForm source, Point cursor)
         {
             IntPtr ghost = _ghost != null && _ghost.IsHandleCreated ? _ghost.Handle : IntPtr.Zero;
 
             // Over a strip: the tab goes in there. Its own strip is where the drag came from.
-            MainForm strip = FluentChromeTabsForm.FormWithStripAt(cursor, ghost) as MainForm;
+            FluentChromeTabsForm strip = FluentChromeTabsForm.FormWithStripAt(cursor, ghost);
             if (strip != null && strip != source && IsDropTarget(strip))
             {
                 SetDropTarget(DropKind.Strip, strip, DropSide.Left, Rectangle.Empty);
@@ -142,13 +137,13 @@ namespace KitveiHakodeshDesktopApp
 
             // Over one of our windows: the zone at its nearest edge places the tab beside it
             // (or above or below it); the middle of another window takes the tab in, like its strip.
-            MainForm under = OurWindowAt(cursor, ghost);
+            FluentChromeTabsForm under = OurWindowAt(cursor, ghost);
             if (under != null)
             {
                 Rectangle visible = VisibleBounds(under);
                 DropSide? side = EdgeZone(visible, cursor);
                 // A window's only tab dropped on its own window has nothing to be beside.
-                bool alone = under == source && source.TabsMirror.PageTabCount <= 1;
+                bool alone = under == source && TabCountOf(source) <= 1;
                 // Only where two windows fit (SplitArea): otherwise the middle's rule applies.
                 if (side.HasValue && !alone && SplitArea(under, side.Value).HasValue)
                     SetDropTarget(DropKind.BesideWindow, under, side.Value, Rectangle.Empty);
@@ -186,7 +181,7 @@ namespace KitveiHakodeshDesktopApp
             return nearest == toTop ? DropSide.Top : DropSide.Bottom;
         }
 
-        private static void SetDropTarget(DropKind kind, MainForm window, DropSide side, Rectangle area)
+        private static void SetDropTarget(DropKind kind, FluentChromeTabsForm window, DropSide side, Rectangle area)
         {
             _dropKind = kind;
             _dropWindow = window;
@@ -211,11 +206,11 @@ namespace KitveiHakodeshDesktopApp
             HideDropPreview();
         }
 
-        private static void DropTab(MainForm source, string tabId, string title, Point cursor,
-            DropKind kind, MainForm target, DropSide side, Rectangle area)
+        private static void DropTab(FluentChromeTabsForm source, string tabId, string title, Point cursor,
+            DropKind kind, FluentChromeTabsForm target, DropSide side, Rectangle area)
         {
             if (source.IsDisposed) return;
-            bool onlyTab = source.TabsMirror.PageTabCount <= 1;
+            bool onlyTab = TabCountOf(source) <= 1;
 
             switch (kind)
             {
@@ -223,24 +218,25 @@ namespace KitveiHakodeshDesktopApp
                 case DropKind.IntoWindow:
                     if (target == null || target.IsDisposed) return;
                     int position = kind == DropKind.Strip ? target.DropIndexAtScreenPoint(cursor) : -1;
-                    _ = MoveTabToWindowAsync(source, tabId, target, position, null);
+                    MoveTab(source, tabId, target, position);
                     target.Activate();
                     return;
 
                 case DropKind.BesideWindow:
-                    if (target == null || target.IsDisposed) return;
-                    Rectangle? split = SplitArea(target, side);
-                    if (!split.HasValue) return;
-                    MainForm beside = onlyTab ? source : OpenWindowForTab(source, tabId, HalfOf(split.Value, side), title);
-                    if (beside != null) PlaceSideBySide(beside, target, side);
+                    if (target == null || target.IsDisposed || !SplitArea(target, side).HasValue) return;
+                    if (onlyTab) PlaceSideBySide(source, target, side);
+                    else OpenWindowForTab(source, tabId, window => PlaceSideBySide(window, target, side));
                     return;
 
                 case DropKind.ScreenHalf:
-                    MainForm half = onlyTab ? source : OpenWindowForTab(source, tabId, area, title);
-                    if (half == null) return;
-                    if (half.WindowState != FormWindowState.Normal) half.WindowState = FormWindowState.Normal;
-                    SetVisibleBounds(half, area);
-                    half.Activate();
+                    Action<FluentChromeTabsForm> toHalf = window =>
+                    {
+                        if (window.WindowState != FormWindowState.Normal) window.WindowState = FormWindowState.Normal;
+                        SetVisibleBounds(window, area);
+                        window.Activate();
+                    };
+                    if (onlyTab) toHalf(source);
+                    else OpenWindowForTab(source, tabId, toHalf);
                     return;
 
                 default:
@@ -251,15 +247,87 @@ namespace KitveiHakodeshDesktopApp
                     var bounds = KeepOnScreen(
                         new Rectangle(cursor.X - size.Width + inset, cursor.Y - (int)(16 * source.DeviceDpi / 96f), size.Width, size.Height),
                         cursor);
-                    if (onlyTab)
+                    Action<FluentChromeTabsForm> place = window =>
                     {
-                        if (source.WindowState != FormWindowState.Normal) source.WindowState = FormWindowState.Normal;
-                        source.Bounds = bounds;
-                        source.Activate();
-                    }
-                    else OpenWindowForTab(source, tabId, bounds, title);
+                        if (window.WindowState != FormWindowState.Normal) window.WindowState = FormWindowState.Normal;
+                        window.Bounds = bounds;
+                        window.Activate();
+                    };
+                    if (onlyTab) place(source);
+                    else OpenWindowForTab(source, tabId, place);
                     return;
             }
+        }
+
+        // ── Our windows: the main ones and the windows their pages draw ─────────────
+        //
+        // A main window (FluentChromeTabsForm) has a page of its own; a page window (PageWindowForm) is
+        // drawn by its owner's page (the VS Code model). A tab moving between windows of one
+        // page moves live; between two pages it is packed and unpacked (Program.TabMoves).
+
+        private static readonly List<PageWindowForm> PageWindows = new List<PageWindowForm>();
+
+        // The window a page opens next for a dropped tab is placed by this, once shown.
+        private static Action<FluentChromeTabsForm> _pendingPlacement;
+
+        /// <summary>A page window was made for <paramref name="owner"/>'s page: it joins the drag and drop.</summary>
+        private static void AddPageWindow(MainForm owner, PageWindowForm window)
+        {
+            PageWindows.Add(window);
+            window.TabsMirror.EnableTabMovesBetweenWindows();
+            window.TabDragOutside += (s, e) => OnTabDragOutside(window, e);
+            window.Activated += (s, e) =>
+            {
+                lock (EarlyRequestsLock) _activeWindow = owner;
+                OnWindowActivated(window);
+            };
+            window.FormClosed += (s, e) =>
+            {
+                PageWindows.Remove(window);
+                ForgetSideBySide(window);
+            };
+            Action<FluentChromeTabsForm> place = _pendingPlacement;
+            _pendingPlacement = null;
+            if (place != null) window.Shown += (s, e) => place(window);
+        }
+
+        // The main window whose page shows this window's tabs.
+        private static MainForm PageOf(FluentChromeTabsForm window)
+            => window as MainForm ?? (window as PageWindowForm)?.PageOwner;
+
+        // The page's key for the window: "" for a main window.
+        private static string WindowKeyOf(FluentChromeTabsForm window)
+            => (window as PageWindowForm)?.WindowKey ?? "";
+
+        private static int TabCountOf(FluentChromeTabsForm window)
+            => (window as MainForm)?.TabsMirror.PageTabCount ?? (window as PageWindowForm)?.TabsMirror.PageTabCount ?? 0;
+
+        private static IEnumerable<FluentChromeTabsForm> AllAppWindows()
+        {
+            foreach (MainForm open in OpenWindows) yield return open;
+            foreach (PageWindowForm open in PageWindows) yield return open;
+        }
+
+        // The drag picture of a window's page (a page window draws in its owner's renderer: none yet).
+        private static Task<Image> CapturePicture(FluentChromeTabsForm window)
+            => window is MainForm main ? main.Viewer.CapturePagePictureAsync() : Task.FromResult<Image>(null);
+
+        // A tab into another window: live within one page, packed and unpacked between two.
+        private static void MoveTab(FluentChromeTabsForm source, string tabId, FluentChromeTabsForm target, int position)
+        {
+            MainForm from = PageOf(source), to = PageOf(target);
+            if (from == null || to == null || from.IsDisposed || to.IsDisposed) return;
+            if (from == to) from.Viewer.MoveTabToAppWindow(tabId, WindowKeyOf(target), position);
+            else _ = MoveTabToWindowAsync(from, tabId, to, position, null);
+        }
+
+        // A new window of the source's page for the tab, placed by `place` once it shows.
+        private static void OpenWindowForTab(FluentChromeTabsForm source, string tabId, Action<FluentChromeTabsForm> place)
+        {
+            MainForm page = PageOf(source);
+            if (page == null || page.IsDisposed) return;
+            _pendingPlacement = place;
+            page.Viewer.MoveTabToAppWindow(tabId, null, -1);
         }
 
         // A dropped window lands whole on the screen it was dropped on: no larger than its
@@ -273,72 +341,12 @@ namespace KitveiHakodeshDesktopApp
             return new Rectangle(left, top, width, height);
         }
 
-        private static bool IsDropTarget(MainForm window)
+        private static bool IsDropTarget(FluentChromeTabsForm window)
         {
-            return !window.IsDisposed && !window.Prewarmed && OpenWindows.Contains(window) && !ClosingWindows.Contains(window);
-        }
-
-        // ── The window started ahead of the drop ──────────────────────────────────
-
-        private static void StartPrewarmedWindow(MainForm source)
-        {
-            DiscardPrewarmedWindow();
-            MainForm window = CreateWindow(NextWindowId(), null);
-            window.MarkPrewarmed();
-            Size size = source.WindowState == FormWindowState.Normal ? source.Size : source.RestoreBounds.Size;
-            // Off every screen until it is used; its page starts meanwhile.
-            window.PlaceAt = new Rectangle(-32000, -32000, size.Width, size.Height);
-            window.Show();
-            _prewarmed = window;
-        }
-
-        private static void DiscardPrewarmedWindow()
-        {
-            MainForm window = _prewarmed;
-            _prewarmed = null;
-            // Closed unused: it is never saved as open, and its starter tab goes with it.
-            if (window != null && !window.IsDisposed && window.Prewarmed)
-            {
-                WindowsEmptiedByMove.Add(window);
-                window.Close();
-            }
-        }
-
-        /// <summary>
-        /// A window for a tab dropped outside any strip, at <paramref name="bounds"/>: the
-        /// prewarmed one when there is one (its page is already up), else a new one.
-        /// </summary>
-        private static MainForm OpenWindowForTab(MainForm source, string tabId, Rectangle bounds, string title)
-        {
-            MainForm window = _prewarmed;
-            _prewarmed = null;
-            if (window == null || window.IsDisposed || !window.Prewarmed) return TearOffTab(source, tabId, bounds, title);
-
-            window.EndPrewarm();
-            window.Bounds = bounds;
-            window.Activate();
-            SaveOpenWindowIds();
-            _ = MoveIntoPrewarmedAsync(source, tabId, window);
-            return window;
-        }
-
-        private static async Task MoveIntoPrewarmedAsync(MainForm source, string tabId, MainForm window)
-        {
-            // Normally long done: the page started when the tab left the strip.
-            await Task.WhenAny(window.Viewer.PageReady, Task.Delay(20000));
-            bool moved = window.Viewer.PageReady.IsCompleted && !window.IsDisposed
-                && await MoveTabToWindowAsync(source, tabId, window, -1, null);
-            if (moved)
-            {
-                window.Viewer.KeepOnlyActiveTab();
-                return;
-            }
-            // The tab did not arrive: it stays where it was, and the window goes.
-            if (!window.IsDisposed)
-            {
-                WindowsEmptiedByMove.Add(window);
-                window.Close();
-            }
+            if (window == null || window.IsDisposed) return false;
+            if (window is PageWindowForm page) return PageWindows.Contains(page) && IsDropTarget(page.PageOwner);
+            var main = window as MainForm;
+            return main != null && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
         }
 
         private static Rectangle HalfOf(Rectangle area, DropSide side)
@@ -365,13 +373,13 @@ namespace KitveiHakodeshDesktopApp
 
         // ── A whole window moved by its title bar (MainForm.WndProc) ───────────────────
 
-        internal static void OnWindowMoving(MainForm window)
+        internal static void OnWindowMoving(FluentChromeTabsForm window)
         {
             // Any move of a window that was placed side by side takes it out of its pair.
             UnpairWindow(window);
 
             // Over another window's tab strip: this window's tabs go in there on release.
-            MainForm strip = FluentChromeTabsForm.FormWithStripAt(Cursor.Position, window.Handle) as MainForm;
+            FluentChromeTabsForm strip = FluentChromeTabsForm.FormWithStripAt(Cursor.Position, window.Handle);
             if (strip != null && strip != window && IsDropTarget(strip))
             {
                 _mergingWindow = window;
@@ -385,10 +393,10 @@ namespace KitveiHakodeshDesktopApp
             }
         }
 
-        internal static void OnWindowMoveEnded(MainForm window)
+        internal static void OnWindowMoveEnded(FluentChromeTabsForm window)
         {
             if (_mergingWindow != window) return;
-            MainForm strip = _stripTarget;
+            FluentChromeTabsForm strip = _stripTarget;
             _mergingWindow = null;
             SetStripTarget(null);
             if (strip == null || strip.IsDisposed || window.IsDisposed) return;
@@ -402,17 +410,19 @@ namespace KitveiHakodeshDesktopApp
             window.BeginInvoke(new Action(() => { _ = MergeWindowIntoAsync(window, tabIds, strip, position); }));
         }
 
-        private static async Task MergeWindowIntoAsync(MainForm source, List<string> tabIds, MainForm target, int position)
+        private static async Task MergeWindowIntoAsync(FluentChromeTabsForm source, List<string> tabIds, FluentChromeTabsForm target, int position)
         {
+            MainForm from = PageOf(source), to = PageOf(target);
             for (int i = 0; i < tabIds.Count; i++)
             {
-                if (source.IsDisposed || target.IsDisposed) return;
+                if (source.IsDisposed || target.IsDisposed || from == null || to == null) return;
+                if (from == to) { MoveTab(source, tabIds[i], target, position + i); continue; }
                 // A failed move leaves that tab (and the rest) where they were.
-                if (!await MoveTabToWindowAsync(source, tabIds[i], target, position + i, null)) return;
+                if (!await MoveTabToWindowAsync(from, tabIds[i], to, position + i, null)) return;
             }
         }
 
-        private static void SetStripTarget(MainForm strip)
+        private static void SetStripTarget(FluentChromeTabsForm strip)
         {
             if (_stripTarget == strip) return;
             if (_stripTarget != null && !_stripTarget.IsDisposed) _stripTarget.DropHintVisible = false;
@@ -421,13 +431,13 @@ namespace KitveiHakodeshDesktopApp
         }
 
         /// <summary>A window is being resized by an edge: its partner follows the shared edge.</summary>
-        internal static void OnWindowSizing(MainForm window, int edge, ref RECT proposed)
+        internal static void OnWindowSizing(FluentChromeTabsForm window, int edge, ref RECT proposed)
         {
             foreach (SideBySidePair pair in SideBySidePairs)
             {
                 bool isFirst = pair.First == window, isSecond = pair.Second == window;
                 if (!isFirst && !isSecond) continue;
-                MainForm other = isFirst ? pair.Second : pair.First;
+                FluentChromeTabsForm other = isFirst ? pair.Second : pair.First;
                 if (other.IsDisposed || other.WindowState != FormWindowState.Normal) return;
                 Rectangle o = other.Bounds;
 
@@ -475,7 +485,7 @@ namespace KitveiHakodeshDesktopApp
         }
 
         /// <summary>A window was activated: the upper window of a stacked pair goes back beneath the lower one.</summary>
-        internal static void OnWindowActivated(MainForm window)
+        internal static void OnWindowActivated(FluentChromeTabsForm window)
         {
             KeepUpperBelowLower(window);
         }
@@ -494,7 +504,7 @@ namespace KitveiHakodeshDesktopApp
         /// above the lower one: it lands directly beneath it, and when it is coming to the front
         /// the lower window comes too (without the focus), so the pair stays in front together.
         /// </summary>
-        internal static void OnWindowPosChanging(MainForm window, ref WINDOWPOS pos)
+        internal static void OnWindowPosChanging(FluentChromeTabsForm window, ref WINDOWPOS pos)
         {
             const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
             if ((pos.flags & SWP_NOZORDER) != 0) return;
@@ -514,7 +524,7 @@ namespace KitveiHakodeshDesktopApp
         // stacked pair casts its strongest shadow downward, onto the lower one; kept directly
         // beneath the lower window, that shadow falls under it and is not seen. It stays the
         // active window - only its place in the window order changes.
-        private static void KeepUpperBelowLower(MainForm window)
+        private static void KeepUpperBelowLower(FluentChromeTabsForm window)
         {
             SideBySidePair pair = SideBySidePairs.Find(p => p.Stacked && p.First == window);
             if (pair == null || pair.Second.IsDisposed || !pair.Second.IsHandleCreated || !window.IsHandleCreated) return;
@@ -522,7 +532,7 @@ namespace KitveiHakodeshDesktopApp
             SetWindowPos(window.Handle, pair.Second.Handle, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
         }
 
-        internal static void ForgetSideBySide(MainForm window)
+        internal static void ForgetSideBySide(FluentChromeTabsForm window)
         {
             UnpairWindow(window);
             if (_dropWindow == window) EndTabDragVisuals();
@@ -532,7 +542,7 @@ namespace KitveiHakodeshDesktopApp
 
         // The topmost of our windows at the point, looking past `ignore` (the drag ghost);
         // null when another program's window covers the point.
-        private static MainForm OurWindowAt(Point cursor, IntPtr ignore)
+        private static FluentChromeTabsForm OurWindowAt(Point cursor, IntPtr ignore)
         {
             IntPtr preview = _dropPreview != null && _dropPreview.IsHandleCreated ? _dropPreview.Handle : IntPtr.Zero;
             for (IntPtr h = GetTopWindow(IntPtr.Zero); h != IntPtr.Zero; h = GetWindow(h, GW_HWNDNEXT))
@@ -541,9 +551,9 @@ namespace KitveiHakodeshDesktopApp
                 RECT r;
                 if (!GetWindowRect(h, out r)) continue;
                 if (cursor.X < r.Left || cursor.X >= r.Right || cursor.Y < r.Top || cursor.Y >= r.Bottom) continue;
-                foreach (MainForm open in OpenWindows)
+                foreach (FluentChromeTabsForm open in AllAppWindows())
                     if (!open.IsDisposed && open.IsHandleCreated && open.Handle == h
-                        && open.WindowState != FormWindowState.Minimized && !ClosingWindows.Contains(open))
+                        && open.WindowState != FormWindowState.Minimized && IsDropTarget(open))
                         return open;
                 return null;
             }
@@ -702,7 +712,7 @@ namespace KitveiHakodeshDesktopApp
         // The area the two windows share: the target's place, or the whole working area of its
         // screen when it was maximized (the same two halves Snap would give) or when its place
         // is too small to halve. Null when not even the screen fits two of them that way.
-        private static Rectangle? SplitArea(MainForm target, DropSide side)
+        private static Rectangle? SplitArea(FluentChromeTabsForm target, DropSide side)
         {
             Rectangle screen = Screen.FromHandle(target.Handle).WorkingArea;
             Rectangle area = target.WindowState == FormWindowState.Maximized ? screen : VisibleBounds(target);
@@ -711,7 +721,7 @@ namespace KitveiHakodeshDesktopApp
         }
 
         // Both halves at least as large as a window can be made (the strip sets the width).
-        private static bool HalvesFit(MainForm window, Rectangle area, DropSide side)
+        private static bool HalvesFit(FluentChromeTabsForm window, Rectangle area, DropSide side)
         {
             bool stacked = side == DropSide.Top || side == DropSide.Bottom;
             return stacked
@@ -720,7 +730,7 @@ namespace KitveiHakodeshDesktopApp
         }
 
         // `dropped` takes the `side` half of the target's place; the target takes the other half.
-        private static void PlaceSideBySide(MainForm dropped, MainForm target, DropSide side)
+        private static void PlaceSideBySide(FluentChromeTabsForm dropped, FluentChromeTabsForm target, DropSide side)
         {
             if (dropped.IsDisposed || target.IsDisposed) return;
             Rectangle? split = SplitArea(target, side);
@@ -731,7 +741,7 @@ namespace KitveiHakodeshDesktopApp
 
             bool droppedFirst = side == DropSide.Left || side == DropSide.Top;
             bool stacked = side == DropSide.Top || side == DropSide.Bottom;
-            MainForm first = droppedFirst ? dropped : target, second = droppedFirst ? target : dropped;
+            FluentChromeTabsForm first = droppedFirst ? dropped : target, second = droppedFirst ? target : dropped;
 
             UnpairWindow(first);
             UnpairWindow(second);

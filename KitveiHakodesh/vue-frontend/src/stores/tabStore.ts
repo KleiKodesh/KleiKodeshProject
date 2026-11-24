@@ -156,6 +156,11 @@ export interface Tab {
   webUrl?: string
   /** Persisted — the widget a /widget tab shows (a widget window dragged onto the tab strip). */
   widgetId?: string
+  /**
+   * The app window that shows this tab: absent for the main window, else the key of a
+   * window this page opened and draws itself (AppWindowLayer.vue - the VS Code model).
+   */
+  windowKey?: string
 }
 
 /**
@@ -242,6 +247,8 @@ const TRANSIENT_FIELDS = [
   'localFileLoadingType',
   'localFileDownloadProgress',
   'pdfInitialOutlineTarget',
+  // Extra windows are not restored yet: their tabs come back in the main window.
+  'windowKey',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
@@ -314,8 +321,109 @@ function assertWatched(saved: Tab): void {
 
 export const useTabStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([DEFAULT_TAB])
-  const activeTabId = ref('1')
   let nextId = 1
+
+  // ── Windows ───────────────────────────────────────────────────────────────
+  // The page can draw more than one app window (AppWindowLayer.vue): '' is the main
+  // window, any other key a window it opened. Each has its own active tab. `activeTabId`
+  // is the active tab of the window the reader is working in (`focusedWindow`); setting
+  // it activates that tab in its own window and makes that window the focused one.
+  const activeByWindow = ref<Record<string, string>>({ '': '1' })
+  const focusedWindow = ref('')
+  let windowCounter = 0
+
+  function windowOf(tabId: string): string {
+    return tabs.value.find((t) => t.id === tabId)?.windowKey ?? ''
+  }
+
+  function tabsIn(windowKey: string): Tab[] {
+    return tabs.value.filter((t) => (t.windowKey ?? '') === windowKey)
+  }
+
+  function activeIdIn(windowKey: string): string {
+    const id = activeByWindow.value[windowKey]
+    if (id && tabs.value.some((t) => t.id === id && (t.windowKey ?? '') === windowKey)) return id
+    return tabsIn(windowKey)[0]?.id ?? ''
+  }
+
+  const activeTabId = computed<string>({
+    get: () => activeIdIn(focusedWindow.value) || activeIdIn(''),
+    set: (id) => {
+      const windowKey = windowOf(id)
+      activeByWindow.value = { ...activeByWindow.value, [windowKey]: id }
+      focusedWindow.value = windowKey
+    },
+  })
+
+  /** The extra windows open now (not the main one). */
+  const extraWindowKeys = computed(() => Object.keys(activeByWindow.value).filter((k) => k !== ''))
+
+  /** The reader is working in this window now (its page got the focus). */
+  function focusWindow(windowKey: string) {
+    if (windowKey === '' || windowKey in activeByWindow.value) focusedWindow.value = windowKey
+  }
+
+  /**
+   * Moves a tab into another window of this page - live, nothing reloads. `toWindow`
+   * null opens a new window for it. Returns the window's key. The window the tab left
+   * closes when it was its last tab (the main window gets a home tab instead).
+   */
+  function moveTabToWindow(tabId: string, toWindow: string | null, position = -1): string {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (!tab) return ''
+    const from = tab.windowKey ?? ''
+    const to = toWindow ?? String(++windowCounter)
+    if (from === to) return to
+    tabs.value.splice(tabs.value.indexOf(tab), 1)
+    const moved: Tab = { ...tab }
+    if (to === '') delete moved.windowKey
+    else moved.windowKey = to
+    const inTarget = tabs.value.filter((t) => (t.windowKey ?? '') === to)
+    const before = position >= 0 && position < inTarget.length ? inTarget[position] : undefined
+    tabs.value.splice(before ? tabs.value.indexOf(before) : tabs.value.length, 0, moved)
+    activeByWindow.value = { ...activeByWindow.value, [to]: tabId }
+    focusedWindow.value = to
+    leaveWindowIfEmpty(from, tabId)
+    return to
+  }
+
+  // After `goneTabId` left `windowKey`: an emptied extra window closes; an emptied main
+  // window gets a home tab; otherwise a window whose active tab left picks its neighbour.
+  function leaveWindowIfEmpty(windowKey: string, goneTabId: string, neighbourIndex = -1) {
+    const left = tabsIn(windowKey)
+    const next = { ...activeByWindow.value }
+    if (left.length === 0) {
+      if (windowKey !== '') {
+        delete next[windowKey]
+        activeByWindow.value = next
+        if (focusedWindow.value === windowKey) focusedWindow.value = ''
+        return
+      }
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
+      tabs.value.push(home)
+      next[''] = home.id
+    } else if (next[windowKey] === goneTabId || !next[windowKey]) {
+      next[windowKey] = left[Math.min(Math.max(neighbourIndex, 0), left.length - 1)]!.id
+    }
+    activeByWindow.value = next
+  }
+
+  /** Opens another window of this page with a new home tab in it. Returns its key. */
+  function openNewWindow(): string {
+    const key = String(++windowCounter)
+    openTab({ title: t('stores.tabTitle.home'), route: '/', windowKey: key })
+    return key
+  }
+
+  /** The reader closed this window: its tabs close with it. */
+  function closeWindow(windowKey: string) {
+    if (windowKey === '' || !(windowKey in activeByWindow.value)) return
+    for (const tab of tabsIn(windowKey)) closeTab(tab.id)
+    const next = { ...activeByWindow.value }
+    delete next[windowKey]
+    activeByWindow.value = next
+    if (focusedWindow.value === windowKey) focusedWindow.value = ''
+  }
 
   // Access order (MRU) — see the mruTabs section below. Declared up here
   // because init() restores it alongside the tab list.
@@ -909,6 +1017,9 @@ export const useTabStore = defineStore('tabs', () => {
     }
 
     const tab: Tab = { id: String(++nextId), ...partial }
+    // A new tab opens in the window the reader is working in, unless the caller named one.
+    if (!('windowKey' in partial) && focusedWindow.value !== '') tab.windowKey = focusedWindow.value
+    if (tab.windowKey === '') delete tab.windowKey
     tabs.value.push(tab)
     activeTabId.value = tab.id
     if (TRACKABLE_ROUTES.has(tab.route)) {
@@ -974,7 +1085,9 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function closeAllTabs() {
-    const closing = [...tabs.value]
+    // The tabs of the window the reader is working in; other windows keep theirs.
+    const windowKey = focusedWindow.value
+    const closing = tabsIn(windowKey)
     if (guardPdfClose(closing, () => closeAllTabs())) return
     for (const tab of closing) {
       releasePdfCloseState(tab.id)
@@ -982,7 +1095,8 @@ export const useTabStore = defineStore('tabs', () => {
       disposeClosedTab(tab.id)
     }
     const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-    tabs.value = [home]
+    if (windowKey !== '') home.windowKey = windowKey
+    tabs.value = [...tabs.value.filter((t) => !closing.includes(t)), home]
     activeTabId.value = home.id
     // Deferred for the same reason as the drop in disposeClosedTab: the closing
     // views have not unmounted yet, and a final savePos() may still need to read
@@ -1048,23 +1162,11 @@ export const useTabStore = defineStore('tabs', () => {
     releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     disposeClosedTab(id)
-    // The next active tab is the closed tab's neighbor.
-    const visIdx = tabs.value.findIndex((t) => t.id === id)
+    // The next active tab is the closed tab's neighbour in its own window.
+    const windowKey = tab.windowKey ?? ''
+    const visIdx = tabsIn(windowKey).indexOf(tab)
     tabs.value.splice(idx, 1)
-    if (activeTabId.value === id) {
-      const visible = tabs.value
-      if (visible.length > 0) {
-        activeTabId.value = visible[Math.min(Math.max(visIdx, 0), visible.length - 1)]!.id
-      } else {
-        const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-        tabs.value.push(home)
-        activeTabId.value = home.id
-      }
-    } else if (tabs.value.length === 0) {
-      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-      tabs.value.push(home)
-      activeTabId.value = home.id
-    }
+    leaveWindowIfEmpty(windowKey, id, visIdx)
   }
 
   /**
@@ -1290,6 +1392,14 @@ export const useTabStore = defineStore('tabs', () => {
     tabs,
     activeTabId,
     activeTab,
+    focusedWindow,
+    extraWindowKeys,
+    tabsIn,
+    activeIdIn,
+    focusWindow,
+    moveTabToWindow,
+    openNewWindow,
+    closeWindow,
     mruTabs,
     init,
     nextNavNonce,

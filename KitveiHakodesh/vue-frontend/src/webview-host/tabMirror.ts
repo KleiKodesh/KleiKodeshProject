@@ -109,10 +109,13 @@ export function initTabMirror(): void {
     return key && siteIconKeys.value.has(key) ? key : undefined
   }
 
+  // One snapshot per app window ('' = main, else an extra window this page draws), each
+  // with its own tabs and active tab; the host routes it by windowKey to that window's strip.
   // Sorted by id so the strip keeps a stable visual order regardless of store order —
   // it only needs membership, titles and the active tab.
-  const snapshot = computed(() => ({
-    tabs: [...tabStore.tabs]
+  const snapshotOf = (windowKey: string) => ({
+    windowKey,
+    tabs: tabStore.tabsIn(windowKey)
       .sort((a, b) => Number(a.id) - Number(b.id))
       .map((t): MirroredTab => ({
         id: t.id,
@@ -124,18 +127,21 @@ export function initTabMirror(): void {
         // the in-page lists use, so the strip shows the identical glyph.
         iconKey: widgetIconKeyFor(t) ?? siteIconKeyFor(t) ?? iconKeyForEntry(t),
       })),
-    activeTabId: tabStore.activeTabId,
-  }))
+    activeTabId: tabStore.activeIdIn(windowKey),
+  })
+  const snapshots = computed(() => ['', ...tabStore.extraWindowKeys].map(snapshotOf))
 
-  let lastSent = ''
+  const lastSent = new Map<string, string>()
   watch(
-    snapshot,
-    (snap) => {
-      const json = JSON.stringify(snap)
-      if (json !== lastSent) {
-        lastSent = json
+    snapshots,
+    (snaps) => {
+      for (const snap of snaps) {
+        const json = JSON.stringify(snap)
+        if (json === lastSent.get(snap.windowKey)) continue
+        lastSent.set(snap.windowKey, json)
         notifyTabsChanged(snap)
       }
+      for (const key of [...lastSent.keys()]) if (!snaps.some((s) => s.windowKey === key)) lastSent.delete(key)
     },
     { immediate: true, flush: 'post' },
   )
@@ -149,7 +155,18 @@ export function initTabMirror(): void {
         closeStripTab(String(msg.tabId))
         break
       case 'chromeTabNewRequested':
-        openNewStripTab()
+        openNewStripTab(typeof msg.windowKey === 'string' ? msg.windowKey : '')
+        break
+      case 'moveTabToAppWindow':
+        // A tab dragged to another window of this page, or out to a new one (null) - live.
+        tabStore.moveTabToWindow(
+          String(msg.tabId),
+          typeof msg.windowKey === 'string' ? msg.windowKey : null,
+          typeof msg.position === 'number' ? msg.position : -1,
+        )
+        break
+      case 'openNewAppWindow':
+        tabStore.openNewWindow()
         break
       case 'openWidgetAsTab':
         // A widget window dropped on this window's tab strip (AppViewer.OpenWidgetAsTab).

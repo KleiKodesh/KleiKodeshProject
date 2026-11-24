@@ -191,6 +191,14 @@ namespace KitveiHakodeshDesktopApp
             form.FormClosed += (s, e) => OnWindowClosed(form);
             // Tabs drag between windows and off into new ones; the pages move them (TabMoves).
             form.TabsMirror.EnableTabMovesBetweenWindows();
+            // The page opens extra windows of itself (VS Code model): full app windows with their own strip.
+            form.Viewer.AppWindowRequested += (s, e) =>
+            {
+                var window = new PageWindowForm(form, e.WindowKey);
+                e.Window = window;
+                e.ContentHost = window.Content;
+                AddPageWindow(form, window);
+            };
             form.TabDragOutside += (s, e) => OnTabDragOutside(form, e);
             OpenWindows.Add(form);
             return form;
@@ -306,7 +314,7 @@ namespace KitveiHakodeshDesktopApp
         {
             var ids = new System.Collections.Generic.List<string>();
             foreach (MainForm open in OpenWindows)
-                if (!WindowsClosingForGood.Contains(open) && !open.Prewarmed) ids.Add(open.WindowId);
+                if (!WindowsClosingForGood.Contains(open)) ids.Add(open.WindowId);
             if (ids.Count == 0) return; // the last window keeps the list as it is
             try { AppSettingsRegistry.SetOpenWindowIds(ids); } catch { /* registry unwritable: next start opens one window */ }
         }
@@ -457,7 +465,8 @@ namespace KitveiHakodeshDesktopApp
             if (window == null || window.IsDisposed) return; // the app is shutting down
             if (request == NewWindowRequest)
             {
-                OpenNewWindow(window);
+                // Another window of the same page (the VS Code model), not another page.
+                window.Viewer.OpenNewAppWindow();
                 return;
             }
 #if DEBUG

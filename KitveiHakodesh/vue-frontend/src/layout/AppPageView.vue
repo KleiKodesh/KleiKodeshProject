@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
-import { useTabStore } from '@/stores/tabStore'
+import { useAppShellPane } from '@/composables/useAppShellPane'
 
-const tabStore = useTabStore()
-
-const activeTab = computed(() => tabStore.activeTab)
-const activeTabId = computed(() => tabStore.activeTabId)
+// This window's active tab (an extra app window shows its own, appWindow.ts).
+const pane = useAppShellPane()
+const activeTab = pane.activeTab
+const activeTabId = pane.activeTabId
 const route = computed(() => activeTab.value.route)
 
 // Remount key for pages that read their target once at setup (they don't watch

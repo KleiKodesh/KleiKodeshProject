@@ -5,6 +5,7 @@ import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
 import SiteFrameLayer from '@/features/websites/SiteFrameLayer.vue'
 import WidgetWindowLayer from '@/features/widgets/WidgetWindowLayer.vue'
+import AppWindowLayer from '@/layout/appWindows/AppWindowLayer.vue'
 import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
@@ -20,7 +21,7 @@ import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { useIndexBuildReasonLog } from '@/composables/useIndexBuildReasonLog'
 import { useKeepScreenOn } from '@/composables/useKeepScreenOn'
 import { activateStripTab } from '@/composables/stripTabActions'
-import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
+import { isVstoEnvironment as isVsto, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 import { detectAvailableFonts } from '@/webview-host/fontsApi'
 import { ownLibraryOffer } from '@/webview-host/ownLibraryOffer'
@@ -125,6 +126,8 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
 
     <!-- Widgets & tools: floating tool windows over the page. -->
     <WidgetWindowLayer />
+    <!-- The extra app windows this page draws (tabs dragged out of the strip). -->
+    <AppWindowLayer v-if="hasNativeChromeTabs" />
     <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone || !termsAccepted" />
     <GlobalContextMenu />

@@ -8,6 +8,7 @@ import {
 import { navigatesDestinationsInPlace } from '@/webview-host/bridge'
 import type { Tab, TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
+import { useAppWindowKey } from './appWindow'
 
 /**
  * The tab operations AppTitleBar, AppPageView and the pages inside the shell use, so they
@@ -16,18 +17,20 @@ import { t } from '@/i18n'
 export function useAppShellPane() {
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
+  // The app window this shell draws (appWindow.ts): its own tabs and active tab.
+  const windowKey = useAppWindowKey()
 
-  const tabs = computed<Tab[]>(() => tabStore.tabs)
+  const tabs = computed<Tab[]>(() => tabStore.tabsIn(windowKey))
 
-  const activeTabId = computed<string>(() => tabStore.activeTabId)
+  const activeTabId = computed<string>(() => tabStore.activeIdIn(windowKey))
 
   /**
    * The same tabs as `tabs`, ordered most-recently-active first. For list UIs
    * (the address-bar dropdown) — the real tab order is unchanged.
    */
-  const mruTabs = computed<Tab[]>(() => tabStore.mruTabs())
+  const mruTabs = computed<Tab[]>(() => tabStore.mruTabs().filter((t) => (t.windowKey ?? '') === windowKey))
 
-  const activeTab = computed<Tab>(() => tabStore.activeTab)
+  const activeTab = computed<Tab>(() => tabs.value.find((t) => t.id === activeTabId.value) ?? tabStore.activeTab)
 
   function switchTab(id: string) {
     tabStore.switchTab(id)
@@ -77,6 +80,7 @@ export function useAppShellPane() {
   }
 
   function closeAllTabs() {
+    tabStore.focusWindow(windowKey)
     tabStore.closeAllTabs()
   }
 
@@ -98,11 +102,11 @@ export function useAppShellPane() {
   }
 
   function openTab(partial: Omit<Tab, 'id'>) {
-    return tabStore.openTab(partial)
+    return tabStore.openTab(windowKey ? { ...partial, windowKey } : partial)
   }
 
   function updateActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
-    tabStore.updateActiveTab(patch)
+    tabStore.updateTab(activeTabId.value, patch)
   }
 
   /**
@@ -137,10 +141,12 @@ export function useAppShellPane() {
   // Each gesture opens its own home tab — see openNewHomeTab in tabStore
   // for why home is deliberately not unique.
   function openNewHomeTab() {
+    tabStore.focusWindow(windowKey)
     tabStore.openNewHomeTab()
   }
 
   function navigateToDestination(route: TabRoute, openInNewTab = false) {
+    tabStore.focusWindow(windowKey)
     tabStore.navigateToDestination(route, openInNewTab)
   }
 

@@ -26,9 +26,10 @@ const NEW_TAB_ROUTES: Record<string, { title: string; route: TabRoute }> = {
   search: { title: t('stores.tabTitle.search'), route: '/search' },
 }
 
-/** Open a new tab, honoring the user's configured new-tab page setting. */
-export function openNewStripTab() {
+/** Open a new tab, honoring the user's configured new-tab page setting, in the strip's window ('' = main). */
+export function openNewStripTab(windowKey = '') {
   const tabStore = useTabStore()
+  tabStore.focusWindow(windowKey)
   const target =
     NEW_TAB_ROUTES[useSettingsStore().newTabPage] ?? { title: t('stores.tabTitle.home'), route: '/' as TabRoute }
 

@@ -14,8 +14,35 @@ namespace KitveiHakodeshLib
     /// size, so we host it in our own small Form sized from the features string and owned
     /// by the app's top-level window — it stays above it, minimizes and closes with it.
     /// </summary>
+    /// <summary>
+    /// The page opened an extra app window of itself (the VS Code model: one page draws many
+    /// windows). The host supplies the window and the control its page fills.
+    /// </summary>
+    public sealed class AppWindowRequestedEventArgs : EventArgs
+    {
+        public AppWindowRequestedEventArgs(string windowKey) { WindowKey = windowKey; }
+
+        /// <summary>The page's key for the window (the tabs it shows carry it).</summary>
+        public string WindowKey { get; }
+
+        /// <summary>Set by the host: the window. Left null, the page gets a plain pop-out.</summary>
+        public Form Window { get; set; }
+
+        /// <summary>Set by the host: the control the window's page fills.</summary>
+        public Control ContentHost { get; set; }
+    }
+
     public partial class AppViewer
     {
+        /// <summary>
+        /// Raised when the page opens an extra app window of itself (window name
+        /// "appwindow-&lt;key&gt;", AppWindow.vue). A host with tab strips makes it a full app
+        /// window; without a handler it opens as a plain pop-out.
+        /// </summary>
+        public event EventHandler<AppWindowRequestedEventArgs> AppWindowRequested;
+
+        private const string AppWindowPrefix = "appwindow-";
+
         private async void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
             // A library-app link opened as a new window (target=_blank): open the book here.
@@ -67,6 +94,24 @@ namespace KitveiHakodeshLib
                 else if (name.Length > 0)
                     (x, y, width, height) = AppSettingsRegistry.GetPopupBounds(name, (int)features.Width, (int)features.Height);
 
+                // An extra app window of this page: the host makes the window (with its strip).
+                Control contentHost = null;
+                bool isAppWindow = false;
+                if (name.StartsWith(AppWindowPrefix, StringComparison.Ordinal) && AppWindowRequested != null)
+                {
+                    var request = new AppWindowRequestedEventArgs(name.Substring(AppWindowPrefix.Length));
+                    AppWindowRequested(this, request);
+                    if (request.Window != null && request.ContentHost != null)
+                    {
+                        form = request.Window;
+                        contentHost = request.ContentHost;
+                        isAppWindow = true;
+                        form.StartPosition = FormStartPosition.Manual;
+                        if (pageKeepsBounds && x != -1) form.ClientSize = new Size(width, height);
+                        else form.Size = FindForm()?.Size ?? form.Size;
+                    }
+                }
+                if (form == null)
                 form = new Form
                 {
                     Text = "",
@@ -81,14 +126,15 @@ namespace KitveiHakodeshLib
                 var saved = new Rectangle(new Point(x, y), form.Size);
                 form.Location = x != -1 && y != -1 && IsOnScreen(saved)
                     ? saved.Location
-                    : CenterOnScreen(form.Size);
-                ApplyPopupTheme(form);
+                    : isAppWindow ? CascadeFrom(form.Size) : CenterOnScreen(form.Size);
+                if (!isAppWindow) ApplyPopupTheme(form);
 
                 var popupView = new WebView2 { Dock = DockStyle.Fill };
-                form.Controls.Add(popupView);
+                (contentHost ?? form).Controls.Add(popupView);
 
                 var owner = GetAncestor(Handle, GA_ROOT);
-                if (SetPopupOwner != null)
+                if (isAppWindow) form.Show(); // a window of its own, like the main one
+                else if (SetPopupOwner != null)
                 {
                     SetPopupOwner(form.Handle); // VSTO: owned by the Word window
                     form.Show();
@@ -246,6 +292,17 @@ namespace KitveiHakodeshLib
             if (_addinIcon != null) return _addinIcon;
             var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico");
             return _addinIcon = System.IO.File.Exists(path) ? new Icon(path) : null;
+        }
+
+        // A new app window with nothing saved: a little down and across from this one.
+        private Point CascadeFrom(Size size)
+        {
+            Form mine = FindForm();
+            if (mine == null) return CenterOnScreen(size);
+            var area = Screen.FromControl(this).WorkingArea;
+            var place = new Point(mine.Left + 32, mine.Top + 32);
+            if (place.X + size.Width > area.Right || place.Y + size.Height > area.Bottom) return CenterOnScreen(size);
+            return place;
         }
 
         private Point CenterOnScreen(Size size)

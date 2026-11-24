@@ -56,10 +56,27 @@ namespace KitveiHakodeshLib
         // Departing tabs whose move succeeded: released once a snapshot no longer lists them.
         private readonly HashSet<string> _departedTabIds = new HashSet<string>();
 
+        // The app window of the page this strip shows: "" for the viewer's own window, else
+        // an extra window the page draws (AppViewer.AppWindowRequested).
+        private readonly string _windowKey;
+        // Puts the keyboard focus back into this window's page.
+        private readonly Action _focusContent;
+
         public ChromeTabsMirror(FluentChromeTabsForm form, AppViewer viewer)
+            : this(form, viewer, "", null)
+        {
+        }
+
+        /// <summary>
+        /// The strip of an extra app window the page draws: shows that window's tabs
+        /// (<paramref name="windowKey"/>); <paramref name="focusContent"/> focuses its page.
+        /// </summary>
+        public ChromeTabsMirror(FluentChromeTabsForm form, AppViewer viewer, string windowKey, Action focusContent)
         {
             _form = form ?? throw new ArgumentNullException(nameof(form));
             _viewer = viewer ?? throw new ArgumentNullException(nameof(viewer));
+            _windowKey = windowKey ?? "";
+            _focusContent = focusContent ?? (() => _viewer.FocusWebContent());
 
             // Mirrored tabs are metadata only — tearing one off into its own window
             // would detach it from the Vue store, and an empty strip must not close
@@ -78,8 +95,25 @@ namespace KitveiHakodeshLib
             _viewer.TabsStateChanged += OnTabsStateChanged;
             _viewer.TabIconsChanged += OnTabIconsChanged;
             _viewer.ChromeThemeChanged += OnChromeThemeChanged;
-            _viewer.ChromeTabListToggleRequested += OnChromeTabListToggleRequested;
+            if (_windowKey.Length == 0) _viewer.ChromeTabListToggleRequested += OnChromeTabListToggleRequested;
+
+            // An extra window's strip is made after the page already sent what it shows.
+            if (_windowKey.Length > 0)
+            {
+                if (_viewer.LastTabIcons != null) ApplyTabIcons(_viewer.LastTabIcons);
+                TabsStateChangedEventArgs last = _viewer.LastTabsState(_windowKey);
+                if (last != null) Reconcile(last);
+                _form.FormClosed += (s, e) =>
+                {
+                    _viewer.TabsStateChanged -= OnTabsStateChanged;
+                    _viewer.TabIconsChanged -= OnTabIconsChanged;
+                    _viewer.ChromeThemeChanged -= OnChromeThemeChanged;
+                };
+            }
         }
+
+        /// <summary>The app window of the page this strip shows ("" = the viewer's own window).</summary>
+        public string WindowKey => _windowKey;
 
         // ── Tabs moving between windows ─────────────────────────────────────────────
         //
@@ -184,7 +218,7 @@ namespace KitveiHakodeshLib
             if (_syncing) return;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabActivated(tabId);
-            _viewer.FocusWebContent();
+            _focusContent();
         }
 
         // Every press on a tab reaches the page, also on the tab the strip already shows as
@@ -207,14 +241,14 @@ namespace KitveiHakodeshLib
             e.Cancel = true;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabCloseRequested(tabId);
-            _viewer.FocusWebContent();
+            _focusContent();
         }
 
         private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
         {
             e.Cancel = true;
-            _viewer.NotifyChromeNewTabRequested();
-            _viewer.FocusWebContent();
+            _viewer.NotifyChromeNewTabRequested(_windowKey);
+            _focusContent();
         }
 
         // ── Vue Ctrl+T / Ctrl+Tab → open the strip's tab-list dropdown ──────────────
@@ -280,7 +314,7 @@ namespace KitveiHakodeshLib
 
         private void OnTabsStateChanged(object sender, TabsStateChangedEventArgs e)
         {
-            if (_form.IsDisposed) return;
+            if (_form.IsDisposed || e.WindowKey != _windowKey) return;
             if (_form.InvokeRequired)
             {
                 _form.BeginInvoke(new Action(() => Reconcile(e)));

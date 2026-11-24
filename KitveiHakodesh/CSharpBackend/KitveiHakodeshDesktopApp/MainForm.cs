@@ -182,53 +182,6 @@ namespace KitveiHakodeshDesktopApp
 
         // A move or an edge resize by the user: Program places windows side by side on a
         // drop and keeps a pair's shared edge shared (Program.SideBySide).
-        /// <summary>
-        /// A window started ahead of a tab drop (Program.SideBySide): shown off screen so its
-        /// page can start, never in the taskbar and never taking the focus, until it is used.
-        /// </summary>
-        internal bool Prewarmed { get; private set; }
-
-        internal void MarkPrewarmed()
-        {
-            Prewarmed = true;
-        }
-
-        /// <summary>The prewarmed window is used: it becomes an ordinary window (taskbar, focus).</summary>
-        internal void EndPrewarm()
-        {
-            if (!Prewarmed) return;
-            Prewarmed = false;
-            if (!IsHandleCreated) return;
-            const int GWL_EXSTYLE = -20, WS_EX_TOOLWINDOW = 0x80, WS_EX_APPWINDOW = 0x40000;
-            const int SW_HIDE = 0, SW_SHOW = 5;
-            int ex = GetWindowLong(Handle, GWL_EXSTYLE);
-            // Hidden around the change: the taskbar only notices a style change on show.
-            ShowWindow(Handle, SW_HIDE);
-            SetWindowLong(Handle, GWL_EXSTYLE, (ex & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW);
-            ShowWindow(Handle, SW_SHOW);
-        }
-
-        protected override bool ShowWithoutActivation => Prewarmed;
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                CreateParams cp = base.CreateParams;
-                if (Prewarmed) cp.ExStyle |= 0x80; // WS_EX_TOOLWINDOW: no taskbar button
-                return cp;
-            }
-        }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hWnd, int index);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int cmd);
-
         protected override void WndProc(ref Message m)
         {
             const int WM_SIZING = 0x0214, WM_MOVING = 0x0216, WM_EXITSIZEMOVE = 0x0232, WM_WINDOWPOSCHANGING = 0x0046;

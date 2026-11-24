@@ -50,11 +50,18 @@ namespace KitveiHakodeshLib
     /// <summary>Full snapshot of the Vue tab store, sent via the 'tabsChanged' bridge action.</summary>
     public class TabsStateChangedEventArgs : EventArgs
     {
-        public TabsStateChangedEventArgs(IReadOnlyList<MirroredTabInfo> tabs, string activeTabId)
+        public TabsStateChangedEventArgs(IReadOnlyList<MirroredTabInfo> tabs, string activeTabId, string windowKey = "")
         {
             Tabs = tabs;
             ActiveTabId = activeTabId;
+            WindowKey = windowKey ?? "";
         }
+
+        /// <summary>
+        /// The app window these tabs belong to: "" for the viewer's own window, else an extra
+        /// window the page opened and draws itself (AppWindowRequested).
+        /// </summary>
+        public string WindowKey { get; }
 
         public IReadOnlyList<MirroredTabInfo> Tabs { get; }
 
@@ -113,8 +120,21 @@ namespace KitveiHakodeshLib
             }
 
             string activeTabId = root.TryGetProperty("activeTabId", out var a) ? a.GetString() : null;
-            TabsStateChanged?.Invoke(this, new TabsStateChangedEventArgs(tabs, activeTabId));
+            string windowKey = root.TryGetProperty("windowKey", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() : "";
+            var state = new TabsStateChangedEventArgs(tabs, activeTabId, windowKey);
+            _lastTabsStates[state.WindowKey] = state;
+            TabsStateChanged?.Invoke(this, state);
         }
+
+        // The last snapshot per app window: a window's strip may be made after its first one came.
+        private readonly Dictionary<string, TabsStateChangedEventArgs> _lastTabsStates = new Dictionary<string, TabsStateChangedEventArgs>();
+
+        /// <summary>The page's last tab snapshot for an app window ("" = this viewer's own), or null.</summary>
+        public TabsStateChangedEventArgs LastTabsState(string windowKey)
+            => _lastTabsStates.TryGetValue(windowKey ?? "", out var state) ? state : null;
+
+        /// <summary>The page's last favicon set, or null before the first one came.</summary>
+        public IReadOnlyDictionary<string, Image> LastTabIcons { get; private set; }
 
         /// <summary>
         /// Vue's rasterized favicon set, keyed by icon name. Sent once per session and
@@ -153,6 +173,7 @@ namespace KitveiHakodeshLib
             }
 
             if (icons.Count == 0) return;
+            LastTabIcons = icons;
 
             if (InvokeRequired)
                 Invoke(new Action(() => TabIconsChanged?.Invoke(this, new TabIconsChangedEventArgs(icons))));
@@ -176,6 +197,17 @@ namespace KitveiHakodeshLib
                 ChromeTabListToggleRequested?.Invoke(this, args);
         }
 
+        /// <summary>
+        /// Moves a tab into another window this page draws - live, nothing reloads:
+        /// <paramref name="windowKey"/> "" is this viewer's own window, null a new window.
+        /// </summary>
+        public void MoveTabToAppWindow(string tabId, string windowKey, int position)
+            => _bridge?.PushEvent(new { @event = "moveTabToAppWindow", tabId, windowKey, position });
+
+        /// <summary>Opens another window of this page, with a new tab in it.</summary>
+        public void OpenNewAppWindow()
+            => _bridge?.PushEvent(new { @event = "openNewAppWindow" });
+
         /// <summary>Forwards a native tab-strip selection to Vue.</summary>
         public void NotifyChromeTabActivated(string tabId)
             => _bridge?.PushEvent(new { @event = "chromeTabActivated", tabId });
@@ -184,8 +216,8 @@ namespace KitveiHakodeshLib
         public void NotifyChromeTabCloseRequested(string tabId)
             => _bridge?.PushEvent(new { @event = "chromeTabCloseRequested", tabId });
 
-        /// <summary>Forwards the native "+" / Ctrl+T gesture to Vue.</summary>
-        public void NotifyChromeNewTabRequested()
-            => _bridge?.PushEvent(new { @event = "chromeTabNewRequested" });
+        /// <summary>Forwards the native "+" / Ctrl+T gesture to Vue, for the strip of app window <paramref name="windowKey"/> ("" = this viewer's own).</summary>
+        public void NotifyChromeNewTabRequested(string windowKey = "")
+            => _bridge?.PushEvent(new { @event = "chromeTabNewRequested", windowKey = windowKey ?? "" });
     }
 }
