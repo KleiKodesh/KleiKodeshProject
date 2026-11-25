@@ -83,6 +83,11 @@ export function openDetachedWindow(
   popupDocument.head.replaceChildren()
   popupDocument.body.replaceChildren()
   popupDocument.title = options.title
+  // about:blank has no icon of its own (a browser shows a globe); give it the app's.
+  const icon = popupDocument.createElement('link')
+  icon.rel = 'icon'
+  icon.href = new URL('/favicon.ico', window.location.href).href
+  popupDocument.head.append(icon)
 
   const stopMirroring = mirrorPageStyles(document, popupDocument)
   const unregister = registerDetachedWindow(popup)
