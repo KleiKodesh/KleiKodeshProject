@@ -1,9 +1,15 @@
 import { defineAsyncComponent, type Component } from 'vue'
+import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled, IconLightbulb24Filled, IconInfo24Filled } from '@iconify-prerendered/vue-fluent'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
 import type { TabRoute } from '@/stores/tabStore'
 import { useWidgetWindowStore, CALENDAR_EXTENDED, type WidgetId, type CustomWidget } from './widgetWindowStore'
+
+/** A widget page loaded on first open, the app's loading animation shown meanwhile (from the first moment). */
+function lazyPage(loader: Parameters<typeof defineAsyncComponent>[0] & (() => Promise<unknown>)): Component {
+  return defineAsyncComponent({ loader: loader as () => Promise<Component>, loadingComponent: LoadingAnimation, delay: 0 })
+}
 
 export interface WidgetItem {
   id: WidgetId
@@ -49,20 +55,20 @@ function barWidget(id: 'worldClock' | 'zmanim' | 'learning', icon: Component, co
 
 /** The widgets & tools menu, in order. Ctrl+Shift+1..7 toggle them. */
 export const WIDGET_ITEMS: WidgetItem[] = [
-  pageWidget('dict', 'Ctrl+Shift+1', defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue'))),
-  pageWidget('calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue')),
+  pageWidget('dict', 'Ctrl+Shift+1', lazyPage(() => import('@/features/dictionary/DictionaryPage.vue'))),
+  pageWidget('calendar', 'Ctrl+Shift+2', lazyPage(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue')),
     CALENDAR_EXTENDED
-      ? { props: { extended: true }, subtitle: `${t('layout.widgets.zmanim.label')} · ${t('layout.widgets.learning.label')}` }
+      ? { props: { extended: true } }
       : undefined),
-  pageWidget('ruler', 'Ctrl+Shift+3', defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue'))),
-  barWidget('worldClock', IconClock24Filled, '#2b88d8', 'Ctrl+Shift+4', defineAsyncComponent(() => import('./WorldClockWidget.vue'))),
-  barWidget('zmanim', IconWeatherSunnyLow24Filled, '#e3a21a', 'Ctrl+Shift+5', defineAsyncComponent(() => import('./ZmanimWidget.vue'))),
-  barWidget('learning', IconBookClock24Filled, '#c1440e', 'Ctrl+Shift+6', defineAsyncComponent(() => import('./DailyLearningWidget.vue'))),
+  pageWidget('ruler', 'Ctrl+Shift+3', lazyPage(() => import('@/features/halachic-units/HalachicUnitsPage.vue'))),
+  barWidget('worldClock', IconClock24Filled, '#2b88d8', 'Ctrl+Shift+4', lazyPage(() => import('./WorldClockWidget.vue'))),
+  barWidget('zmanim', IconWeatherSunnyLow24Filled, '#e3a21a', 'Ctrl+Shift+5', lazyPage(() => import('./ZmanimWidget.vue'))),
+  barWidget('learning', IconBookClock24Filled, '#c1440e', 'Ctrl+Shift+6', lazyPage(() => import('./DailyLearningWidget.vue'))),
   {
     id: 'keepScreenOn', route: '/', shortcut: 'Ctrl+Shift+7', icon: IconLightbulb24Filled, color: '#f2c811',
     text: t('settings.keepScreenOn.label'),
     description: t('settings.keepScreenOn.hint'),
-    page: defineAsyncComponent(() => import('./KeepScreenOnWidget.vue')),
+    page: lazyPage(() => import('./KeepScreenOnWidget.vue')),
   },
 ]
 
@@ -72,11 +78,11 @@ export const HIDDEN_WIDGET_ITEMS: WidgetItem[] = [
     id: 'about', route: '/', shortcut: '', icon: IconInfo24Filled, color: '#0f6cbd',
     text: t('settings.about.title'),
     description: t('settings.about.appName'),
-    page: defineAsyncComponent(() => import('@/features/about/AboutPage.vue')),
+    page: lazyPage(() => import('@/features/about/AboutPage.vue')),
   },
 ]
 
-const CustomHtmlWidget = defineAsyncComponent(() => import('./CustomHtmlWidget.vue'))
+const CustomHtmlWidget = lazyPage(() => import('./CustomHtmlWidget.vue'))
 
 function customWidgetItem(widget: CustomWidget): WidgetItem {
   const icon = documentIcon('html')

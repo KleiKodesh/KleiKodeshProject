@@ -685,3 +685,11 @@ public sealed class FindBooksByNameResult
 {
     public List<int> BookIds { get; set; } = [];
 }
+
+/// <summary>Args of <c>remindersList</c>: the reminders between two dates (yyyy-MM-dd, both included).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RemindersListArgs
+{
+    public string From { get; set; } = "";
+    public string To { get; set; } = "";
+}

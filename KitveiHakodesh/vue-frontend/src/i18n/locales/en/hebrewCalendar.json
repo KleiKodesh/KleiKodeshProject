@@ -1,4 +1,42 @@
 {
+  "sidePanel": {
+    "show": "Show zmanim and daily learning beside the calendar",
+    "hide": "Hide the zmanim and daily learning panel"
+  },
+  "reminders": {
+    "title": "Windows reminders",
+    "add": "Add a Windows reminder",
+    "edit": "Edit",
+    "delete": "Delete",
+    "titlePlaceholder": "What to remind",
+    "save": "Save",
+    "cancel": "Cancel",
+    "empty": "No Windows reminders on this day",
+    "past": "That time has already passed",
+    "failed": "The reminder could not be saved",
+    "open": "Windows reminders for the picked day",
+    "hint": "Saved in Windows, not in Kitvei Hakodesh: Windows shows each one at its time, even when the app is closed.",
+    "notePlaceholder": "Another line (optional)",
+    "style": "Style",
+    "sound": "Sound",
+    "snooze": "Snooze button (5 minutes to an hour)",
+    "styles": {
+      "brief": "Brief - slides away",
+      "reminder": "Reminder - stays until closed",
+      "alarm": "Alarm - stays and repeats its sound"
+    },
+    "sounds": {
+      "none": "Silent",
+      "default": "Windows default",
+      "reminder": "Reminder",
+      "sms": "Message",
+      "mail": "Mail",
+      "im": "Instant message",
+      "alarm": "Alarm 1 (repeats)",
+      "alarm2": "Alarm 2 (repeats)",
+      "call": "Phone call (repeats)"
+    }
+  },
   "datePicker": "Pick a date",
   "nav": {
     "next": "Next",

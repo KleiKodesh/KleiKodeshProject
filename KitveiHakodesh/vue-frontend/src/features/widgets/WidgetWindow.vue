@@ -18,7 +18,10 @@ const props = defineProps<{ win: WidgetWindowState }>()
 const store = useWidgetWindowStore()
 // removeCustom closes a widget's window before dropping it, so an open window always has its item.
 const item = computed(() => findWidgetItem(props.win.id)!)
-const size = widgetWindowSize(props.win.id)
+const size = widgetWindowSize(props.win.id, props.win.fromShortcut)
+// The shortcut's calendar window is remembered apart (its own size and place).
+const windowName = `widget-${props.win.id}${props.win.fromShortcut ? '-shortcut' : ''}`
+const pageProps = computed(() => ({ ...item.value.props, ...(props.win.fromShortcut ? { fromShortcut: true } : {}) }))
 
 // The tool pages were written as tab pages: they read "their" tab (route, saved query)
 // and write its title. Inside a widget they get a private stand-in tab, so they behave
@@ -53,7 +56,7 @@ function onBlocked() {
 <template>
   <DetachedWindow
     ref="detachedWindow"
-    :name="`widget-${win.id}`"
+    :name="windowName"
     :title="item.text"
     :width="size.width"
     :min-width="size.minWidth"
@@ -62,7 +65,7 @@ function onBlocked() {
     @blocked="onBlocked"
   >
     <section class="widget-body" :aria-label="item.text" :data-widget="win.id">
-      <component :is="item.page" v-bind="item.props" />
+      <component :is="item.page" v-bind="pageProps" />
     </section>
   </DetachedWindow>
 </template>

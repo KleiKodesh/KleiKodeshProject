@@ -2,11 +2,6 @@
 import PageCard from '@/components/PageCard.vue'
 import { ref, watch, onMounted, computed } from 'vue'
 import { HDate } from '@hebcal/core'
-import { lsGet, lsSet } from '@/utils/persistence'
-
-const KEYS = {
-  SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
-} as const
 import { useZmanim } from './useZmanim'
 import { useWeeklyView } from './useWeeklyView'
 import { useMonthlyView } from './useMonthlyView'
@@ -15,21 +10,28 @@ import WeeklyView from './WeeklyView.vue'
 import MonthlyView from './MonthlyView.vue'
 import ZmanimWidget from '@/features/widgets/ZmanimWidget.vue'
 import DailyLearningWidget from '@/features/widgets/DailyLearningWidget.vue'
+import DayRemindersDialog from './DayRemindersDialog.vue'
 
 /**
- * The extended calendar (the separate calendar app): a click on a day picks it, and that
- * day's zmanim and daily learning show beside the calendar. Opens on the month.
+ * The extended calendar: a click on a day picks it, and that day's zmanim and daily learning
+ * show in a side panel beside the calendar (a top-strip button shows or hides it). Opened from
+ * the installer's calendar shortcut it starts like a program of its own - month view, panel
+ * shown; opened from the app's menu - week view, panel hidden.
  */
-const props = defineProps<{ extended?: boolean }>()
+const props = defineProps<{ extended?: boolean; fromShortcut?: boolean }>()
 
 type ViewMode = 'weekly' | 'monthly'
 
-const viewMode = ref<ViewMode>('weekly')
+const fromShortcut = props.fromShortcut === true
+const viewMode = ref<ViewMode>(fromShortcut ? 'monthly' : 'weekly')
+/** The zmanim and daily learning panel beside the calendar. */
+const sidePanel = ref(fromShortcut)
 
 const selectedDate = ref(new Date())
+/** The picked day's reminders dialog (the bell in the top strip). */
+const remindersOpen = ref(false)
 /** undefined = days are not pickable (the in-app calendar widget). */
 const pickedDate = computed(() => (props.extended ? selectedDate.value : undefined))
-watch(viewMode, (v) => lsSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
 const { activeCity, init: initZmanim } = useZmanim()
 
@@ -74,9 +76,6 @@ function onSelectGregYear(y: number) {
 }
 
 onMounted(() => {
-  const savedView = lsGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
-  const fallback: ViewMode = props.extended ? 'monthly' : 'weekly'
-  viewMode.value = savedView === 'monthly' || savedView === 'weekly' ? savedView : fallback
   weekly.reset()
   monthly.reset()
   initZmanim()
@@ -88,6 +87,9 @@ onMounted(() => {
     <PageCard class="calendar-card">
           <CalendarHeader
             :view-mode="viewMode"
+            :reminders="props.extended"
+            :side-panel="props.extended ? sidePanel : undefined"
+            @toggle-side-panel="sidePanel = !sidePanel"
             :hebrew-label="
               viewMode === 'weekly' ? weekly.week.value.hebrewLabel : monthly.hebrewLabel.value
             "
@@ -99,6 +101,7 @@ onMounted(() => {
             @prev="onPrev"
             @next="onNext"
             @today="onToday"
+            @reminders="remindersOpen = true"
             @set-view="viewMode = $event"
             @select-heb-month="onSelectHebMonth"
             @select-heb-year="onSelectHebYear"
@@ -109,7 +112,7 @@ onMounted(() => {
           <MonthlyView v-else :monthly="monthly" :selected-date="pickedDate" class="calendar-view" @select-day="selectedDate = $event" />
     </PageCard>
     <!-- Extended calendar: the picked day's zmanim and daily learning beside it (below it in a narrow window). -->
-    <aside v-if="props.extended" class="calendar-side">
+    <aside v-if="props.extended && sidePanel" class="calendar-side">
       <section class="calendar-side-zmanim">
         <ZmanimWidget :date="selectedDate" />
       </section>
@@ -117,6 +120,7 @@ onMounted(() => {
         <DailyLearningWidget :date="selectedDate" />
       </section>
     </aside>
+    <DayRemindersDialog v-if="remindersOpen" :date="selectedDate" @close="remindersOpen = false" />
   </div>
 </template>
 
@@ -129,7 +133,8 @@ onMounted(() => {
 }
 
 .calendar-card { flex: 1 1 auto; min-width: 0; }
-/* Extended: the month takes two shares of the width, the side column one (never under 260px). */
+/* Extended: the calendar takes two shares of the width, the side panel one. The panel always stays
+   beside the calendar (never moves under it) and shrinks with the window down to 160px. */
 .page--extended .calendar-card { flex: 2 1 0; }
 /* The separate calendar app is the calendar itself: no card around it, at any width (as PageCard
    already does in a narrow window) - painted straight onto the window, edge to edge. */
@@ -137,7 +142,7 @@ onMounted(() => {
 .page--extended .calendar-card :deep(.page-card) { border: none; border-radius: 0; background: var(--bg-primary); }
 .calendar-side {
   flex: 1 1 0;
-  min-width: 260px;
+  min-width: 160px;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -148,14 +153,6 @@ onMounted(() => {
 .calendar-side-zmanim,
 .calendar-side-learning { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .calendar-side-learning { border-top: 1px solid var(--border-color); }
-/* Narrow window: zmanim and learning go under the calendar. */
-@media (max-width: 640px) {
-  .page--extended { flex-direction: column; overflow-y: auto; }
-  .page--extended .calendar-card { min-height: 420px; }
-  .calendar-side-zmanim,
-  .calendar-side-learning { flex: none; overflow: visible; }
-  .calendar-side { flex: none; border-inline-start: none; border-top: 1px solid var(--border-color); }
-}
 
 .calendar-view {
   flex: 1;

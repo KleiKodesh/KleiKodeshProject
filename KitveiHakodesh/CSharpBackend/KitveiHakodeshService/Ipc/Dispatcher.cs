@@ -1,5 +1,6 @@
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.DailyLearning;
+using KitveiHakodesh.Core.Reminders;
 using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.SeforimLibraryDownload;
 using KitveiHakodesh.Core.HebrewBooks;
@@ -294,6 +295,17 @@ public sealed class Dispatcher(
                         ? new PickFolderResult { Cancelled = true }
                         : new PickFolderResult { Path = picked }));
                 }
+
+                // Calendar reminders: one-off notifications kept by Windows itself (Core WindowsReminders).
+                case "remindersList":
+                {
+                    var a = MsgPack.De<RemindersListArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(WindowsReminders.List(a.From, a.To)));
+                }
+                case "reminderSave":
+                    return RpcResponse.Ok(MsgPack.Ser(WindowsReminders.Save(MsgPack.De<Reminder>(req.Args))));
+                case "reminderDelete":
+                    return RpcResponse.Ok(MsgPack.Ser(WindowsReminders.Delete(MsgPack.De<StringArg>(req.Args).Value ?? "")));
 
                 // Daily-learning log: a sorted CSV in a folder the user picks (Core DailyLearningLog).
                 case "dailyLearningDay":

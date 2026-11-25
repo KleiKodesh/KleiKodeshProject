@@ -11,11 +11,14 @@
     probes) moved to KitveiHakodeshLib; self-update is the service's (KitveiHakodeshService/KitveiHakodesh/Updater*).
 
     net10.0-windows, NOT plain net10.0: registry access, the NTFS MFT/USN calls of the local
-    file index (LocalFiles/) and the Windows pipe ACLs all need Windows.
+    file index (LocalFiles/) and the Windows pipe ACLs all need Windows. The Windows 10 SDK
+    version (10.0.19041) brings the WinRT projections for Windows' scheduled notifications
+    (Reminders/); SupportedOSPlatformVersion keeps the floor at Windows 10 1809.
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <OutputType>Library</OutputType>
     <RootNamespace>KitveiHakodesh.Core</RootNamespace>
     <AssemblyName>KitveiHakodesh.Core</AssemblyName>

@@ -6,7 +6,7 @@
          P/Invokes advapi32 for SCM registration and hosts a WinForms folder dialog); this
          project stayed on net10.0 and silently stopped being restorable — NU1201, which
          broke `dotnet restore` on KitveiHakodesh.slnx for the whole solution. -->
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>$(NoWarn);NU1903</NoWarn>

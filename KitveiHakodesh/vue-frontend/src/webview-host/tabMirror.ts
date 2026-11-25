@@ -181,7 +181,7 @@ export function initTabMirror(): void {
       case 'openCalendarAppWindow':
         // The installer's calendar shortcut (--calendar): the calendar widget
         // (opened, or brought to the front when it is open).
-        useWidgetWindowStore().open('calendar')
+        useWidgetWindowStore().open('calendar', true)
         break
       case 'openWidgetAsTab':
         // A widget window dropped on this window's tab strip (AppViewer.OpenWidgetAsTab).

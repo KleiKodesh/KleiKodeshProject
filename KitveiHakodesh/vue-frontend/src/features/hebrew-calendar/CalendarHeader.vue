@@ -4,6 +4,9 @@ import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
   IconHome20Regular,
+  IconAlert20Regular,
+  IconPanelLeft20Regular,
+  IconPanelLeft20Filled,
   IconCalendarAgenda20Regular,
   IconCalendarMonth20Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -13,6 +16,10 @@ import { HEB_MONTHS, GREG_MONTHS, hebYearGem } from './useMonthlyView'
 
 const props = defineProps<{
   viewMode: 'weekly' | 'monthly'
+  /** Show the reminders bell (the full calendar, where a day can be picked). */
+  reminders?: boolean
+  /** The side panel (zmanim, daily learning) shown; undefined = no panel button. */
+  sidePanel?: boolean
   hebrewLabel: string
   gregLabel: string
   hebMonth: number
@@ -25,6 +32,8 @@ const emit = defineEmits<{
   (e: 'prev'): void
   (e: 'next'): void
   (e: 'today'): void
+  (e: 'reminders'): void
+  (e: 'toggle-side-panel'): void
   (e: 'set-view', mode: 'weekly' | 'monthly'): void
   (e: 'select-heb-month', m: number): void
   (e: 'select-heb-year', y: number): void
@@ -150,6 +159,14 @@ function selectGregYear(y: number) {
       </button>
       <div class="sep" />
       <button class="nav-btn" :title="$t('hebrewCalendar.nav.today')" @click="emit('today')"><IconHome20Regular /></button>
+      <button v-if="reminders" class="nav-btn" :title="$t('hebrewCalendar.reminders.open')" @click="emit('reminders')"><IconAlert20Regular /></button>
+      <button
+        v-if="sidePanel !== undefined"
+        class="nav-btn"
+        :aria-pressed="sidePanel"
+        :title="$t(sidePanel ? 'hebrewCalendar.sidePanel.hide' : 'hebrewCalendar.sidePanel.show')"
+        @click="emit('toggle-side-panel')"
+      ><IconPanelLeft20Filled v-if="sidePanel" /><IconPanelLeft20Regular v-else /></button>
       <div class="sep" />
       <button
         class="nav-btn"

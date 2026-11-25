@@ -14,6 +14,10 @@ const SHORTCUT: Text = Text::new("כתבי הקודש", "Kitvei Hakodesh");
 const SHORTCUT_NAMES: [&str; 2] = [SHORTCUT.he, SHORTCUT.en];
 const URL_SCHEME: &str = r"Software\Classes\kitveihakodeshapp";
 const OPEN_WITH: &str = r"Software\Classes\Applications\כתבי הקודש.exe";
+/// The app's id in Windows notifications (Core WindowsReminders.AppId): the calendar's
+/// reminders show under this name and icon. The app registers it too, on first use.
+const NOTIFICATION_APP_ID: &str = r"Software\Classes\AppUserModelId\KleiKodesh.KitveiHakodesh";
+const APP_ICON: &str = "KitveiHakodesh.ico";
 /// Written by old versions; removed whenever we touch associations.
 const LEGACY_PROG_ID: &str = "KitveiHakodesh.Document.1";
 /// Offered in "Open with": PDF only.
@@ -51,6 +55,12 @@ pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool, englis
     reg.set_str(&format!(r"{URL_SCHEME}\DefaultIcon"), "", &format!("{},0", exe.display()))?;
     reg.set_str(&format!(r"{URL_SCHEME}\shell\open\command"), "", &command)?;
 
+    reg.set_str(NOTIFICATION_APP_ID, "DisplayName", SHORTCUT.get(english))?;
+    let icon = layout.file(APP_ICON);
+    if icon.exists() {
+        reg.set_str(NOTIFICATION_APP_ID, "IconUri", &icon.display().to_string())?;
+    }
+
     remove_legacy_prog_id(&reg);
     if open_with {
         reg.set_str(OPEN_WITH, "FriendlyAppName", SHORTCUT.get(english))?;
@@ -71,6 +81,7 @@ pub fn unregister(layout: &Layout) {
     let reg = Hkcu::new(layout);
     reg.delete_tree(URL_SCHEME);
     reg.delete_tree(OPEN_WITH);
+    reg.delete_tree(NOTIFICATION_APP_ID);
     remove_legacy_prog_id(&reg);
     system::notify_associations_changed();
 }
