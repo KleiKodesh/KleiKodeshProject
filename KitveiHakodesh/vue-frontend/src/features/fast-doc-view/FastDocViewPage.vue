@@ -157,9 +157,10 @@ function blockColumnStyle(index: number): Record<string, string> | undefined {
   // view's column width and padding never apply here. "Ignore document margins" (global): the
   // text takes the lines view's max column width setting - for the text and, through this same
   // function, the notes pane.
-  if (settingsStore.fastDocViewIgnoreMargins) return { '--fast-doc-view-column-max-width': 'var(--lines-content-max-width, none)' }
-  const twips = fastDocument.textWidthTwipsAt(index)
-  if (twips == null) return undefined
+  // A file with no page width of its own (.txt, a web archive without one) takes the book view's
+  // reading-column width too, instead of the whole pane.
+  const twips = settingsStore.fastDocViewIgnoreMargins ? undefined : fastDocument.textWidthTwipsAt(index)
+  if (twips == null) return { '--fast-doc-view-column-max-width': 'var(--lines-content-max-width, none)' }
   const widthPx = (twips / 15) * textScale.value
   return { '--fast-doc-view-column-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
 }

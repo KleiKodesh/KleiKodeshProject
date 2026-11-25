@@ -1,7 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { HDate } from '@hebcal/hdate'
 import { HebrewCalendar } from '@hebcal/core/dist/esm/hebcal'
-import { flags } from '@hebcal/core/dist/esm/event'
+import { Event, flags } from '@hebcal/core/dist/esm/event'
 import { isShownEvent } from './isShownModernHoliday'
 import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
@@ -9,6 +9,7 @@ import { ZMAN_NAMES, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
 import { chosenCommunity, primaryGroupsFor } from './zmanimCommunity'
 import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
 import { specialDayRows } from './specialDayZmanim'
+import { altFastTime, fastTime } from './fastTimes'
 import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
 
@@ -29,6 +30,9 @@ const HEBCAL_LOCATION: Record<number, string> = {
 
 /** End of Shabbat / Yom Tov when the preset names no line: the default list's tzeit line. */
 const DEFAULT_TZEIT_SHABBAT: ZmanName = 'tzeit18Sun'
+
+/** hebcal's own label for the start of a fast (it has no such event on erev Yom Kippur). */
+const YK_FAST_BEGINS = strip(new Event(new HDate(), 'Fast begins', flags.MAJOR_FAST).render('he'))
 
 type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 
@@ -114,6 +118,8 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
     let yomKippurKatan: string | null = null
     let fastStart: string | null = null
     let fastEnd: string | null = null
+    let fastStartAlt: CalendarDay['fastStartAlt'] = null
+    let fastEndAlt: CalendarDay['fastEndAlt'] = null
 
     for (const e of dayEvents) {
       if (!isShownEvent(e)) continue
@@ -135,17 +141,28 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
       } else if (f & flags.YOM_KIPPUR_KATAN) {
         yomKippurKatan = strip(e.render('he'))
       } else if (f & flags.MINOR_FAST || f & flags.MAJOR_FAST) {
-        const timeStr = (e as any).eventTimeStr
-        if (timeStr) {
-          const r = strip(e.render('he'))
-          if (r.includes('תחילת') || r.includes('עלות')) fastStart = `${r}: ${timeStr}`
-          else fastEnd = `${r}: ${timeStr}`
+        const desc = e.getDesc()
+        if (desc === 'Fast begins' || desc === 'Fast ends') {
+          const edge = desc === 'Fast ends' ? 'end' : f & flags.MAJOR_FAST ? 'majorStart' : 'minorStart'
+          const time = fastTime(edge, zmanim, primary)
+          const label = strip(e.renderBrief('he'))
+          if (time) {
+            if (edge === 'end') fastEnd = `${label}: ${time}`
+            else fastStart = `${label}: ${time}`
+          }
+          if (edge === 'end') fastEndAlt = altFastTime(edge, zmanim, primary)
+          else fastStartAlt = altFastTime(edge, zmanim, primary)
         } else {
           holidays.push(strip(e.render('he')))
         }
       } else if (f & (flags.CHAG | flags.MINOR_FAST | flags.MAJOR_FAST | flags.ROSH_CHODESH | flags.SPECIAL_SHABBAT | flags.MODERN_HOLIDAY | flags.CHOL_HAMOED | flags.MINOR_HOLIDAY)) {
         holidays.push(strip(e.render('he')))
       }
+    }
+
+    if (hd.getMonth() === 7 && hd.getDate() === 9) {
+      const time = fastTime('majorStart', zmanim, primary)
+      if (time) fastStart = `${YK_FAST_BEGINS}: ${time}`
     }
 
     days.push({
@@ -168,6 +185,8 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
       yomKippurKatan,
       fastStart,
       fastEnd,
+      fastStartAlt,
+      fastEndAlt,
       learning: getDailyLearning(hd),
       zmanim,
       specialZmanim: city ? specialDayRows(city, date) : [],

@@ -63,6 +63,6 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
 
 - Normal work: commit your own files (`git commit -o <paths>`), `git pull`, `git push`.
 - A session on dedicated work (e.g. zmanim, FastDocView) works on its own branch in its own
-  folder (`../KleiKodeshProject-work/<name>`), pushes that branch, and merges into master when a
+  folder (`../KleiKodeshProject-work/<name>`), keeps work in progress in its scratchpad, pushes that branch, and merges into master when a
   piece is done. It never leaves uncommitted edits in the main folder: they block every other
   session's pull.

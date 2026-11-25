@@ -131,7 +131,9 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
           day.molad ||
           day.yomKippurKatan ||
           day.fastStart ||
-          day.fastEnd
+          day.fastEnd ||
+          day.fastStartAlt ||
+          day.fastEndAlt
         "
         class="extras"
       >
@@ -143,6 +145,8 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         <span v-if="day.yomKippurKatan" class="ev holiday">{{ day.yomKippurKatan }}</span>
         <span v-if="day.fastStart" class="ev muted">{{ day.fastStart }}</span>
         <span v-if="day.fastEnd" class="ev muted">{{ day.fastEnd }}</span>
+        <span v-if="day.fastStartAlt" class="ev muted">{{ t(zmanLabelKey(day.fastStartAlt.name)) }}: {{ day.fastStartAlt.time }}</span>
+        <span v-if="day.fastEndAlt" class="ev muted">{{ t(zmanLabelKey(day.fastEndAlt.name)) }}: {{ day.fastEndAlt.time }}</span>
         <span v-if="day.shabbatMevarchim" class="ev muted italic">{{ day.shabbatMevarchim }}</span>
         <span v-if="day.molad" class="ev muted">{{ day.molad }}</span>
       </div>
