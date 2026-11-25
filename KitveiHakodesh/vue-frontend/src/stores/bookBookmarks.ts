@@ -35,22 +35,38 @@ export interface BookBookmark {
   tocPath?: string
   /** The bookmarked text - the selection, or the words at the point - shown under the name. */
   snippet?: string
+  /**
+   * PDF bookmarks (key `pdf:<file path>`): the point's y in PDF units on the page
+   * (PDF.js's view location `top`); lineId is then the page number and lineIndex its index.
+   */
+  pdfTop?: number
 }
 
-function bookmarksKey(bookId: number): string {
+/**
+ * Whose list: a library book's id, or a string key for other documents - `pdf:<file path>`
+ * for a PDF file (see pdfBookmarksKey).
+ */
+export type BookmarksOwner = number | string
+
+/** The bookmarks key of a PDF file: its path, so the list follows the file across tabs. */
+export function pdfBookmarksKey(filePath: string): string {
+  return `pdf:${filePath.replace(/\\/g, '/').toLowerCase()}`
+}
+
+function bookmarksKey(bookId: BookmarksOwner): string {
   return `bookmarks:${bookId}`
 }
 
 /** Each book's list once loaded, by book id. Absent = not loaded yet. */
-const loadedBookmarks = reactive(new Map<number, BookBookmark[]>())
+const loadedBookmarks = reactive(new Map<BookmarksOwner, BookBookmark[]>())
 
 /** The book's bookmarks if loaded, in reading order - reactive; undefined until `loadBookBookmarks` lands. */
-export function loadedBookBookmarks(bookId: number): BookBookmark[] | undefined {
+export function loadedBookBookmarks(bookId: BookmarksOwner): BookBookmark[] | undefined {
   return loadedBookmarks.get(bookId)
 }
 
 /** Loads the book's list into the shared map (once; later calls are free). */
-export async function loadBookBookmarks(bookId: number): Promise<void> {
+export async function loadBookBookmarks(bookId: BookmarksOwner): Promise<void> {
   if (loadedBookmarks.has(bookId)) return
   const stored = (await dbGet<BookBookmark[]>(BOOKMARKS_DB, bookmarksKey(bookId))) ?? []
   // An update may have landed while this read was in flight; its list is newer.
@@ -59,7 +75,7 @@ export async function loadBookBookmarks(bookId: number): Promise<void> {
 
 // One chain per book, so two edits in flight (two panes on one book) never read the same
 // list and the second write never drops the first one's change.
-const pendingUpdates = new Map<number, Promise<unknown>>()
+const pendingUpdates = new Map<BookmarksOwner, Promise<unknown>>()
 
 /**
  * Read-modify-write of the book's list against what is STORED, never against a caller's
@@ -67,14 +83,14 @@ const pendingUpdates = new Map<number, Promise<unknown>>()
  * empty list removes the record.
  */
 export function updateBookBookmarks(
-  bookId: number,
+  bookId: BookmarksOwner,
   change: (bookmarks: BookBookmark[]) => BookBookmark[],
 ): Promise<BookBookmark[]> {
   const previous = pendingUpdates.get(bookId) ?? Promise.resolve()
   const next = previous.catch(() => {}).then(async () => {
     const stored = (await dbGet<BookBookmark[]>(BOOKMARKS_DB, bookmarksKey(bookId))) ?? []
     const sorted = change(stored).sort((a, b) =>
-      a.lineIndex - b.lineIndex || (a.letterOffset ?? 0) - (b.letterOffset ?? 0) || a.id - b.id)
+      a.lineIndex - b.lineIndex || (a.letterOffset ?? 0) - (b.letterOffset ?? 0) || (b.pdfTop ?? 0) - (a.pdfTop ?? 0) || a.id - b.id)
     if (sorted.length === 0) await dbDelete(BOOKMARKS_DB, bookmarksKey(bookId))
     else await dbSet(BOOKMARKS_DB, bookmarksKey(bookId), sorted)
     loadedBookmarks.set(bookId, sorted)

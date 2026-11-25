@@ -60,10 +60,21 @@ const fs = () => props.fontSize ?? '0.8rem'
     >
       <slot>{{ node.text }}</slot>
     </div>
+    <span v-if="node.trailing && !filtered" class="tree-trailing" @click.stop="$emit('select', $event)">{{ node.trailing }}</span>
   </div>
 </template>
 
 <style scoped>
+.tree-trailing {
+  flex-shrink: 0;
+  align-self: center;
+  margin-inline-start: auto;
+  padding-inline: 6px 8px;
+  font-size: 0.85em;
+  opacity: 0.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
 .tree-row {
   display: flex;
   align-items: flex-start;

@@ -290,7 +290,24 @@ function setExpanded(ids: readonly number[], position?: TreeViewScrollPosition |
   reopenAt(index == null ? { index: 0, offsetPx: 0 } : { index, offsetPx: top!.offsetPx })
 }
 
-defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded, getScrollPosition })
+/** Opens a row's children (no-op when open or unknown) - for callers that add rows under it. */
+function expandNode(id: number) {
+  const node = nodeById.value.get(id)
+  if (node && !expanded.value.has(id)) toggle(node)
+}
+
+/** Scrolls a shown row into view (below the sticky header), as the arrow keys do. */
+function revealNode(id: number) {
+  const index = visibleIndexById.value.get(id)
+  if (index != null) revealRow(index)
+}
+
+/** The row the keyboard focus ring is on, while the list has focus; else null. */
+function focusedNode(): TreeNodeItem | null {
+  return containerFocused.value ? (visibleNodes.value[focusedIndex.value] ?? null) : null
+}
+
+defineExpose({ toggleNode: toggle, expandNode, revealNode, focusedNode, reset, containerRef, getExpanded, setExpanded, getScrollPosition })
 
 // ── Sticky header ───────────────────────────────────────────────────────────
 

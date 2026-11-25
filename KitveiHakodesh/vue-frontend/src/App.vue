@@ -20,7 +20,6 @@ import { storeToRefs } from 'pinia'
 import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { useIndexBuildReasonLog } from '@/composables/useIndexBuildReasonLog'
 import { useKeepScreenOn } from '@/composables/useKeepScreenOn'
-import { activateStripTab } from '@/composables/stripTabActions'
 import { isVstoEnvironment as isVsto, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 import { detectAvailableFonts } from '@/webview-host/fontsApi'
@@ -51,8 +50,8 @@ onMounted(() => { void userSpaceStore.claimDefaultFolders() })
 
 // ── Unsaved PDF edits guards ─────────────────────────────────────────────────
 
-// Tab-close confirmation: tabStore's close paths park a pending request in
-// bookViewStore instead of closing when a tab has unsaved PDF (TOC) edits.
+// Unsaved-changes prompt (Save / Don't save / Cancel): tabStore's close and leave paths park
+// a pending request in bookViewStore instead of closing when a tab's PDF has unsaved edits.
 const pdfClosePending = computed(() => bookViewStore.pdfClosePending)
 const pdfCloseDesc = computed(() => {
   const titles = (pdfClosePending.value?.tabTitles ?? []).filter(Boolean)
@@ -60,43 +59,22 @@ const pdfCloseDesc = computed(() => {
   return t('app.unsavedDesc', { names })
 })
 
-// "שמירה בשם..." from the close dialog: save the tab's PDF through the
-// viewer, then complete the close. The tab may be a BACKGROUND one whose
-// iframe is long gone — activate it first and wait for the viewer (and the
-// parked-edit rehydration) to come back before asking it to save.
-const pdfSaveAsBusy = ref(false)
+// Save from the unsaved-changes dialog: the tab's viewer is the mounted one (only a tab's
+// active page is mounted, and only a mounted viewer can be dirty). Saved: the close /
+// navigation goes on; not saved (cancelled Save As, failed write): the tab stays as it is.
+const pdfSaveBusy = ref(false)
 
-async function pdfCloseSaveAs() {
-  if (pdfSaveAsBusy.value) return
+async function pdfCloseSave() {
+  if (pdfSaveBusy.value) return
   const pending = bookViewStore.takePdfClosePending()
-  if (!pending) return
-  if (!pending.tabId) {
-    // Multi-tab request (close-all) — no single document to save; requeue
-    // semantics: treat as cancel.
-    return
-  }
-  pdfSaveAsBusy.value = true
+  if (!pending?.tabId) return
+  const bridge = bookViewStore.getPdfBridge(pending.tabId)
+  if (!bridge) return pending.proceed() // nothing mounted, nothing unsaved
+  pdfSaveBusy.value = true
   try {
-    activateStripTab(pending.tabId)
-    // Wait for the viewer bridge AND for it to report dirty — the bridge
-    // registers on documentloaded, but the parked-edit rehydration lands
-    // later; saving in that window would write the file WITHOUT the edits
-    // (and the clean-document download path never signals completion).
-    const bridge = await (async () => {
-      const deadline = Date.now() + 20_000
-      for (;;) {
-        const b = bookViewStore.getPdfBridge(pending.tabId!)
-        if (b?.saveAs && b.hasUnsavedChanges?.()) return b
-        if (Date.now() > deadline) return null
-        await new Promise((r) => setTimeout(r, 150))
-      }
-    })()
-    if (!bridge) return // viewer/rehydration never came back — leave the tab open
-    const saved = await bridge.saveAs!()
-    if (saved) pending.proceed() // completes the close, pre-approved
-    // Not saved (picker cancelled / timeout): leave the tab open, no dialog.
+    if (await bridge.save()) pending.proceed()
   } finally {
-    pdfSaveAsBusy.value = false
+    pdfSaveBusy.value = false
   }
 }
 
@@ -138,10 +116,10 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
       :title="t('app.unsavedTitle')"
       :desc="pdfCloseDesc"
       :confirm-label="t('app.closeWithoutSaving')"
-      :extra-label="pdfClosePending.tabId ? t('app.saveAs') : undefined"
+      :extra-label="pdfClosePending.tabId ? t('app.save') : undefined"
       @confirm="bookViewStore.resolvePdfCloseConfirm(true)"
       @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
-      @extra="pdfCloseSaveAs"
+      @extra="pdfCloseSave"
     />
     <!-- Switched away from the library this app downloaded: offer to free its disk space. -->
     <ConfirmDialog

@@ -4,10 +4,9 @@
  * side panel (it takes the left commentary column's place while shown).
  *
  * No tab is involved: the PDF is fetched through the same local folder / cache / download
- * path as the tab flow (fetchHbPdfUrl) and loaded in the same PDF.js viewer iframe the PDF
- * tab builds (buildPdfViewerSrc), opened at the outline entry for `outlineTarget` - the
- * section the reader was in when this edition loaded. OCR works here as in the PDF tab: the
- * title-bar OCR button drives this iframe through pdfOcrStore.
+ * path as the tab flow (fetchHbPdfUrl) and shown in the same PDF view the PDF tab uses
+ * (PdfReaderView, with its own toolbar, OCR included), opened at the outline entry for the
+ * outline target - the section the reader was in when this edition loaded.
  */
 import { ref, shallowRef, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -16,14 +15,8 @@ import { fetchHbPdfUrl } from '@/webview-host/bridge'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
-import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import { syncPdfViewerTheme } from '@/theme/themes'
 import { editionAsHebrewBook } from '@/features/hebrewbooks/useHebrewBooks'
-import { buildPdfViewerSrc, outlineJumpHash } from '@/features/pdf-viewer/buildPdfViewerSrc'
-import { usePdfOcrSelection } from '@/features/pdf-viewer/usePdfOcrSelection'
-import { usePdfOcrStoreSync } from '@/features/pdf-viewer/usePdfOcrStoreSync'
-import PdfOcrToolbar from '@/features/pdf-viewer/PdfOcrToolbar.vue'
-import PdfOcrResultPopup from '@/features/pdf-viewer/PdfOcrResultPopup.vue'
+import PdfReaderView from '@/features/pdf-reader/PdfReaderView.vue'
 
 const props = defineProps<{
   edition: HebrewBooksEdition
@@ -34,26 +27,23 @@ const props = defineProps<{
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const historyStore = useHebrewBooksHistoryStore()
-const pdfOcrStore = usePdfOcrStore()
-
-const iframeRef = ref<HTMLIFrameElement | null>(null)
-const ocr = usePdfOcrSelection(() => iframeRef.value)
-usePdfOcrStoreSync(ocr)
 
 // ── Fetch the PDF ─────────────────────────────────────────────────────────────
 
-const iframeSrc = shallowRef<string | null>(null)
+const pdfUrl = shallowRef<string | null>(null)
+/** The section to open at, read when the edition loads. */
+const outlineTarget = shallowRef<string | null>(null)
 const errorMessage = ref<string | null>(null)
-const isLoading = computed(() => !iframeSrc.value && !errorMessage.value)
+const isLoading = computed(() => !pdfUrl.value && !errorMessage.value)
 
 // Bumped per load so a slow fetch for an edition the user already switched away from is dropped.
 let loadGeneration = 0
 
 async function loadEdition(edition: HebrewBooksEdition) {
   const generation = ++loadGeneration
-  iframeSrc.value = null
+  pdfUrl.value = null
   errorMessage.value = null
-  const outlineTarget = props.getOutlineTarget()
+  const target = props.getOutlineTarget() ?? null
   historyStore.trackAccess(editionAsHebrewBook(edition)).catch(() => {})
   const result = await fetchHbPdfUrl(
     String(edition.id),
@@ -62,7 +52,8 @@ async function loadEdition(edition: HebrewBooksEdition) {
   )
   if (generation !== loadGeneration) return
   if (result.url) {
-    iframeSrc.value = buildPdfViewerSrc(result.url, edition.title, outlineTarget ? outlineJumpHash(outlineTarget) : null)
+    outlineTarget.value = target
+    pdfUrl.value = result.url
   } else if (result.cancelled) {
     errorMessage.value = t('bookView.hebrewBooks.sideLoadFailed')
   } else if (result.noInternet) {
@@ -74,25 +65,11 @@ async function loadEdition(edition: HebrewBooksEdition) {
   }
 }
 
-watch(() => props.edition.id, () => {
-  if (ocr.isActive.value) ocr.deactivate()
-  loadEdition(props.edition)
-}, { immediate: true })
+watch(() => props.edition.id, () => loadEdition(props.edition), { immediate: true })
 
-function onIframeLoad() {
-  setTimeout(syncPdfViewerTheme, 100)
-}
-
-// Release the PDF.js worker and canvases now, not at the next GC - and an OCR mode left on
-// would otherwise keep the title-bar button lit with nothing to drive.
+// A fetch still running when the panel closes is dropped.
 onBeforeUnmount(() => {
   loadGeneration++
-  if (pdfOcrStore.isActive) pdfOcrStore.deactivate()
-  if (iframeRef.value) {
-    iframeRef.value.src = 'about:blank'
-    iframeRef.value.remove()
-    iframeRef.value = null
-  }
 })
 </script>
 
@@ -104,25 +81,9 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="errorMessage" class="side-edition-status">{{ errorMessage }}</div>
     <div v-else class="side-edition-frame-wrap">
-      <iframe
-        ref="iframeRef"
-        :src="iframeSrc!"
-        class="side-edition-frame"
-        allowfullscreen
-        @load="onIframeLoad"
-      />
-      <PdfOcrToolbar :ocr="ocr" contained />
+      <!-- Keyed by the file: another edition is a fresh view (its own document, OCR and position). -->
+      <PdfReaderView :key="pdfUrl!" :url="pdfUrl!" :file-name="edition.title" :outline-target="outlineTarget" />
     </div>
-
-    <PdfOcrResultPopup
-      v-if="ocr.result.value"
-      :result="ocr.result.value"
-      :script="pdfOcrStore.script"
-      :is-processing="ocr.isProcessing.value"
-      :processing-progress="ocr.processingProgress.value"
-      @dismiss="ocr.dismissResult"
-      @update:script="pdfOcrStore.setScript"
-    />
   </div>
 </template>
 
@@ -150,10 +111,5 @@ onBeforeUnmount(() => {
   flex: 1;
   position: relative;
   min-height: 0;
-}
-.side-edition-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
 }
 </style>

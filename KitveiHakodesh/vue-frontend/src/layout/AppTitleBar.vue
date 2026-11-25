@@ -9,7 +9,6 @@ import {
   IconHome20Regular,
   IconOptions24Regular,
   IconOptions24Filled,
-  IconConvertToText24Regular,
   IconChevronDoubleDown16Regular,
   // IconColor24Regular,
   // IconColor24Filled,
@@ -30,8 +29,6 @@ import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
-import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { documentIcon } from '@/utils/documentIcons'
 import { useI18n } from 'vue-i18n'
 import { useAppNavUpdateItem } from './appNavUpdateItem'
@@ -44,8 +41,6 @@ const pane = useAppShellPane()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
-const pdfOcrStore = usePdfOcrStore()
-const hebrewBooksSideEditionStore = useHebrewBooksSideEditionStore()
 
 // ---- The workspace picker -----------------------------------------------------
 //
@@ -110,11 +105,6 @@ const widgetsBtnRef = ref<HTMLElement | null>(null)
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 /** Catalog title for a catalog book, the stored title otherwise (see catalogBookTitle). */
 const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(activeTab.value) : ''))
-// OCR works on any PDF.js viewer on screen: a PDF tab, or a HebrewBooks edition shown side
-// by side in the book view's left panel.
-const isOcrAvailable = computed(() =>
-  activeTab.value?.route === '/pdf-view' || hebrewBooksSideEditionStore.isEditionShown(),
-)
 
 // A click always enters search mode; the address-bar dropdown lists recent
 // locations (shown while the field is empty / has no results) — not open tabs.
@@ -128,9 +118,8 @@ const barTitle = computed(() => {
 })
 
 const toolbarTitle = computed(() => {
-  const baseTitle = isBookViewActive.value
-    ? bookViewStore.getToolbarVisible() ? t('layout.hideToolbar') : t('layout.showToolbar')
-    : activeTab.value?.pdfViewerTitleBarVisible !== false ? t('layout.hidePdfTitleBar') : t('layout.showPdfTitleBar')
+  // The PDF view follows the book view's toolbar setting.
+  const baseTitle = bookViewStore.getToolbarVisible() ? t('layout.hideToolbar') : t('layout.showToolbar')
   return `${baseTitle} (Ctrl+B)`
 })
 
@@ -422,20 +411,10 @@ ${updateItem.text}` : t('layout.menu')"
         class="bar-btn"
         tabindex="-1"
         :title="toolbarTitle"
-        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar() : pane.togglePdfViewerTitleBar()"
+        @click.stop="bookViewStore.toggleToolbar()"
       >
-        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.getToolbarVisible() : activeTab?.pdfViewerTitleBarVisible !== false" />
+        <IconOptions24Filled v-if="bookViewStore.getToolbarVisible()" />
         <IconOptions24Regular v-else />
-      </button>
-      <button
-        v-if="isTitleBarButtonVisible('ocr') && isOcrAvailable"
-        class="bar-btn"
-        tabindex="-1"
-        :class="{ active: pdfOcrStore.isActive }"
-        :title="t('layout.ocrSelect')"
-        @click.stop="pdfOcrStore.toggle()"
-      >
-        <IconConvertToText24Regular />
       </button>
     </div>
 

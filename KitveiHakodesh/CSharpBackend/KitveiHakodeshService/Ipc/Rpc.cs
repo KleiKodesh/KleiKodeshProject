@@ -145,6 +145,15 @@ public sealed class WritePdfTailArgs
     public byte[]? Anchor { get; set; }
 }
 
+/// <summary>Args for <c>writePdfFile</c> - the PDF viewer's Save: the whole new file for
+/// <see cref="Path"/> (see PdfFileWriter). Replies with <see cref="OpenInDefaultAppResult"/>'s { ok, error }.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WritePdfFileArgs
+{
+    public string? Path { get; set; }
+    public byte[]? Bytes { get; set; }
+}
+
 /// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
 /// for the temp file name.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

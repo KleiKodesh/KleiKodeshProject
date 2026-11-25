@@ -39,7 +39,7 @@ With the toggle row on top of the editions dropdown on (per pane, persisted, def
 
 - `useHebrewBooksSideEditionMode.ts` - toggle + availability + which side column (left/right, `settingsStore.hbEditionSide`, one for all books).
 - `stores/hebrewBooksSideEditionStore.ts` - per pane+book picked edition (localStorage `app.hbSideEditionPicks`), per pane edition on screen (the title bar shows OCR while one is).
-- `BookViewHebrewBooksSideEdition.vue` - fetches the PDF (`fetchHbPdfUrl`, shared with the tab download flow) and hosts the PDF.js iframe (`buildPdfViewerSrc`, shared with `PdfViewPage`), with OCR (`usePdfOcrStoreSync` + `PdfOcrToolbar`, also shared).
+- `BookViewHebrewBooksSideEdition.vue` - fetches the PDF (`fetchHbPdfUrl`, shared with the tab download flow) and shows it in the PDF tab's own view (`PdfReaderView`, toolbar and OCR included), opened at the current section (`outlineTarget`).
 
 ## Top-Level Components
 

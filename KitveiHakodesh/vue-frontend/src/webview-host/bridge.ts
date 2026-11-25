@@ -334,38 +334,62 @@ export async function revealFileInFolder(filePath: string): Promise<boolean> {
 }
 
 /**
- * PDF viewer TOC autosave: write an incremental-save `tail` back into the PDF at `offset`
- * (the length the viewer loaded). `anchor` = the loaded bytes just before `offset`; the
- * write is refused when they no longer match the disk (rules: Core PdfIncrementalSaveWriter).
- * Hosted: the C# host writes (`writePdfTail`, bytes as base64). Dev: the service op.
+ * Write a whole PDF over a file the app has open (PDF viewer Save, page organizer save).
+ * Atomic on the C# side: a temp file beside the target, then swapped in (Core PdfFileWriter).
+ * Hosted: the C# host (`writePdfFile`, base64). Dev: the service op of the same name.
  * Returns an error message, or null when written.
  */
-export async function writePdfTail(
-  filePath: string,
-  offset: number,
-  tail: Uint8Array,
-  anchor: Uint8Array,
-): Promise<string | null> {
+export async function writePdfFile(filePath: string, bytes: Uint8Array): Promise<string | null> {
   try {
     const r =
       typeof window.__webviewAction !== 'function'
-        ? // Copied into THIS realm: the viewer's arrays come from the PDF.js iframe, and a
-          // cross-realm Uint8Array fails `instanceof` in the encoder and goes out as a map.
-          await serviceCall<{ ok?: boolean; error?: string }>('writePdfTail', {
-            path: filePath,
-            offset,
-            tail: new Uint8Array(tail),
-            anchor: new Uint8Array(anchor),
-          })
-        : await action<{ ok?: boolean; error?: string }>('writePdfTail', {
-            filePath,
-            offset,
-            tail: bytesToBase64(tail),
-            anchor: bytesToBase64(anchor),
-          })
+        ? await serviceCall<{ ok?: boolean; error?: string }>('writePdfFile', { path: filePath, bytes: new Uint8Array(bytes) })
+        : await action<{ ok?: boolean; error?: string }>('writePdfFile', { filePath, bytes: bytesToBase64(bytes) })
     return r?.ok ? null : r?.error || 'write failed'
   } catch (e) {
     return String(e)
+  }
+}
+
+export type SavePdfAsResult =
+  | { kind: 'saved'; filePath: string; fileName: string }
+  | { kind: 'cancelled' }
+  | { kind: 'error'; error: string }
+  /** No host Save As dialog here (dev browser): the caller uses the browser's own save. */
+  | { kind: 'unsupported' }
+
+/**
+ * PDF viewer Save As: the host shows its Save dialog and writes the PDF where the user picked
+ * (C# `savePdfAs`). Dev has no host dialog: 'unsupported'.
+ */
+export async function savePdfAs(bytes: Uint8Array, suggestedName: string, initialDir?: string): Promise<SavePdfAsResult> {
+  if (typeof window.__webviewAction !== 'function') return { kind: 'unsupported' }
+  try {
+    const r = await action<{ filePath?: string; fileName?: string; cancelled?: boolean; error?: string }>('savePdfAs', {
+      suggestedName,
+      initialDir: initialDir ?? '',
+      bytes: bytesToBase64(bytes),
+    })
+    if (r?.cancelled) return { kind: 'cancelled' }
+    if (r?.filePath) return { kind: 'saved', filePath: r.filePath, fileName: r.fileName || r.filePath.replace(/^.*[\\/]/, '') }
+    return { kind: 'error', error: r?.error || 'write failed' }
+  } catch (e) {
+    return { kind: 'error', error: String(e) }
+  }
+}
+
+/**
+ * Print a PDF file on disk through the browser engine's own PDF viewer (system print dialog,
+ * full vector quality). Hosted only (C# `printPdfFile`); returns false when there is no host
+ * or the host could not open the file; the caller then shows a message (there is no in-page print).
+ */
+export async function printPdfFile(filePath: string): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') return false
+  try {
+    const r = await action<{ ok?: boolean; error?: string }>('printPdfFile', { filePath })
+    return !!r?.ok
+  } catch {
+    return false
   }
 }
 

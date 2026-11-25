@@ -21,6 +21,8 @@ defineProps<{
   /** What the tree is created with on a restored session - see TreeView. */
   initialExpanded?: readonly number[]
   initialPosition?: TreeViewScrollPosition | null
+  /** See TreeView: new `entries` are the same tree edited in place. */
+  nodesUpdateInPlace?: boolean
 }>()
 defineEmits<{ select: [TreeNodeItem] }>()
 
@@ -34,6 +36,9 @@ defineExpose({
   getScrollPosition: () => treeViewRef.value?.getScrollPosition() ?? null,
   /** Collapse everything and go back to the top. */
   reset: () => treeViewRef.value?.reset(),
+  expandNode: (id: number) => treeViewRef.value?.expandNode(id),
+  revealNode: (id: number) => treeViewRef.value?.revealNode(id),
+  focusedNode: () => treeViewRef.value?.focusedNode() ?? null,
 })
 </script>
 
@@ -49,8 +54,14 @@ defineExpose({
       :search-tree="searchTree"
       :initial-expanded="initialExpanded"
       :initial-position="initialPosition"
+      :nodes-update-in-place="nodesUpdateInPlace"
       @select="$emit('select', $event)"
-    />
+    >
+      <!-- A caller's own row (TreeView's `row` slot), passed through only when given. -->
+      <template v-if="$slots.row" #row="rowProps">
+        <slot name="row" v-bind="rowProps" />
+      </template>
+    </TreeView>
   </div>
 </template>
 

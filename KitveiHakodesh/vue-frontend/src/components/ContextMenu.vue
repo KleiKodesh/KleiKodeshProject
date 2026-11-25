@@ -9,6 +9,8 @@ export interface ContextMenuTextItem {
   label: string
   shortcut?: string
   action: () => void
+  /** Optional icon shown before the label. */
+  icon?: import('vue').Component
 }
 
 export interface ContextMenuSeparatorItem {
@@ -40,6 +42,8 @@ export type ContextMenuLeafItem =
 export interface ContextMenuSubmenuItem {
   type: 'submenu'
   label: string
+  /** Optional icon shown before the label. */
+  icon?: import('vue').Component
   items: ContextMenuLeafItem[]
 }
 
@@ -234,10 +238,12 @@ defineExpose({ show, showAtPosition, hide })
           @mouseenter="openSubmenu(index, $event.currentTarget)"
           @click="openSubmenu(index, $event.currentTarget)"
         >
+          <component :is="(item as ContextMenuSubmenuItem).icon" v-if="(item as ContextMenuSubmenuItem).icon" class="item-icon" />
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
           <span class="submenu-chevron"><IconChevronLeft16Regular class="dir-icon" /></span>
         </div>
         <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)" @mouseenter="closeSubmenu">
+          <component :is="(item as ContextMenuTextItem).icon" v-if="(item as ContextMenuTextItem).icon" class="item-icon" />
           <span class="item-label">{{ (item as ContextMenuTextItem).label }}</span>
           <span v-if="(item as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (item as ContextMenuTextItem).shortcut }}</span>
         </div>
@@ -258,12 +264,19 @@ defineExpose({ show, showAtPosition, hide })
             <div
               v-else-if="child.type === 'checkbox'"
               class="context-menu-item context-menu-checkbox"
+              :class="{ 'is-selected': (child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked }"
               @click.stop="toggleCheckbox(child as ContextMenuCheckboxItem)"
             >
-              <span class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+              <component
+                :is="(child as ContextMenuCheckboxItem).icon"
+                v-if="(child as ContextMenuCheckboxItem).icon"
+                class="item-icon"
+              />
+              <span v-else class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
               <span>{{ (child as ContextMenuCheckboxItem).label }}</span>
             </div>
             <div v-else class="context-menu-item" @click.stop="runItem(child as ContextMenuTextItem)">
+              <component :is="(child as ContextMenuTextItem).icon" v-if="(child as ContextMenuTextItem).icon" class="item-icon" />
               <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
               <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
             </div>

@@ -414,6 +414,19 @@ public sealed class Dispatcher(
                         : new OpenInDefaultAppResult { Error = writeError }));
                 }
 
+                // PDF viewer Save / page organizer save - the dev-mode equivalent of the hosted
+                // "writePdfFile" bridge action: the whole file, written atomically (Core PdfFileWriter).
+                case "writePdfFile":
+                {
+                    var a = MsgPack.De<WritePdfFileArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    string? writeError = PdfFileWriter.Write(full, a.Bytes, mustExist: true);
+                    return RpcResponse.Ok(MsgPack.Ser(writeError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = writeError }));
+                }
+
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
                 // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word
                 // imports HTML only by opening a file, so the service writes a temp .html named

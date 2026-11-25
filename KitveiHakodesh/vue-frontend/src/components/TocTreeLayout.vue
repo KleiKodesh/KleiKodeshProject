@@ -48,6 +48,8 @@ watch(
             @keydown.down.prevent="emit('focusList')"
             @keydown.tab.prevent="emit('focusList')"
           />
+          <!-- Extra buttons beside the search box (e.g. the PDF outline's add button). -->
+          <slot name="actions" />
           <button
             v-if="resettable"
             type="button"

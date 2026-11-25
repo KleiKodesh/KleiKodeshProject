@@ -34,7 +34,8 @@ const pages: Record<string, unknown> = {
   '/': defineAsyncComponent(() => import('@/features/home/HomePage.vue')),
   '/books': defineAsyncComponent(() => import('@/features/book-catalog/BookCatalogPage.vue')),
   '/book-view': defineAsyncComponent(() => import('@/features/book-view/BookViewPage.vue')),
-  '/pdf-view': defineAsyncComponent(() => import('@/features/pdf-viewer/PdfViewPage.vue')),
+  // PDF viewer (features/pdf-reader).
+  '/pdf-view': defineAsyncComponent(() => import('@/features/pdf-reader/PdfReaderPage.vue')),
   '/html-view': defineAsyncComponent(() => import('@/features/html-view/HtmlViewPage.vue')),
   '/fast-doc-view': defineAsyncComponent(() => import('@/features/fast-doc-view/FastDocViewPage.vue')),
   '/settings': defineAsyncComponent(() => import('@/features/settings/SettingsPage.vue')),

@@ -41,63 +41,21 @@ export interface PdfOutlineEntry {
 }
 
 /**
- * Bridge registered by each mounted PDF-view tab so the title bar can read
- * the outline tree and navigate to a page without querying the iframe directly.
- * Never persisted — in-memory only; cleaned up on unmount.
+ * Registered by the mounted PDF view of a /pdf-view tab (features/pdf-reader/PdfReaderView):
+ * the title bar reads the outline and navigates through it, and the close / leave guards ask
+ * about unsaved changes and save. In memory only; unregistered on unmount.
+ *
+ * Only a tab's ACTIVE page is mounted, so a tab without a registered viewer has nothing
+ * unsaved: leaving a dirty viewer (close, switch tab, navigate) goes through the guard first.
  */
 export interface PdfBridge {
+  /** Flat outline in document order (the title-bar breadcrumb). */
   outlineEntries: PdfOutlineEntry[]
   navigateToEntry: (entry: PdfOutlineEntry) => void
-  /**
-   * Live unsaved-changes state, read straight from the viewer's
-   * PDFViewerApplication._hasChanges() (annotations + structural page edits +
-   * outline edits). Only meaningful while the tab's iframe is mounted — for
-   * background tabs use the parked snapshot in pdfEditStateByTabId instead.
-   */
-  hasUnsavedChanges?: () => boolean
-  /**
-   * Run the viewer's save flow (downloadOrSave → File System Access dialog).
-   * Resolves true once the file was ACTUALLY written (the viewer's
-   * kh-save-complete signal); false if nothing was saved within the timeout —
-   * a cancelled picker emits nothing, so cancellation looks like a timeout.
-   */
-  saveAs?: () => Promise<boolean>
-}
-
-/**
- * One serialized outline entry, as produced by the viewer's outline editor
- * (outline-search.js serializeOutlineDom). Page-level destinations.
- */
-export interface PdfOutlineEditEntry {
-  title: string
-  page: number
-  items: PdfOutlineEditEntry[]
-  /**
-   * Index into the document's ORIGINAL outline (BFS order). Present on rows
-   * that came from the PDF; the save path uses it to preserve the original
-   * destination/action/styling verbatim. Absent on user-created rows.
-   */
-  src?: number
-}
-
-/**
- * A parked snapshot of unsaved PDF outline edits for one tab.
- *
- * The PDF viewer lives in ONE iframe per pane rendering the ACTIVE tab, so
- * switching tabs destroys (or navigates) the viewer — a background PDF tab has
- * no live viewer to ask about unsaved state. The viewer therefore pushes its
- * edited outline out EAGERLY after every edit; this is where it lands. When
- * the tab becomes active again with the SAME file, the snapshot is rehydrated
- * into the viewer (setState) and editing continues seamlessly.
- *
- * In-memory only, never persisted: surviving an app restart would require
- * writing the edits somewhere, and the design keeps the PDF file itself as the
- * only durable store — that is exactly what the close/unload guards are for.
- */
-export interface PdfEditState {
-  filePath: string
-  dirty: boolean
-  outline: PdfOutlineEditEntry[]
+  /** Edits not yet in the file (annotations, outline). */
+  hasUnsavedChanges: () => boolean
+  /** Save in place (Save As when the tab has no file). Resolves true once the file was written. */
+  save: () => Promise<boolean>
 }
 
 export const useBookViewStore = defineStore('bookView', () => {
@@ -377,41 +335,17 @@ export const useBookViewStore = defineStore('bookView', () => {
     return pdfBridgeByTabId.get(tabId) ?? null
   }
 
-  // ── PDF unsaved-edit snapshots + close guard state ─────────────────────────
+  // ── PDF close / leave guard state ────────────────────────────────────────
 
-  const pdfEditStateByTabId = shallowReactive(new Map<string, PdfEditState>())
-
-  /** Called by the PDF view on every viewer notification (edit or save). */
-  function setPdfEditState(tabId: string, state: PdfEditState) {
-    if (state.dirty) pdfEditStateByTabId.set(tabId, state)
-    else pdfEditStateByTabId.delete(tabId) // a completed save resolves the debt
-  }
-
-  function getPdfEditState(tabId: string): PdfEditState | null {
-    return pdfEditStateByTabId.get(tabId) ?? null
-  }
-
-  function clearPdfEditState(tabId: string) {
-    pdfEditStateByTabId.delete(tabId)
-  }
-
-  /**
-   * True when closing this tab would lose PDF edits: the live viewer says so
-   * (active tab), or a parked snapshot is dirty (background tab / same-tab
-   * navigation that replaced the PDF).
-   */
+  /** True when closing or leaving this tab would lose PDF edits (its live viewer says so). */
   function hasUnsavedPdfChanges(tabId: string): boolean {
-    const live = pdfBridgeByTabId.get(tabId)?.hasUnsavedChanges?.()
-    if (live) return true
-    return pdfEditStateByTabId.get(tabId)?.dirty === true
+    return pdfBridgeByTabId.get(tabId)?.hasUnsavedChanges() === true
   }
 
-  /** True when ANY tab has unsaved PDF edits — the app-close guard. */
+  /** True when ANY tab has unsaved PDF edits - the app-close guard. */
   function hasAnyUnsavedPdfChanges(): boolean {
-    // Snapshots are dirty by construction — setPdfEditState deletes on clean.
-    if (pdfEditStateByTabId.size > 0) return true
     for (const bridge of pdfBridgeByTabId.values()) {
-      if (bridge.hasUnsavedChanges?.()) return true
+      if (bridge.hasUnsavedChanges()) return true
     }
     return false
   }
@@ -430,8 +364,8 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   const pdfClosePending = computed(() => pdfClosePendingQueue.value[0] ?? null)
 
-  /** `tabId` — set when the request is about exactly ONE dirty tab, enabling
-   *  the dialog's "שמירה בשם..." action (save that tab, then proceed). */
+  /** `tabId` - set when the request is about exactly ONE dirty tab, enabling
+   *  the dialog's Save action (save that tab, then proceed). */
   function requestPdfCloseConfirm(tabTitles: string[], proceed: () => void, tabId?: string | null) {
     pdfClosePendingQueue.value.push({ tabTitles, proceed, tabId: tabId ?? null })
   }
@@ -448,10 +382,6 @@ export const useBookViewStore = defineStore('bookView', () => {
   }
 
   return {
-    pdfEditStateByTabId,
-    setPdfEditState,
-    getPdfEditState,
-    clearPdfEditState,
     hasUnsavedPdfChanges,
     hasAnyUnsavedPdfChanges,
     pdfClosePending,

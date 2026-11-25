@@ -13,7 +13,6 @@ import { useTabStore } from './stores/tabStore'
 import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
-import { initPdfThemeObserver } from './theme/themes'
 import { dbReady, emitWebviewEvent, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
@@ -70,8 +69,6 @@ if (Array.isArray(startupEvents)) {
 }
 
 app.mount('#app')
-
-initPdfThemeObserver()
 
 // Warm the catalog as early as possible so it's already in the store when the user
 // opens it. The catalog load (ensureLoaded → getAllCategories/getAllBooks) IS the

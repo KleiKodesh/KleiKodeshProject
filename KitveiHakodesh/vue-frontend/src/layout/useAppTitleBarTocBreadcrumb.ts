@@ -4,7 +4,7 @@
  *
  * Handles two route types:
  * - /book-view: reads TocEntry tree from the TocBridge registered in bookViewStore
- * - /pdf-view:  reads PdfOutlineEntry list from the PdfBridge registered in bookViewStore
+ * - /pdf-view:  reads PdfOutlineEntry list from the PdfBridge the PDF view (PdfReaderView) registers in bookViewStore
  *
  * Only produces non-empty segments when the bridge is registered.
  */

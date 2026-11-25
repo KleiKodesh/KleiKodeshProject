@@ -176,10 +176,6 @@ export function useAppShellPane() {
     }
   }
 
-  function togglePdfViewerTitleBar() {
-    tabStore.togglePdfViewerTitleBar()
-  }
-
   return {
     tabs,
     mruTabs,
@@ -207,6 +203,5 @@ export function useAppShellPane() {
     openBookTarget,
     navigateToDestination,
     goHome,
-    togglePdfViewerTitleBar,
   }
 }

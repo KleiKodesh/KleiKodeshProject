@@ -45,7 +45,7 @@ function getApp(win: Window | null): PdfViewerApplicationLike | null {
  * (not its markup) and wrap each line in an RTL div — this is what pastes cleanly
  * into Word, matching the book view's copy behaviour.
  */
-function selectionToHtml(text: string): string {
+export function selectionToHtml(text: string): string {
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -75,7 +75,7 @@ function escapeHtml(s: string): string {
  * PDFs whose text layer DOES embed real spaces are unaffected: joining adds a space only
  * when the boundary has none.
  */
-function selectionToText(win: Window): string {
+export function selectionToText(win: Window): string {
   const sel = win.getSelection()
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return ''
   const range = sel.getRangeAt(0)

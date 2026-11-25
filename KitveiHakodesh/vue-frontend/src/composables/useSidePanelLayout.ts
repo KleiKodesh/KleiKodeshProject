@@ -22,16 +22,25 @@ export function useSidePanelLayout(options: {
   pageElement: Ref<HTMLElement | null>
   resizeArea: Ref<HTMLElement | null>
   fraction?: Ref<number | null>
+  /**
+   * Optional: decides inline vs overlay for a page with its own rule (given the page width and
+   * the panel's width there). Default: inline from SIDE_PANEL_INLINE_MIN_WIDTH.
+   */
+  inlineWhen?: (pageWidth: number, panelWidth: number) => boolean
 }) {
   const hostWindow = useHostWindow()
   const pageWidth = ref(hostWindow.innerWidth)
   useResizeObserver(options.pageElement, ([entry]) => {
     pageWidth.value = entry!.contentRect.width
   })
-  const isInline = computed(() => pageWidth.value >= SIDE_PANEL_INLINE_MIN_WIDTH)
+  const fraction = options.fraction ?? ref<number | null>(null)
+  /** The inline panel's width at a page width: the dragged share, else SidePanel's CSS cap min(40%, 240px). */
+  const panelWidthAt = (w: number) => (fraction.value !== null ? fraction.value * w : Math.min(0.4 * w, 240))
+  const isInline = computed(() =>
+    options.inlineWhen ? options.inlineWhen(pageWidth.value, panelWidthAt(pageWidth.value)) : pageWidth.value >= SIDE_PANEL_INLINE_MIN_WIDTH,
+  )
   const isOverlay = computed(() => !isInline.value)
 
-  const fraction = options.fraction ?? ref<number | null>(null)
   const isDragging = ref(false)
 
   function onDividerPointerDown(event: PointerEvent) {

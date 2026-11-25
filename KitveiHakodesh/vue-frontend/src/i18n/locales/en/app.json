@@ -1,6 +1,6 @@
 {
-  "unsavedDesc": "Changes made to the table of contents{names} were not saved and will be lost if the tab is closed.",
+  "unsavedDesc": "Changes{names} were not saved and will be lost if you close or leave the document.",
   "unsavedTitle": "Unsaved changes",
-  "closeWithoutSaving": "Close without saving",
-  "saveAs": "Save as..."
+  "closeWithoutSaving": "Don't save",
+  "save": "Save"
 }

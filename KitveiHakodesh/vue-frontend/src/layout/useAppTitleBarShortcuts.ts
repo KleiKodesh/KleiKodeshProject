@@ -142,7 +142,13 @@ export function useAppTitleBarShortcuts(options: {
       // don't check modifiers, and this must not also move their focus.
       if (e.altKey && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
         e.stopPropagation()
-        if (e.code === 'ArrowRight') pane.goBack()
+        // A view with its own back/forward (the PDF view's link jumps) takes the key first, while
+        // focus is in it: it marks itself [data-local-history] and cancels the 'localhistory'
+        // event when it moved. Nothing to go back to there: the tab's history, as everywhere.
+        const back = e.code === 'ArrowRight'
+        const local = (hostWindow.document.activeElement as Element | null)?.closest('[data-local-history]')
+        if (local && !local.dispatchEvent(new hostWindow.CustomEvent('localhistory', { cancelable: true, detail: { back } }))) return true
+        if (back) pane.goBack()
         else pane.goForward()
         return true
       }
@@ -205,9 +211,9 @@ export function useAppTitleBarShortcuts(options: {
         else pane.closeAllPages()
         return true
       case 'KeyB':
-        if (isBookViewActive.value) bookViewStore.toggleToolbar()
+        // The PDF view shows the book view's toolbar setting (Ctrl+B in either).
+        if (isBookViewActive.value || activeTab.value?.route === '/pdf-view') bookViewStore.toggleToolbar()
         else if (isFastDocViewActive.value) sendFastDocViewCommand('toggleToolbar')
-        else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
         return true
       case 'KeyJ':
         // Ctrl+J toggles the bottom commentary panel, Ctrl+Shift+J the right-side
@@ -256,6 +262,8 @@ export function useAppTitleBarShortcuts(options: {
         else pane.openNewTab()
         return true
       case 'KeyG':
+        // Ctrl+Alt+G is the PDF viewer's "go to page", not home.
+        if (e.altKey) return false
         pane.goHome()
         return true
       case 'KeyH':
@@ -326,9 +334,8 @@ export function useAppTitleBarShortcuts(options: {
       return true
     }
     // Swallow the browser print dialog. This is preventDefault-only (no
-    // stopPropagation), and `usePdfPrintShortcut` relies on that: on the PDF
-    // page it still sees this keydown and forwards the print into the PDF.js
-    // iframe.
+    // stopPropagation): the PDF view's own Ctrl+P (usePdfReaderShortcuts) still
+    // sees this keydown and prints the document.
     if (e.code === 'KeyP') return true
     return false
   }

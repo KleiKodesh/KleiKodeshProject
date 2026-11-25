@@ -839,8 +839,6 @@ function devSqlitePlugin(): Plugin {
           return
         }
 
-        // Don't cache pdf.js assets. All DATA flows browser → service HTTP host directly.
-        if (req.url?.startsWith('/pdfjs/')) res.setHeader('Cache-Control', 'no-store')
         next()
       })
     },
@@ -871,15 +869,70 @@ function zmanimAssets(): Plugin {
   }
 }
 
+
+/**
+ * The new PDF viewer's decoder files (wasm image decoders and their JS fallbacks, cMaps,
+ * standard fonts, colour profiles), served raw from the installed pdfjs-dist at
+ * /pdfjs-dist-res/ - the same version as the engine. Raw on purpose: PDF.js loads the
+ * fallbacks with import(), and a file under public/ may not be imported in dev.
+ * The build copies the same folders into the output.
+ */
+function pdfjsResourcesPlugin(): Plugin {
+  const ROUTE = '/pdfjs-dist-res/'
+  const root = path.resolve(path.dirname(toPath(import.meta.url)), 'node_modules/pdfjs-dist')
+  const DIRS = ['wasm', 'cmaps', 'standard_fonts', 'iccs']
+  // The form-script sandbox (pdf-reader/pdfScripting.ts; scripts run in QuickJS from wasm/), made from
+  // build/pdf.sandbox.mjs with its Sandbox class exported, so each viewer gives it its own window stand-in.
+  const SANDBOX = 'build/pdf.sandbox.kh.mjs'
+  const sandboxSource = () =>
+    fs.readFileSync(path.join(root, 'build/pdf.sandbox.mjs'), 'utf8').replace(/^\/\/# sourceMappingURL=.*$/m, '') +
+    '\nexport { Sandbox as KhSandbox };\n'
+  const TYPES: Record<string, string> = {
+    '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm',
+    '.bcmap': 'application/octet-stream', '.pfb': 'application/octet-stream', '.ttf': 'font/ttf', '.icc': 'application/vnd.iccprofile',
+  }
+  let outDir = 'dist'
+  return {
+    name: 'kh-pdfjs-resources',
+    configResolved(c) { outDir = path.resolve(c.root, c.build.outDir) },
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? '').split('?')[0]!
+        if (!url.startsWith(ROUTE)) return next()
+        const rel = decodeURIComponent(url.slice(ROUTE.length))
+        if (rel === SANDBOX) {
+          res.setHeader('Content-Type', 'text/javascript')
+          return res.end(sandboxSource())
+        }
+        const file = path.resolve(root, rel)
+        if (!file.startsWith(root + path.sep) || !DIRS.includes(rel.split('/')[0]!) || !fs.existsSync(file)) {
+          res.statusCode = 404
+          return res.end()
+        }
+        res.setHeader('Content-Type', TYPES[path.extname(file)] ?? 'application/octet-stream')
+        fs.createReadStream(file).pipe(res)
+      })
+    },
+    closeBundle() {
+      for (const d of DIRS) fs.cpSync(path.join(root, d), path.join(outDir, 'pdfjs-dist-res', d), { recursive: true })
+      fs.mkdirSync(path.join(outDir, 'pdfjs-dist-res', 'build'), { recursive: true })
+      fs.writeFileSync(path.join(outDir, 'pdfjs-dist-res', SANDBOX), sandboxSource())
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     devSqlitePlugin(),
+    pdfjsResourcesPlugin(),
     websitesDevProxy(),
     ...vueSingleFilePlugins(),
     zmanimAssets(),
   ],
   resolve: appResolve,
   server: {
+    // The pdf.js submodule is source for a separate build, not app code: no file watching there.
+    watch: { ignored: ['**/pdf.js/**'] },
     warmup: {
       clientFiles: [
         './src/main.ts',
@@ -901,6 +954,8 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Scan only the app page: the pdf.js submodule (./pdf.js) and public/ hold many other .html files.
+    entries: ['index.html'],
     // The @iconify-prerendered/* packages ship as a SINGLE ~12.5MB index.js barrel
     // (not one-file-per-icon), so EXCLUDING them from pre-bundling does NOT serve
     // "only the imported symbols" — it makes Vite serve the whole barrel raw, which

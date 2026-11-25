@@ -16,6 +16,7 @@ import {
   deleteAllStateForTab,
 } from './tabStatePersistence'
 import { getLastReadPos, setLastReadPos } from './bookLastRead'
+import { useLocalFileStore } from './localFileStore'
 import { clearSettingsViewState } from '@/features/settings/settingsViewMemory'
 import { loadRecentLocations, saveRecentLocations, recordVisit } from './recentLocations'
 import {
@@ -87,7 +88,6 @@ export interface Tab {
   localFileConverting?: boolean // in-memory only — true while Word conversion is in progress
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   localFileDownloadProgress?: string // in-memory only — live HB download progress text (e.g. "6.2 / 13.2 MB · 47%")
-  pdfViewerTitleBarVisible?: boolean // persisted — whether to show PDF.js viewer title bar (default true)
   // Outline entry a /pdf-view tab opens at, as a book-view breadcrumb path - set when a
   // HebrewBooks edition is opened from a text book. One-shot: PdfViewPage hands it to the
   // viewer on the tab's first load and clears it. Deliberately NOT a position field: the
@@ -255,7 +255,7 @@ const TRANSIENT_FIELDS = [
  * reading a whole tab would also track the live handles above, so a save would fire on
  * every download-progress tick. The cost of the narrowing is that a persisted field left
  * out of it never triggers a save at all - which is exactly what happened to
- * pdfViewerTitleBarVisible, catalogQuery and the three page search queries. persistTabs
+ * catalogQuery and the three page search queries. persistTabs
  * asserts the list is complete in dev.
  */
 const WATCHED_FIELDS = [
@@ -267,7 +267,6 @@ const WATCHED_FIELDS = [
   'localFilePath',
   'localFileHbBookId',
   'localFileHbBookTitle',
-  'pdfViewerTitleBarVisible',
   'isOtzariaAddin',
   'webUrl',
   'widgetId',
@@ -769,7 +768,17 @@ export const useTabStore = defineStore('tabs', () => {
     if (changesIdentity(tab, patch)) {
       for (const field of POSITION_FIELDS) delete tab[field]
     }
+    // A file location carries only its path: the served URL the tab holds belongs to the
+    // document it is leaving. Kept, the view went on showing that document while the tab
+    // (and so the saved session) named the target - a reload then opened the other file.
+    // Re-serve it, as the address bar's file rows do.
+    const fileChanged =
+      tab.localFilePath !== patch.localFilePath || tab.localFileHbBookId !== patch.localFileHbBookId
+    if (fileChanged) patch.localFileVirtualUrl = undefined
     Object.assign(tab, patch)
+    if (fileChanged && (tab.route === '/pdf-view' || tab.route === '/html-view')) {
+      void useLocalFileStore().restoreTab(tab.id, true)
+    }
   }
 
   /** Sends a tab home without recording a frame — the "nothing left to show" fallback. */
@@ -780,6 +789,7 @@ export const useTabStore = defineStore('tabs', () => {
   function moveThroughHistory(tabId: string, move: () => NavLocation | null) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
+    if (guardPdfLeave(tabId, () => moveThroughHistory(tabId, move))) return
     // The page still showing saves where the reader is NOW (see leaveLocation).
     leaveLocation(tabId)
 
@@ -841,6 +851,7 @@ export const useTabStore = defineStore('tabs', () => {
   function closeCurrentPage(tabId: string) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
+    if (guardPdfLeave(tabId, () => closeCurrentPage(tabId))) return
 
     // Remove from recentLocations before moving — captureCurrentPosition would
     // just update it, but we want it gone.
@@ -875,6 +886,7 @@ export const useTabStore = defineStore('tabs', () => {
   function closeAllPages(tabId: string) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
+    if (guardPdfLeave(tabId, () => closeAllPages(tabId))) return
 
     clearHistory(tabId)
     recentLocations.value = []
@@ -920,7 +932,7 @@ export const useTabStore = defineStore('tabs', () => {
   // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
   // Hand-listed on purpose (tracking every field would save on live handles like
   // localFileDownloadProgress), which makes it the one place that can silently drift
-  // from what withoutTransientFields actually writes: pdfViewerTitleBarVisible, the
+  // from what withoutTransientFields actually writes: the
   // three page search queries and catalogQuery were all missing here, so changing them
   // never woke the watcher and they were lost on exit. Any NEW persisted Tab field must
   // be added here too - the dev assertion in persistTabs shouts if one is forgotten.
@@ -1146,6 +1158,9 @@ export const useTabStore = defineStore('tabs', () => {
     // the two most-recent tabs instead of advancing through the list.
     const tab = tabs.value.find((t) => t.id === id)
     if (!tab) return
+    // The tab shown now in that window unmounts: its unsaved PDF edits ask first.
+    const leaving = activeIdIn(windowOf(id))
+    if (leaving && leaving !== id && guardPdfLeave(leaving, () => switchTab(id))) return
     activeTabId.value = id
   }
 
@@ -1183,9 +1198,8 @@ export const useTabStore = defineStore('tabs', () => {
    * native chrome-tabs mirror, close-all) stays a plain function call, and the
    * guard lives here at the single chokepoint they all funnel through.
    *
-   * The dirty check covers both the LIVE viewer (active tab, via the bridge's
-   * hasUnsavedChanges → PDF.js _hasChanges) and PARKED snapshots (background
-   * tabs — their iframe is long gone, but the eagerly-pushed edits are not).
+   * The dirty check asks the tab's live PDF viewer (its registered bridge); a tab
+   * whose page is not mounted has nothing unsaved.
    */
   function guardPdfClose(candidates: Tab[], retry: () => void): boolean {
     const bookViewStore = useBookViewStore()
@@ -1213,10 +1227,15 @@ export const useTabStore = defineStore('tabs', () => {
     return true
   }
 
+  /** The same guard for a tab that stays open but leaves its PDF (switch tab, navigate, Back). */
+  function guardPdfLeave(tabId: string, retry: () => void): boolean {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    return !!tab && guardPdfClose([tab], retry)
+  }
+
   /** Post-close cleanup shared by every close path. */
   function releasePdfCloseState(id: string) {
     approvedPdfClose.delete(id)
-    useBookViewStore().clearPdfEditState(id)
   }
 
   function closeTab(id: string) {
@@ -1285,6 +1304,10 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function applyTabPatch(tab: Tab, patch: Partial<Omit<Tab, 'id'>>) {
+    // A PDF tab moving to another document or page type: its unsaved edits ask first.
+    const leavingPdf =
+      tab.route === '/pdf-view' && ((patch.route !== undefined && patch.route !== tab.route) || changesIdentity(tab, patch))
+    if (leavingPdf && guardPdfLeave(tab.id, () => applyTabPatch(tab, patch))) return
     const navigating = isNavigationPatch(patch)
     if (navigating) leaveLocation(tab.id)
 
@@ -1446,15 +1469,6 @@ export const useTabStore = defineStore('tabs', () => {
     updateActiveTab(patch)
   }
 
-  // ── PDF viewer title bar visibility ───────────────────────────────────────
-
-  function togglePdfViewerTitleBar() {
-    const tab = tabs.value.find((t) => t.id === activeTabId.value)
-    if (tab) {
-      tab.pdfViewerTitleBarVisible = tab.pdfViewerTitleBarVisible !== false ? false : true
-    }
-  }
-
   return {
     tabs,
     activeTabId,
@@ -1498,7 +1512,6 @@ export const useTabStore = defineStore('tabs', () => {
     setBookViewState: setBookViewStateTracked,
     isOpenTab,
     clearBookViewState,
-    togglePdfViewerTitleBar,
     persistedEntryOf,
     adoptMovedTab,
     hasUnsavedEdits,

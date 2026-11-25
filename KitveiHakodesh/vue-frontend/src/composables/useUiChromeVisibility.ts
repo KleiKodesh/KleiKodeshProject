@@ -3,7 +3,6 @@ import { effectScope, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useTabStore } from '@/stores/tabStore'
 
 /**
  * UI chrome visibility, in two halves:
@@ -225,7 +224,7 @@ export function useIframeScrollbarsHidden(getIframe: () => HTMLIFrameElement | n
  * Reading mode — F9, handled in the app-wide block of `useAppTitleBarShortcuts`.
  *
  * A "check all / uncheck all" over the hideable chrome: title bars (Ctrl+H),
- * book-view toolbars (Ctrl+B), the PDF.js toolbar (per PDF tab) and hidden scrollbars (Ctrl+Shift+H). There is
+ * the reading toolbar (Ctrl+B; book view and PDF view) and hidden scrollbars (Ctrl+Shift+H). There is
  * no stored reading-mode flag — whether it is "on" is derived from the
  * individual states, so the individual shortcuts keep working and F9 never
  * fights them: if anything is still visible, F9 hides everything; only when
@@ -237,21 +236,13 @@ export function useIframeScrollbarsHidden(getIframe: () => HTMLIFrameElement | n
 export function toggleReadingMode() {
   const settingsStore = useSettingsStore()
   const bookViewStore = useBookViewStore()
-  const tabStore = useTabStore()
-  const activePdfTab = tabStore.activeTab.route === '/pdf-view' ? tabStore.activeTab : undefined
-
   const everythingHidden =
     settingsStore.scrollbarsHidden &&
     !titleBarVisible.value &&
-    !bookViewStore.getToolbarVisible() &&
-    (activePdfTab === undefined || activePdfTab.pdfViewerTitleBarVisible === false)
+    !bookViewStore.getToolbarVisible()
   const hideAll = !everythingHidden
 
   if (settingsStore.scrollbarsHidden !== hideAll) toggleScrollbarsHidden()
   titleBarVisible.value = !hideAll
   if (bookViewStore.getToolbarVisible() === hideAll) bookViewStore.toggleToolbar()
-  // PDF.js toolbar (Ctrl+B in a PDF tab) — per tab, so every PDF tab follows.
-  for (const tab of tabStore.tabs) {
-    if (tab.route === '/pdf-view') tabStore.updateTab(tab.id, { pdfViewerTitleBarVisible: !hideAll })
-  }
 }

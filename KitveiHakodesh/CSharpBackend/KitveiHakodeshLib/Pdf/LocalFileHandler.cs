@@ -370,6 +370,67 @@ namespace KitveiHakodeshLib.LocalFile
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
+        /// <summary>PDF viewer Save / page organizer save: write the whole PDF over a file a tab has
+        /// open (its folder is mapped for viewing). Atomic write rules: Core PdfFileWriter.</summary>
+        public void HandleWritePdfFile(JsonElement root, string id)
+        {
+            try
+            {
+                string filePath = root.GetProperty("filePath").GetString();
+                if (!IsOpenedPdf(filePath)) { _bridge.Reply(id, new { error = "file is not open" }); return; }
+                string error = PdfFileWriter.Write(
+                    filePath,
+                    Convert.FromBase64String(root.GetProperty("bytes").GetString() ?? ""),
+                    mustExist: true);
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>PDF viewer Save As: the user picks the place in the save dialog, then the whole
+        /// PDF is written there (Core PdfFileWriter). Replies { filePath, fileName } | { cancelled } | { error }.</summary>
+        public void HandleSavePdfAs(JsonElement root, string id, Control owner)
+        {
+            // Read out of `root` before BeginInvoke: its JsonDocument is disposed when this returns.
+            string suggested = root.TryGetProperty("suggestedName", out var sn) && sn.ValueKind == JsonValueKind.String ? sn.GetString() : null;
+            string initialDir = root.TryGetProperty("initialDir", out var idr) && idr.ValueKind == JsonValueKind.String ? idr.GetString() : null;
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(root.GetProperty("bytes").GetString() ?? ""); }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
+            owner.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    string filePath;
+                    using (var dlg = new SaveFileDialog())
+                    {
+                        dlg.Title = HostText.SaveFileTitle;
+                        dlg.Filter = "PDF (*.pdf)|*.pdf";
+                        dlg.DefaultExt = "pdf";
+                        dlg.AddExtension = true;
+                        dlg.OverwritePrompt = true;
+                        if (!string.IsNullOrEmpty(suggested)) dlg.FileName = suggested;
+                        if (!string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir)) dlg.InitialDirectory = initialDir;
+                        if (dlg.ShowDialog(owner) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
+                        filePath = dlg.FileName;
+                    }
+                    string error = PdfFileWriter.Write(filePath, bytes, mustExist: false);
+                    _bridge.Reply(id, error == null
+                        ? (object)new { filePath, fileName = Path.GetFileName(filePath) }
+                        : new { error });
+                }
+                catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+            }));
+        }
+
+        /// <summary>True when the path is an existing PDF whose folder a tab has mapped for viewing.</summary>
+        private bool IsOpenedPdf(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+            string folder = Path.GetDirectoryName(filePath);
+            return folder != null && _hosts.ContainsKey(folder);
+        }
+
         public async Task HandleReadTxtFileContent(JsonElement root, string id)
         {
             try

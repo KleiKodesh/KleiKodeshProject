@@ -2,7 +2,7 @@
   /* Tells the browser which scheme the app renders, so everything IT draws —
      native scrollbars, datalist/select popups, date pickers, autofill, the
      pre-paint canvas — comes in the matching variant instead of always light.
-     The PDF viewer iframe gets its own copy in syncPdfViewerTheme; local-file
+     Local-file
      iframes get it via the htmlViewTheme message. */
   color-scheme: light;
   --bg-primary: var(--bg-primary-custom, #ffffff);

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { OcrScript } from '@/features/pdf-viewer/pdfViewerTypes'
+import type { OcrScript } from '@/features/pdf-reader/pdfOcrTypes'
 
 export const usePdfOcrStore = defineStore('pdfOcr', () => {
   const isActive = ref(false)

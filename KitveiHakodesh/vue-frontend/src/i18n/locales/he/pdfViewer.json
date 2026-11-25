@@ -17,23 +17,5 @@
     "force": "כפה"
   },
   "closeEsc": "סגור (Esc)",
-  "cancel": "ביטול",
-  "loading": {
-    "converting": "ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה",
-    "downloadingProgress": "מוריד את הספר — {progress}",
-    "downloadingWait": "מוריד את הספר — אנא המתן"
-  },
-  "noFile": "לא נבחר קובץ",
-  "menu": {
-    "copyFailed": "לא ניתן היה להעתיק את הטקסט שנבחר.",
-    "noPdf": "לא נטען קובץ PDF.",
-    "renderFailed": "לא ניתן היה לצייר את הדף.",
-    "pageCopiedAsImage": "דף {page} הועתק כתמונה.",
-    "imageFailed": "לא ניתן היה ליצור את התמונה.",
-    "clipboardUnavailableSaved": "הלוח אינו זמין — דף {page} נשמר כתמונה.",
-    "copy": "העתק",
-    "copyIntoWord": "העתק לתוך וורד",
-    "copyPageAsImage": "העתק דף כתמונה",
-    "searchInCatalog": "חיפוש ספר בכתבי הקודש"
-  }
+  "cancel": "ביטול"
 }

@@ -775,11 +775,6 @@ export const useSettingsStore = defineStore('settings', () => {
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-    allHostWindows().flatMap((host) => [...host.document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')]).forEach((iframe) => {
-      try {
-        iframe.contentDocument?.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-      } catch { /* cross-origin guard */ }
-    })
   }
 
   function completeSetup() {

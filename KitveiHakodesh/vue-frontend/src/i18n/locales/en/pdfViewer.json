@@ -17,23 +17,5 @@
     "force": "Force"
   },
   "closeEsc": "Close (Esc)",
-  "cancel": "Cancel",
-  "loading": {
-    "converting": "Converting to PDF. This may take a while",
-    "downloadingProgress": "Downloading the book: {progress}",
-    "downloadingWait": "Downloading the book. Please wait"
-  },
-  "noFile": "No file selected",
-  "menu": {
-    "copyFailed": "Could not copy the selected text.",
-    "noPdf": "No PDF loaded.",
-    "renderFailed": "Could not render the page.",
-    "pageCopiedAsImage": "Page {page} copied as an image.",
-    "imageFailed": "Could not create the image.",
-    "clipboardUnavailableSaved": "Clipboard unavailable. Page {page} was saved as an image.",
-    "copy": "Copy",
-    "copyIntoWord": "Copy into Word",
-    "copyPageAsImage": "Copy page as image",
-    "searchInCatalog": "Search book in Kitvei Hakodesh"
-  }
+  "cancel": "Cancel"
 }

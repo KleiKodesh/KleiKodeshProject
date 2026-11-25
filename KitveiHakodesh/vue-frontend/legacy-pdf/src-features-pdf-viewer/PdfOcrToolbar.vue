@@ -6,10 +6,11 @@
  */
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import type { usePdfOcrSelection } from './usePdfOcrSelection'
+import type { Ref } from 'vue'
 
 defineProps<{
-  ocr: ReturnType<typeof usePdfOcrSelection>
+  /** Any OCR mode with an on flag and a way out: the iframe viewer's usePdfOcrSelection or the new view's usePdfReaderOcr. */
+  ocr: { isActive: Ref<boolean>; deactivate: () => void }
   /** Pin the toolbar to the host box (a side panel) instead of the window's top centre. */
   contained?: boolean
 }>()

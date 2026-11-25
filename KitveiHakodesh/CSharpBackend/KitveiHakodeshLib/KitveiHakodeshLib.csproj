@@ -158,6 +158,10 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerPrintPdf.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="AppViewerFocus.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
@@ -187,6 +191,9 @@
     </Compile>
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileOpenRules.cs">
       <Link>Core\LocalFiles\LocalFileOpenRules.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\PdfFileWriter.cs">
+      <Link>Core\LocalFiles\PdfFileWriter.cs</Link>
     </Compile>
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\PdfIncrementalSaveWriter.cs">
       <Link>Core\LocalFiles\PdfIncrementalSaveWriter.cs</Link>

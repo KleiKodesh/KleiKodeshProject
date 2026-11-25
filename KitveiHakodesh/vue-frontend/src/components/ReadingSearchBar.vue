@@ -31,6 +31,10 @@ const props = defineProps<{
   query?: string
   /** The input's placeholder while a panel is searched; the book view's "search the commentary" by default. */
   panelPlaceholder?: string
+  /** A short note beside the count ("not found", "continued from the top"); none by default. */
+  statusMessage?: string | null
+  /** Shows `statusMessage` as a warning (nothing found). */
+  statusDanger?: boolean
 }>()
 const emit = defineEmits<{
   close: []
@@ -293,6 +297,7 @@ defineExpose({ focus: focusInput })
           @blur="recents.onBlur"
           @keydown="onKeydown"
         />
+        <span v-if="props.statusMessage" class="search-status" :class="{ 'no-match': props.statusDanger }" :title="props.statusMessage" role="status">{{ props.statusMessage }}</span>
         <span class="match-count" :class="{ 'no-match': props.matchCount === 0 }">{{ matchLabel }}</span>
         <!-- Recents chevron, and the only way to open the list. Shown only while the
              field is empty (with a query typed the reader is searching, not browsing
@@ -348,6 +353,11 @@ defineExpose({ focus: focusInput })
       </div>
       <!-- Always shown: this divides the field (and the mode toggle, when present) from
            the match navigation, which is never hidden. -->
+      <!-- Optional page-specific search options (e.g. the PDF viewer's find options). -->
+      <template v-if="$slots.options">
+        <span class="sep" />
+        <slot name="options" />
+      </template>
       <span class="sep" />
 
       <button class="nav-btn" :disabled="props.matchCount === 0" @click="emit('prev')">
@@ -433,6 +443,19 @@ defineExpose({ focus: focusInput })
 }
 
 .match-count.no-match { color: var(--status-danger); }
+
+.search-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.search-status.no-match { color: var(--status-danger); }
 
 .sep {
   width: 1px;
