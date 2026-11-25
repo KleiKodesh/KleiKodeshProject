@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { getDbPathInfo, pickDbPath } from '@/webview-host/bridge'
@@ -84,10 +85,12 @@ async function pickLibrary() {
 // The user may close the banner; a DIFFERENT message (or the same one after it cleared) shows again.
 const dismissed = ref(false)
 watch(texts, () => { dismissed.value = false })
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <Transition name="service-banner">
       <div v-if="texts && !dismissed" class="service-banner" role="alert">
         <span class="service-banner-icon" aria-hidden="true">

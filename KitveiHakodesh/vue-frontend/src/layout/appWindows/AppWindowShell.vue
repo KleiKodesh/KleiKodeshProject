@@ -6,12 +6,15 @@ import SiteFrameLayer from '@/features/websites/SiteFrameLayer.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useTabStore } from '@/stores/tabStore'
+import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 
 const props = defineProps<{ windowKey: string }>()
 const tabStore = useTabStore()
 
 // This window got the focus: the reader works here now (shortcuts, new tabs).
 useEventListener(useHostWindow(), 'focus', () => tabStore.focusWindow(props.windowKey))
+// Swipes in this window move through this window's tab's history.
+useTabSwipeNavigation(useHostWindow(), props.windowKey)
 </script>
 
 <template>

@@ -35,7 +35,7 @@ export interface CalendarDay {
   yomKippurKatan: string | null
   fastStart: string | null
   fastEnd: string | null
-  /** The second opinion's fast start / end (alot 16.1 deg, tzeit 7.083 deg) - null where it is the preset's own line. */
+  /** The second opinion's fast start / end (alot 16.05 deg, tzeit 7.083 deg) - null where it is the preset's own line. */
   fastStartAlt: { name: ZmanName, time: string } | null
   fastEndAlt: { name: ZmanName, time: string } | null
   // learning

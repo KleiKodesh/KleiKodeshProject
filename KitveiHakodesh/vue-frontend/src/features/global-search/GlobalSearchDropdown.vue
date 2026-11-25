@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
@@ -225,10 +226,12 @@ function getFileIcon(item: FileSearchResult): FileIconInfo {
 function getTabIcon(route: string): FileIconInfo {
   return iconInfo(iconKeyForRoute(route))
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div dir="rtl"
       ref="dropdownRef"
       class="global-search-dropdown"

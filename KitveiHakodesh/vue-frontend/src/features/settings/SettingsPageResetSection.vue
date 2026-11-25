@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
@@ -88,6 +89,8 @@ function confirmResetAll() {
     action: resetEverything,
   })
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -144,7 +147,7 @@ function confirmResetAll() {
     Teleported to <body> because this section is inside a scrolling settings pane that
     would otherwise clip the overlay and confine it to a fraction of the screen.
   -->
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div v-if="resetting" class="reset-overlay">
       <LoadingAnimation :text="RESET_ALL_LABEL" />
     </div>

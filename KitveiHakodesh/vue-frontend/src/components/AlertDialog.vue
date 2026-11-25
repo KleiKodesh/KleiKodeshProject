@@ -19,7 +19,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="alert-backdrop" @click.self="emit('close')">
       <div class="alert-dialog" role="alertdialog" aria-modal="true">
         <p class="alert-message">{{ message }}</p>

@@ -89,6 +89,9 @@ export function openDetachedWindow(
 
   // Created by the popup's own document so it is a plain element there.
   const mountElement = popupDocument.createElement('div')
+  // The app's root in this window too: app-wide settings on #app (the zoom) reach it.
+  mountElement.id = 'app'
+  mountElement.style.zoom = window.document.getElementById('app')?.style.zoom ?? ''
   mountElement.style.cssText =
     'position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg-primary);color:var(--text-primary)'
   popupDocument.body.appendChild(mountElement)

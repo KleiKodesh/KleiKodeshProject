@@ -32,7 +32,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="confirm-backdrop" @click.self="emit('cancel')">
       <div class="confirm-dialog">
         <p class="confirm-title">{{ title }}</p>

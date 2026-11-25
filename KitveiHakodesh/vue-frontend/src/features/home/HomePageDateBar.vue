@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useNow, useWindowSize, computedAsync } from '@vueuse/core'
@@ -24,6 +25,8 @@ const props = defineProps<{
   statusBar?: boolean
 }>()
 
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 const widgets = useWidgetWindowStore()
 const { showClock, dateBarPinned } = storeToRefs(useSettingsStore())
 
@@ -31,8 +34,9 @@ const { showClock, dateBarPinned } = storeToRefs(useSettingsStore())
 // is already showing it — i.e. showClock && fullscreen — so the time is never
 // displayed twice.
 const now = useNow({ interval: 10_000 })
-const { height: windowHeight } = useWindowSize()
-const isFullscreen = computed(() => windowHeight.value >= screen.height)
+// This window's own size and screen (an extra window may be elsewhere, at another size).
+const { height: windowHeight } = useWindowSize({ window: hostWindow })
+const isFullscreen = computed(() => windowHeight.value >= hostWindow.screen.height)
 const clockTime = computed(() =>
   now.value.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
 )
@@ -272,7 +276,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
         </button>
       </div>
-      <Teleport to="body">
+      <Teleport :to="hostWindow.document.body">
         <div v-if="isZmanPopupOpen" class="zman-popup-anchor" :style="zmanPopupStyle">
           <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="zmanCityName" />
         </div>
@@ -289,7 +293,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
         {{ dateInfo.hebrewDate }}
       </button>
     </div>
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div
         v-if="isCalendarOpen"
         ref="calendarPopupRef"
@@ -311,7 +315,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           {{ $t('home.dateBar.dailyLearning') }}
         </button>
       </div>
-      <Teleport to="body">
+      <Teleport :to="hostWindow.document.body">
         <div
           v-if="isLearningOpen"
           ref="learningMenuRef"

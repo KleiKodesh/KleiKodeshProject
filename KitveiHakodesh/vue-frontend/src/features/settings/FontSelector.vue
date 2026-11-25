@@ -108,7 +108,7 @@ defineExpose({ isOpen })
         class="select-chevron"
       />
     </div>
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div
         v-if="isOpen"
         ref="dropdownRef"

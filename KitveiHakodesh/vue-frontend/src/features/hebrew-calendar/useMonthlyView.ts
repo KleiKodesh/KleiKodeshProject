@@ -22,7 +22,7 @@ export const GREG_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'au
   t(`hebrewCalendar.gregMonths.${k}`),
 )
 
-function hebYearGem(year: number): string {
+export function hebYearGem(year: number): string {
   try {
     return new HDate(1, 7, year).renderGematriya().split(' ').pop() ?? String(year)
   } catch {

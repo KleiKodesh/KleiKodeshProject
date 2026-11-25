@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 // Bar clock button + world clock dropdown (current time in other time zones).
 // Same dropdown pattern as the Limud Yomi menu in HomePageDateBar.vue.
@@ -111,6 +112,8 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
   event.preventDefault()
   closeWorldClockMenuAndRefocus()
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -124,7 +127,7 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       {{ clockTime }}
     </button>
   </div>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div
       v-if="isWorldClockOpen"
       ref="worldClockMenuRef"

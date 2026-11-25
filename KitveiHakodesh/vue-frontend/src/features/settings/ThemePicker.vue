@@ -109,7 +109,7 @@ function select(key: ThemeKey) {
     />
   </div>
 
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div v-if="isOpen" ref="dropdownRef" class="theme-dropdown" :style="dropdownStyle">
       <div class="theme-grid-header">
         <span></span>

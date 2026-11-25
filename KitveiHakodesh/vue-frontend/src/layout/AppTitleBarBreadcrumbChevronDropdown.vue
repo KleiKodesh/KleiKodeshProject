@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, nextTick } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -58,6 +59,8 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
   isOpen.value = false
   emit('select', item)
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -72,7 +75,7 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
       <IconChevronDown16Regular />
     </button>
 
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div
         v-if="isOpen"
         ref="dropdownRef"

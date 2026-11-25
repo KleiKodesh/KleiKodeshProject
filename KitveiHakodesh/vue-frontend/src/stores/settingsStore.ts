@@ -1,3 +1,4 @@
+import { allHostWindows } from '@/composables/detachedWindow/hostWindow'
 import { defineStore } from 'pinia'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Ref } from 'vue'
@@ -521,8 +522,11 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
     style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-    const app = document.getElementById('app')
-    if (app) app.style.zoom = appZoom.value.toString()
+    // The app's zoom, in every window it draws (an extra window's root is #app too).
+    for (const host of allHostWindows()) {
+      const app = host.document.getElementById('app')
+      if (app) app.style.zoom = appZoom.value.toString()
+    }
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -771,7 +775,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-    document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]').forEach((iframe) => {
+    allHostWindows().flatMap((host) => [...host.document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')]).forEach((iframe) => {
       try {
         iframe.contentDocument?.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
       } catch { /* cross-origin guard */ }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, h } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { onLongPress } from '@vueuse/core'
@@ -102,6 +103,8 @@ function onSelectItem(index: number) {
   isOpen.value = false
   pane.goToHistoryIndex(index)
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -118,7 +121,7 @@ function onSelectItem(index: number) {
     <IconArrowLeft20Regular class="dir-icon" v-else />
   </button>
 
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div
       v-if="isOpen"
       ref="dropdownRef"

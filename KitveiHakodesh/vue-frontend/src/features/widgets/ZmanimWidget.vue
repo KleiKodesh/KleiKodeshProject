@@ -2,16 +2,25 @@
 // The zmanim tool: a title with the current place (country › city › neighbourhood) and a
 // settings toggle. The settings popup holds the place, the community custom and which
 // zman lines to show (the list shows the common ones by default; more or fewer on request).
-import { computed, onMounted, ref, shallowRef, toRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import NextZmanPopup from '@/features/home/NextZmanPopup.vue'
 import { useNextZman } from '@/features/home/useNextZman'
-import { IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconChevronLeft20Regular, IconChevronRight20Regular, IconHome20Regular, IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
+import HebrewDatePicker from '@/components/HebrewDatePicker.vue'
 import ZmanimSettingsDialog from '@/features/hebrew-calendar/ZmanimSettingsDialog.vue'
 import { placeTree, type PlaceTree } from '@/features/hebrew-calendar/zmanimPlaces'
 
 /** The day to show (the separate calendar app's picked day); today when absent. */
 const props = defineProps<{ date?: Date | null }>()
-const { rows, city, setCity } = useNextZman(toRef(() => props.date ?? null))
+/** The day shown: the calendar's picked day, moved by the widget's own back/forward/today. */
+const day = ref(props.date ?? new Date())
+watch(() => props.date, (d) => { day.value = d ?? new Date() })
+function shiftDay(by: number) {
+  const d = new Date(day.value)
+  d.setDate(d.getDate() + by)
+  day.value = d
+}
+const { rows, city, setCity } = useNextZman(day)
 const settingsOpen = ref(false)
 
 const tree = shallowRef<PlaceTree | null>(null)
@@ -45,6 +54,12 @@ const placePath = computed(() => {
         @click="settingsOpen = true"
       ><IconSettings20Regular /></button>
     </div>
+    <div class="zw-nav">
+      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.prev')" @click="shiftDay(-1)"><IconChevronRight20Regular /></button>
+      <HebrewDatePicker v-model="day" />
+      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.next')" @click="shiftDay(1)"><IconChevronLeft20Regular /></button>
+      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.today')" @click="day = new Date()"><IconHome20Regular /></button>
+    </div>
     <ZmanimSettingsDialog v-if="settingsOpen" :place-id="city?.id" @pick="setCity" @close="settingsOpen = false" />
     <NextZmanPopup :rows="rows" :city-name="''" />
   </div>
@@ -56,6 +71,13 @@ const placePath = computed(() => {
   align-items: center;
   gap: 6px;
   margin: 8px 8px 0;
+}
+.zw-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin: 4px 8px 0;
 }
 .zw-place {
   flex: 1;

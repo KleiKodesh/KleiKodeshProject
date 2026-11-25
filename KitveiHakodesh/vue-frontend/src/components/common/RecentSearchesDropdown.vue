@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * The recent-searches popup: the list of previously-run queries that drops under a
  * search input. Draws what `useRecentSearches` holds — this component owns no state.
@@ -85,10 +86,12 @@ watch(
       ?.scrollIntoView({ block: 'nearest' })
   },
 )
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div
       v-if="recents.open.value && recents.suggestions.value.length"
       ref="bubbleRef"
