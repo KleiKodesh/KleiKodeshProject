@@ -40,8 +40,8 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
           <label class="zs-label">{{ $t('settings.calendar.community') }}</label>
           <CommunityPicker />
           <p class="zs-legend" data-rounding-legend>
-            <span>18:05<RoundingMark sign="earlier" /> {{ $t('hebrewCalendar.rounded.legendEarlier') }}</span>
-            <span>18:05<RoundingMark sign="later" /> {{ $t('hebrewCalendar.rounded.legendLater') }}</span>
+            <span><RoundingMark sign="earlier">18:05</RoundingMark> {{ $t('hebrewCalendar.rounded.legendEarlier') }}</span>
+            <span><RoundingMark sign="later">18:05</RoundingMark> {{ $t('hebrewCalendar.rounded.legendLater') }}</span>
           </p>
           <label class="zs-label">{{ $t('hebrewCalendar.chooseOpinions') }}</label>
           <ZmanimOpinionsPanel />

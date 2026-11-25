@@ -164,10 +164,10 @@
   },
   "zmanimNotReached": "השמש אינה מגיעה לזווית זו הלילה",
   "rounded": {
-    "earlier": "עוגל מוקדם יותר",
-    "later": "עוגל מאוחר יותר",
-    "legendEarlier": "עוגל מוקדם (הזמן האמיתי מעט אחריו)",
-    "legendLater": "עוגל מאוחר (הזמן האמיתי מעט לפניו)"
+    "earlier": "בעיגול כלפי מטה",
+    "later": "בעיגול כלפי מעלה",
+    "legendEarlier": "בעיגול כלפי מטה",
+    "legendLater": "בעיגול כלפי מעלה"
   },
   "otherOpinions": "שיטות נוספות",
   "specialZmanim": {

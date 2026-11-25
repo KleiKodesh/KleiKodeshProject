@@ -138,27 +138,27 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         "
         class="extras"
       >
-        <span v-if="day.havdalah" class="ev havdalah">{{ $t('hebrewCalendar.day.havdalah', { time: day.havdalah }) }}<RoundingMark :sign="day.havdalahSign" /></span>
+        <span v-if="day.havdalah" class="ev havdalah"><RoundingMark :sign="day.havdalahSign">{{ $t('hebrewCalendar.day.havdalah', { time: day.havdalah }) }}</RoundingMark></span>
         <span v-if="day.candleLighting" class="ev candle"
-          >{{ $t('hebrewCalendar.day.candleLighting', { time: day.candleLighting }) }}<RoundingMark :sign="day.candleSign" /></span
+          ><RoundingMark :sign="day.candleSign">{{ $t('hebrewCalendar.day.candleLighting', { time: day.candleLighting }) }}</RoundingMark></span
         >
         <span v-if="day.omer" class="ev muted">{{ day.omer }}</span>
         <span v-if="day.yomKippurKatan" class="ev holiday">{{ day.yomKippurKatan }}</span>
-        <span v-if="day.fastStart" class="ev muted">{{ day.fastStart }}<RoundingMark :sign="day.fastStartSign" /></span>
-        <span v-if="day.fastEnd" class="ev muted">{{ day.fastEnd }}<RoundingMark :sign="day.fastEndSign" /></span>
-        <span v-if="day.fastStartAlt" class="ev muted">{{ t(zmanLabelKey(day.fastStartAlt.name)) }}: {{ day.fastStartAlt.time }}<RoundingMark :sign="day.fastStartAlt.sign" /></span>
-        <span v-if="day.fastEndAlt" class="ev muted">{{ t(zmanLabelKey(day.fastEndAlt.name)) }}: {{ day.fastEndAlt.time }}<RoundingMark :sign="day.fastEndAlt.sign" /></span>
+        <span v-if="day.fastStart" class="ev muted"><RoundingMark :sign="day.fastStartSign">{{ day.fastStart }}</RoundingMark></span>
+        <span v-if="day.fastEnd" class="ev muted"><RoundingMark :sign="day.fastEndSign">{{ day.fastEnd }}</RoundingMark></span>
+        <span v-if="day.fastStartAlt" class="ev muted">{{ t(zmanLabelKey(day.fastStartAlt.name)) }}: <RoundingMark :sign="day.fastStartAlt.sign">{{ day.fastStartAlt.time }}</RoundingMark></span>
+        <span v-if="day.fastEndAlt" class="ev muted">{{ t(zmanLabelKey(day.fastEndAlt.name)) }}: <RoundingMark :sign="day.fastEndAlt.sign">{{ day.fastEndAlt.time }}</RoundingMark></span>
         <span v-if="day.shabbatMevarchim" class="ev muted italic">{{ day.shabbatMevarchim }}</span>
         <span v-if="day.molad" class="ev muted">{{ day.molad }}</span>
       </div>
       <div class="zmanim-grid">
         <template v-for="z in day.specialZmanim" :key="z.key">
           <span class="zg-label" data-special-zman>{{ $t(specialZmanLabelKey(z.key)) }}</span>
-          <span class="zg-value">{{ z.value ?? '—' }}<RoundingMark :sign="z.sign" /></span>
+          <span class="zg-value"><RoundingMark :sign="z.sign">{{ z.value ?? '—' }}</RoundingMark></span>
         </template>
         <template v-for="z in zmanRows" :key="z.key">
           <span class="zg-label" :class="{ primary: z.primary }" :data-primary-zman="z.primary || undefined">{{ z.label }}</span>
-          <span v-if="day.zmanim[z.key] != null" class="zg-value" :class="{ primary: z.primary }">{{ day.zmanim[z.key] }}<RoundingMark :sign="day.zmanimSigns[z.key]" /></span>
+          <span v-if="day.zmanim[z.key] != null" class="zg-value" :class="{ primary: z.primary }"><RoundingMark :sign="day.zmanimSigns[z.key]">{{ day.zmanim[z.key] }}</RoundingMark></span>
           <span v-else class="zg-value" :class="{ primary: z.primary }" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
         </template>
       </div>
