@@ -1,4 +1,5 @@
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Drawing;
 using System.IO;
@@ -83,6 +84,28 @@ namespace KitveiHakodeshLib
             {
                 var stream = new MemoryStream();
                 Task capture = _webView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+                if (await Task.WhenAny(capture, Task.Delay(1500)) != capture) return null;
+                await capture;
+                stream.Position = 0;
+                // The stream stays open: GDI+ reads from it for as long as the image lives.
+                return Image.FromStream(stream);
+            }
+            catch (Exception) { return null; }
+        }
+
+        /// <summary>
+        /// A picture of the browser view inside <paramref name="host"/> (an extra app window's
+        /// page), as it is drawn; null when there is none or the capture took too long.
+        /// </summary>
+        public static async Task<Image> CaptureViewPictureAsync(Control host)
+        {
+            WebView2 view = null;
+            foreach (Control child in host.Controls) if (child is WebView2 w) { view = w; break; }
+            if (view?.CoreWebView2 == null || view.Width <= 0) return null;
+            try
+            {
+                var stream = new MemoryStream();
+                Task capture = view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
                 if (await Task.WhenAny(capture, Task.Delay(1500)) != capture) return null;
                 await capture;
                 stream.Position = 0;

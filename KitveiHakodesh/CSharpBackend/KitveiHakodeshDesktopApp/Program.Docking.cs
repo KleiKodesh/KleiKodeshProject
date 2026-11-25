@@ -132,9 +132,9 @@ namespace KitveiHakodeshDesktopApp
             public bool AcceptsDrops(Form window)
             {
                 if (ToolWindowPages.TryGetValue(window, out MainForm toolOwner)) return !window.IsDisposed && AcceptsDrops(toolOwner);
-                if (window is PageWindowForm page) return PageWindows.Contains(page) && AcceptsDrops(page.PageOwner);
+                if (window is PageWindowForm page) return PageWindows.Contains(page) && !page.IsDisposed && PageIsOpen(page.PageOwner);
                 var main = window as MainForm;
-                return main != null && main.Visible && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
+                return main != null && main.Visible && PageIsOpen(main);
             }
 
             // A tool window let go on a strip: a widget becomes a tab there (any of our windows),
@@ -147,6 +147,11 @@ namespace KitveiHakodeshDesktopApp
                 if (owner.Viewer.MergeToolWindowIntoTabs(window, into.Viewer)) target.Activate();
             }
 
+            // A main window whose page still runs: open and not closing. It may be hidden - closed by
+            // the reader while windows its page draws stay - and those windows still take drops.
+            private static bool PageIsOpen(MainForm main)
+                => main != null && !main.IsDisposed && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
+
             public int TabCount(FluentChromeTabsForm window)
                 => (window as MainForm)?.TabsMirror.PageTabCount ?? (window as PageWindowForm)?.TabsMirror.PageTabCount ?? window.Tabs.Count;
 
@@ -156,7 +161,10 @@ namespace KitveiHakodeshDesktopApp
             {
                 ScreenDocking.DarkMode = AppSettingsRegistry.GetDarkMode();
                 ScreenDocking.AccentColor = ParseColor(AppSettingsRegistry.GetAccentColor(), Color.FromArgb(124, 92, 252));
-                return window is MainForm main ? main.Viewer.CapturePagePictureAsync() : Task.FromResult<Image>(null);
+                if (window is MainForm main) return main.Viewer.CapturePagePictureAsync();
+                // A window the page draws: its own view (the popup's WebView2) is pictured.
+                if (window is PageWindowForm page) return AppViewer.CaptureViewPictureAsync(page.Content);
+                return Task.FromResult<Image>(null);
             }
 
             private static Color ParseColor(string hex, Color fallback)

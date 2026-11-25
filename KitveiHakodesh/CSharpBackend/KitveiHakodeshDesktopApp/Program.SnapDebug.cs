@@ -61,6 +61,7 @@ namespace KitveiHakodeshDesktopApp
                     case "min": w.WindowState = FormWindowState.Minimized; break;
                     case "tabs": log.Append(SnapDebugTabs()); break;
                     case "front": w.Activate(); break;
+                    case "bounds": w.WindowState = FormWindowState.Normal; w.Bounds = new Rectangle(int.Parse(p[2]), int.Parse(p[3]), int.Parse(p[4]), int.Parse(p[5])); break;
                     case "merge": Docking.MergeIntoTabs(w, (FluentChromeTabsForm)SnapDebugWindow(p[2])); break;
                     case "restore": w.WindowState = FormWindowState.Normal; break;
                 }
