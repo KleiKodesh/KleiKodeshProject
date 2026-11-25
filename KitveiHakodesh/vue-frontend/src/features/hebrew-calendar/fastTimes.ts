@@ -6,6 +6,7 @@
 // line of the day rounds up; the end is a nightfall, so it rounds UP (later).
 import { formatTime, type Rounding, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
 import type { DayTimedZmanim } from './zmanimPlaces'
+import { roundSign, type RoundSign } from './zmanRounding'
 
 type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 
@@ -16,11 +17,11 @@ export const DEFAULT_FAST_LINES = { alot: 'alot90', sunset: 'sunset', tzeit: 'tz
 export const ALT_FAST_LINES = { minorStart: 'alot', end: 'tzeit7083' } as const satisfies Partial<Record<FastEdge, ZmanName>>
 
 /** The second opinion's line and time for a fast edge; null for the sunset start, or when it is the preset's own line. */
-export function altFastTime(edge: FastEdge, zmanim: DayTimedZmanim, primary: PrimaryGroups | null, tzid: string): { name: ZmanName, time: string } | null {
+export function altFastTime(edge: FastEdge, zmanim: DayTimedZmanim, primary: PrimaryGroups | null, tzid: string): { name: ZmanName, time: string, sign: RoundSign } | null {
   if (!primary || edge === 'majorStart') return null
   const name = ALT_FAST_LINES[edge]
   const time = printEdge(edge, zmanim, name, tzid)
-  return name === fastLine(edge, primary) || !time ? null : { name, time }
+  return name === fastLine(edge, primary) || !time ? null : { name, time, sign: edgeSign(edge, zmanim, name) }
 }
 
 export type FastEdge = 'minorStart' | 'majorStart' | 'end'
@@ -31,6 +32,16 @@ export const FAST_EDGE_ROUNDING: Readonly<Record<FastEdge, Rounding>> = { minorS
 function printEdge(edge: FastEdge, zmanim: DayTimedZmanim, name: ZmanName, tzid: string): string | null {
   const z = zmanim[name]
   return z ? formatTime(z.time.getTime(), FAST_EDGE_ROUNDING[edge], tzid) : null
+}
+
+function edgeSign(edge: FastEdge, zmanim: DayTimedZmanim, name: ZmanName): RoundSign {
+  const z = zmanim[name]
+  return z ? roundSign(z.time.getTime(), FAST_EDGE_ROUNDING[edge]) : null
+}
+
+/** Which way a fast edge's printed minute was rounded (null until the preset is loaded). */
+export function fastSign(edge: FastEdge, zmanim: DayTimedZmanim, primary: PrimaryGroups | null): RoundSign {
+  return primary ? edgeSign(edge, zmanim, fastLine(edge, primary)) : null
 }
 
 /** The line a fast edge follows under a preset. */

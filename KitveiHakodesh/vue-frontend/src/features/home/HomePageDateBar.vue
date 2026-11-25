@@ -19,6 +19,7 @@ import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
 import { savedPlaceName } from '@/features/hebrew-calendar/savedPlaceName'
 import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
+import RoundingMark from '@/features/hebrew-calendar/RoundingMark.vue'
 
 const props = defineProps<{
   /** Rendered by App.vue as the window's status bar (pinned) rather than under the home page. */
@@ -273,7 +274,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           :title="$t('home.dateBar.nextZmanTitle', { countdown: nextZmanCountdown })"
           @click="toggleZmanPopup"
         >
-          <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
+          <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}<RoundingMark :sign="nextZman.sign" />
         </button>
       </div>
       <Teleport :to="hostWindow.document.body">

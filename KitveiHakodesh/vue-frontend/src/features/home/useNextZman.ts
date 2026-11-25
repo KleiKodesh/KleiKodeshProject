@@ -6,7 +6,7 @@ import { OPTIONAL_ZMANIM, zmanLabelKey, type CalendarZmanim } from '@/features/h
 import { lsSet } from '@/utils/persistence'
 import { isCandleLine, useShownZmanNames } from '@/features/hebrew-calendar/zmanimShown'
 import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
-import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
+import type { DayTimedZmanim, Place, RoundSign } from '@/features/hebrew-calendar/zmanimPlaces'
 
 const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 
@@ -54,6 +54,8 @@ export interface NextZman {
   time: Date
   /** As the calendar prints it. */
   printed: string
+  /** Which way the printed minute was rounded. */
+  sign: RoundSign
   /** Minutes until the zman (>= 0). */
   minutesUntil: number
   urgency: ZmanUrgency
@@ -65,6 +67,8 @@ export interface ZmanRow {
   key: keyof CalendarZmanim
   label: string
   time: string // as the calendar prints it, or '—'
+  /** Which way the printed minute was rounded. */
+  sign: RoundSign
   /** The sun never reaches this zman's angle today. */
   missing: boolean
   isNext: boolean
@@ -140,7 +144,7 @@ export function useNextZman(shownDay?: Ref<Date | null>) {
           const urgency: ZmanUrgency =
             minutesUntil <= IMMINENT_MIN ? 'imminent' : minutesUntil <= SOON_MIN ? 'soon' : 'normal'
           const flash = urgency === 'imminent' && CRITICAL_KEYS.has(key)
-          return { key, label, time: t, printed: zman.printed, minutesUntil, urgency, flash }
+          return { key, label, time: t, printed: zman.printed, sign: zman.sign, minutesUntil, urgency, flash }
         }
       }
     }
@@ -198,6 +202,7 @@ export function useNextZman(shownDay?: Ref<Date | null>) {
         key,
         label,
         time: zman ? zman.printed : '—',
+        sign: zman?.sign ?? null,
         missing: !zman,
         // Match by exact instant, not key, so a rolled-over next zman can never
         // highlight a same-named row from the wrong day.

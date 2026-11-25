@@ -28,6 +28,9 @@
   --status-success: #10b981;
   --status-warning: #d98200;
   --status-danger: #e53e3e;
+  /* Zman rounding marks: muted green / red, mixed toward the theme's secondary text (works in both themes). */
+  --round-earlier: color-mix(in srgb, var(--status-success) 60%, var(--text-secondary));
+  --round-later: color-mix(in srgb, var(--status-danger) 60%, var(--text-secondary));
   --header-font: 'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif;
   --text-font: 'Taamey Frank CLM', David, serif;
   --teamim-text-font: 'Taamey Frank CLM', David, serif;

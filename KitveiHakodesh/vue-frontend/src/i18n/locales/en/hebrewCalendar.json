@@ -168,6 +168,12 @@
     "dec": "December"
   },
   "zmanimNotReached": "The sun does not reach this angle tonight",
+  "rounded": {
+    "earlier": "Rounded earlier",
+    "later": "Rounded later",
+    "legendEarlier": "rounded earlier (the real time is a little after)",
+    "legendLater": "rounded later (the real time is a little before)"
+  },
   "otherOpinions": "Other opinions",
   "specialZmanim": {
     "sofAchilatChametzMga": "Latest eating chametz – Magen Avraham (72 fixed min)",

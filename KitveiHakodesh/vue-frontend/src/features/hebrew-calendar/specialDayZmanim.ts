@@ -6,9 +6,10 @@ import {
   formatTime, type SpecialKind, type SpecialZmanName,
 } from 'kleikodesh-zmanim'
 import type { Place } from './zmanimPlaces'
+import { roundSign, type RoundSign } from './zmanRounding'
 
 /** One special-day line: its library name and its printed time (with the date when it falls on another day). */
-export interface SpecialZmanRow { key: SpecialZmanName, value: string | null }
+export interface SpecialZmanRow { key: SpecialZmanName, value: string | null, sign: RoundSign }
 
 /** i18n key of a special zman's label (both locales; zmanLabels.test.ts checks every name). */
 export const specialZmanLabelKey = (name: SpecialZmanName): string => `hebrewCalendar.specialZmanim.${name}`
@@ -40,13 +41,13 @@ export function specialDayRows(place: Place, date: Date): SpecialZmanRow[] {
     const instants = specialZmanInstants(place, civil, kind)
     for (const key of SPECIAL_KINDS[kind]) {
       const ns = instants[key]
-      if (ns == null) { if (kind !== 'kiddushLevana') rows.push({ key, value: null }); continue }
+      if (ns == null) { if (kind !== 'kiddushLevana') rows.push({ key, value: null, sign: null }); continue }
       const ms = epochMs(ns)
       const time = formatTime(ms, SPECIAL_ROUNDING[key], place.tzid)
       const sameDay = new Intl.DateTimeFormat('en-CA', { timeZone: place.tzid }).format(ms) === dayKey
       // Kiddush levana: each start/end line only on the day it falls.
       if (kind === 'kiddushLevana' && !sameDay) continue
-      rows.push({ key, value: sameDay ? time : `${dm.format(ms)} ${time}` })
+      rows.push({ key, value: sameDay ? time : `${dm.format(ms)} ${time}`, sign: roundSign(ms, SPECIAL_ROUNDING[key]) })
     }
   }
   return rows

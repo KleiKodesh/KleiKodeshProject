@@ -9,6 +9,7 @@ import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import PlaceTreePicker from './PlaceTreePicker.vue'
 import CommunityPicker from './CommunityPicker.vue'
 import ZmanimOpinionsPanel from './ZmanimOpinionsPanel.vue'
+import RoundingMark from './RoundingMark.vue'
 
 defineProps<{ placeId: number | undefined }>()
 const emit = defineEmits<{ close: [], pick: [id: number] }>()
@@ -38,6 +39,10 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
           <PlaceTreePicker :place-id="placeId" @pick="(id) => emit('pick', id)" />
           <label class="zs-label">{{ $t('settings.calendar.community') }}</label>
           <CommunityPicker />
+          <p class="zs-legend" data-rounding-legend>
+            <span>18:05<RoundingMark sign="earlier" /> {{ $t('hebrewCalendar.rounded.legendEarlier') }}</span>
+            <span>18:05<RoundingMark sign="later" /> {{ $t('hebrewCalendar.rounded.legendLater') }}</span>
+          </p>
           <label class="zs-label">{{ $t('hebrewCalendar.chooseOpinions') }}</label>
           <ZmanimOpinionsPanel />
         </div>
@@ -118,5 +123,13 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   font-weight: 700;
   color: var(--text-secondary);
   margin-top: 6px;
+}
+.zs-legend {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 0.8em;
+  color: var(--text-secondary);
 }
 </style>
