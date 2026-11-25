@@ -1,5 +1,5 @@
 import { defineAsyncComponent, type Component } from 'vue'
-import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled, IconLightbulb24Filled } from '@iconify-prerendered/vue-fluent'
+import { IconClock24Filled, IconWeatherSunnyLow24Filled, IconBookClock24Filled, IconLightbulb24Filled, IconInfo24Filled } from '@iconify-prerendered/vue-fluent'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
 import type { TabRoute } from '@/stores/tabStore'
@@ -66,6 +66,16 @@ export const WIDGET_ITEMS: WidgetItem[] = [
   },
 ]
 
+/** Widgets opened from elsewhere (not in the widgets menu, no shortcut): About, from Settings. */
+export const HIDDEN_WIDGET_ITEMS: WidgetItem[] = [
+  {
+    id: 'about', route: '/', shortcut: '', icon: IconInfo24Filled, color: '#0f6cbd',
+    text: t('settings.about.title'),
+    description: t('settings.about.appName'),
+    page: defineAsyncComponent(() => import('@/features/about/AboutPage.vue')),
+  },
+]
+
 const CustomHtmlWidget = defineAsyncComponent(() => import('./CustomHtmlWidget.vue'))
 
 function customWidgetItem(widget: CustomWidget): WidgetItem {
@@ -90,5 +100,5 @@ export function allWidgetItems(): WidgetItem[] {
 }
 
 export function findWidgetItem(id: WidgetId): WidgetItem | undefined {
-  return allWidgetItems().find((w) => w.id === id)
+  return [...allWidgetItems(), ...HIDDEN_WIDGET_ITEMS].find((w) => w.id === id)
 }

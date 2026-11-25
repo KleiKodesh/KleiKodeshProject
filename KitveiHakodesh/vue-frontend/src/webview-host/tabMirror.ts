@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
 import { rasterizeTabIcons, rasterizeWidgetTabIcons, widgetTabIconKey } from './rasterizeTabIcons'
-import { WIDGET_ITEMS, findWidgetItem } from '@/features/widgets/widgetItems'
+import { WIDGET_ITEMS, HIDDEN_WIDGET_ITEMS, findWidgetItem } from '@/features/widgets/widgetItems'
 import type { WidgetId } from '@/features/widgets/widgetWindowStore'
 import { addinTabIconKey, rasterizeAddinTabIcons, rasterizeSiteTabIcons, siteTabIconKey } from './rasterizeSiteTabIcons'
 import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/websitesList'
@@ -72,7 +72,7 @@ export function initTabMirror(): void {
     lastRatio = ratio
     lastSiteCount = sites.length
     lastAddinPaths = addinKey
-    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites), rasterizeAddinTabIcons(addinPaths), rasterizeWidgetTabIcons(WIDGET_ITEMS.filter((w) => !isDocumentIconKey(w.id)))]).then(([icons, siteIcons, addinIcons, widgetIcons]) => {
+    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites), rasterizeAddinTabIcons(addinPaths), rasterizeWidgetTabIcons([...WIDGET_ITEMS, ...HIDDEN_WIDGET_ITEMS].filter((w) => !isDocumentIconKey(w.id)))]).then(([icons, siteIcons, addinIcons, widgetIcons]) => {
       siteIconKeys.value = new Set([...siteIcons, ...addinIcons].map((icon) => icon.key))
       const all = [...icons, ...siteIcons, ...addinIcons, ...widgetIcons]
       if (all.length) notifyTabIcons(all)

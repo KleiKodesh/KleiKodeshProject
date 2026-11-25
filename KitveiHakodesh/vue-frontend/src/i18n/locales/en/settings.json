@@ -438,12 +438,21 @@
     "toastOff": "Keep screen on: OFF"
   },
   "about": {
-    "section": "About",
-    "open": "About Kitvei Hakodesh",
+    "section": "About credits and licenses",
+    "open": "Show",
     "appName": "Kitvei Hakodesh",
     "version": "Version {version}",
     "otzariaPermission": "Kitvei Hakodesh uses the book database and other materials of the Otzaria Project (otzaria.org), such as dictionaries and acronym lists, with its permission. All rights in these materials belong to the Otzaria Project and are subject to its license terms.",
-    "booksOwnLicense": "The books in the library are not covered by the Otzaria software license. Each book remains subject to its own license and permissions, as set by its source and rights holders."
+    "booksOwnLicense": "The books in the library are not covered by the Otzaria software license. Each book remains subject to its own license and permissions, as set by its source and rights holders.",
+    "title": "About",
+    "what": "A library for reading and searching Torah books, built on the Zayit book library. If there is no library on your computer yet, the app downloads one.",
+    "volunteers": "Kitvei Hakodesh is free, open source and built by volunteers.",
+    "contactTitle": "Contact",
+    "contactIntro": "Found a problem, or have an idea?",
+    "issues": "Report or suggest on GitHub",
+    "website": "The Klei Kodesh website",
+    "projects": "All the projects",
+    "email": "Email"
   },
   "credits": {
     "section": "Credits and licenses",

@@ -165,7 +165,6 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'userSpace'
     case '/user-space-search':
       return 'userSpaceSearch'
-    case '/about':
     case '/settings':
       return 'settings'
     default:
