@@ -914,7 +914,11 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 }
 .line :deep(.user-note-marker) {
   font-size: 0.72em;
-  vertical-align: super;
+  /* Zero width: the icon floats in the gap above the line, the text never moves. */
+  position: relative;
+  display: inline-block;
+  width: 0;
+  vertical-align: baseline;
   line-height: 1;
   color: var(--accent-color);
   cursor: pointer;
@@ -927,7 +931,11 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(.user-note-marker)::before {
   /* A speech bubble (Fluent Comment20Regular), in the marker's colour. */
   content: '';
-  display: inline-block;
+  display: block;
+  position: absolute;
+  bottom: 0.9em;
+  inset-inline-start: -0.45em;
+  pointer-events: auto;
   width: 0.85em;
   height: 0.85em;
   background-color: currentColor;
