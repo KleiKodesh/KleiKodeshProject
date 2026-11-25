@@ -834,7 +834,9 @@ namespace KitveiHakodeshLib
             // each call is a browser-process round-trip, so one call is faster than two.
             // Only HOST facts are injected; the database path and folder settings are the
             // service's and the page asks it for them.
-            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            // Both registrations are started together and awaited together (each is a
+            // browser-process round-trip); both are in place before navigation.
+            Task<string> bridgeScript = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.ForAppFramesOnly(JsBridge.Script + "\n" + HostFactsScript()));
 
             // IframeScrollScript runs in every frame including local file iframes.
@@ -847,8 +849,10 @@ namespace KitveiHakodeshLib
             // window.Otzaria stub must exist BEFORE the addin's own scripts run. Those
             // frames are cross-origin from the Vue app, so the Vue side cannot inject it —
             // document-created injection is the only path that reaches them.
-            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            Task<string> frameScript = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
+            await Task.WhenAll(bridgeScript, frameScript);
+            _dbInjectionScriptId = bridgeScript.Result;
 
             _bridge = new WebBridge(_webView, this);
             // The service is a hard dependency: the channel starts it when no instance is
@@ -888,10 +892,6 @@ namespace KitveiHakodeshLib
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
-            _webSites = KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.Attach(_webView.CoreWebView2, AppDir);
-            AttachSiteFrameShortcuts();
-            AttachSiteFrameNavigation();
-
             await InjectStartupOpenEventsAsync();
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -902,6 +902,13 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
 
             _webView.Source = new Uri("http://kitveihakodesh-app/index.html");
+
+            // Website frame support (~0.3 s) is set up while the page loads. It runs on this
+            // (UI) thread with no await before it, so no browser event is handled until it is
+            // in place - no frame of the page can exist yet. Its calls are COM, UI thread only.
+            _webSites = KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.Attach(_webView.CoreWebView2, AppDir);
+            AttachSiteFrameShortcuts();
+            AttachSiteFrameNavigation();
 
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
