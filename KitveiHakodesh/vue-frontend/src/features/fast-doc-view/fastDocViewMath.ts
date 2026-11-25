@@ -1,8 +1,9 @@
 /**
  * Equations finished with the browser's layout - what the library's HTML writer cannot know (FastDocView
  * Html/WordOfficeMathHtml.cs). Measurement is batched for all the blocks a render holds: writes, then one read of every
- * block and operator, never a read per operator (layoutMath: at most three reads per render).
+ * block and operator, never a read per operator (layoutMath: at most three reads per render, four with a matrix).
  *
+ * - Matrices (`mtable.omath-matrix`): rows one math line apart as Word sets them (matrixRowShifts), not by the font's box.
  * - Stretched operators (`mo.omath-stretch[data-variants]`): Word draws a grown delimiter or n-ary operator with the
  *   font's OpenType MATH size variants, else its assembly; the operator carries them ("height:width ... |assembly width", em).
  *   Word picks the smallest variant covering TeX's size for the content's ink (DELIMITER_FACTOR below; else the assembly) -
@@ -18,6 +19,7 @@
 
 const STRETCH = 'mo.omath-stretch[data-variants]'
 const BLOCKS = '.omath-para[data-math-break], .omath-para[data-math-wrap-right]'
+const MATRICES = 'mtable.omath-matrix'
 
 /**
  * TeX's \left / \right size (tex.web make_left_right, as KaTeX src/delimiter.ts makeLeftRightDelim takes it): with d the
@@ -95,24 +97,64 @@ function matrixInkHeight(content: Element): number | null {
   const table = tables[0]!
   const tokens = [...content.querySelectorAll<HTMLElement>(INK_TOKENS)]
   if (tokens.some(token => !table.contains(token) && tokenInk(token))) return null
+  const rows = matrixRows(table)
+  if (!rows || rows.inks.length < 2 || rows.inks.some(ink => !ink)) return null
+  const inks = rows.inks as RowInk[]
+  let height = inks[0]!.above + inks[inks.length - 1]!.below
+  for (let i = 0; i + 1 < inks.length; i++) height += wordRowPitch(rows.pitch, inks[i]!, inks[i + 1]!)
+  return height
+}
+
+type RowInk = { above: number; below: number; baseline: number }
+
+/** A matrix's rows (`mtr`), each row's ink about its baseline (null for a row without ink) and Word's row pitch (px). */
+function matrixRows(table: Element): { rows: HTMLElement[]; inks: (RowInk | null)[]; pitch: number } | null {
   const rows = [...table.children].filter(row => row.tagName.toLowerCase() === 'mtr') as HTMLElement[]
-  const pitchEm = parseFloat(rows[0]?.style.height ?? '')
+  const pitchEm = parseFloat((table as HTMLElement).dataset.pitchEm ?? rows[0]?.style.height ?? '')
   const size = parseFloat(getComputedStyle(table).fontSize)
-  if (rows.length < 2 || !(pitchEm > 0) || !(size > 0)) return null
+  if (!(pitchEm > 0) || !(size > 0)) return null
   const inks = rows.map(row => {
     let top = Infinity, bottom = -Infinity, baseline = NaN
     for (const token of row.querySelectorAll<HTMLElement>(INK_TOKENS)) {
+      // a nested matrix's tokens are its own rows' (measured before its rows move): the row is left as it is
+      if (token.closest('mtable') !== table) return null
       const ink = tokenInk(token)
       if (!ink) continue
       if (Number.isNaN(baseline)) baseline = ink.baseline
       top = Math.min(top, ink.top); bottom = Math.max(bottom, ink.bottom)
     }
-    return Number.isNaN(baseline) ? null : { above: baseline - top, below: bottom - baseline }
+    return Number.isNaN(baseline) ? null : { above: baseline - top, below: bottom - baseline, baseline }
   })
-  if (inks.some(ink => !ink)) return null
-  let height = inks[0]!.above + inks[inks.length - 1]!.below
-  for (let i = 0; i + 1 < inks.length; i++) height += Math.max(pitchEm * size, inks[i]!.below + inks[i + 1]!.above)
-  return height
+  return { rows, inks, pitch: pitchEm * size }
+}
+
+/** Word's distance between two rows' baselines: one math line, more when their ink would meet. */
+function wordRowPitch(pitch: number, upper: RowInk, lower: RowInk): number {
+  return Math.max(pitch, upper.below + lower.above)
+}
+
+/**
+ * The space that puts each matrix row Word's pitch below the row above it. Word sets rows one math line apart (1.18 em,
+ * test-data/word-math/brackets-*-v1.pdf); a minimum row height of that line (the library's) let Chromium place rows ~1.32 em
+ * apart (the cell's baseline sits low in the taller box), so the rows are laid out without it and spaced from their baselines.
+ * Padding above a row's cells moves it and the rows below it down by that much.
+ */
+function matrixRowShifts(table: Element): { row: HTMLElement; shift: number }[] {
+  const read = matrixRows(table)
+  if (!read) return []
+  const shifts: { row: HTMLElement; shift: number }[] = []
+  for (let i = 0; i + 1 < read.rows.length; i++) {
+    const upper = read.inks[i], lower = read.inks[i + 1]
+    if (!upper || !lower) continue
+    const shift = wordRowPitch(read.pitch, upper, lower) - (lower.baseline - upper.baseline)
+    if (shift >= 0.25) shifts.push({ row: read.rows[i + 1]!, shift })
+  }
+  return shifts
+}
+
+/** The space above a row's cells (px): a row only moves down, Chromium's own pitch without a row height is below Word's. */
+function setRowShift(row: HTMLElement, shift: number | null) {
+  for (const cell of row.children) (cell as HTMLElement).style.paddingTop = shift === null || shift <= 0 ? '' : `${shift}px`
 }
 
 type Variants = { heights: number[]; widths: number[]; assembly: number }
@@ -154,15 +196,26 @@ function setRepeat(repeat: HTMLElement, piece: HTMLElement | undefined, previous
  * Lays out all the equations under `root` with batched measurement: each pass writes, then reads every block and operator at
  * once, never a read per operator. Pass 1 reads the stretched operators and the lines without repeated operators; pass 2
  * reads the lines with the copies shown where pass 1 found line starts (a shown copy widens its line and can move a later
- * break); a block whose starts moved gets one more pass. At most three reads per render, whatever the number of operators.
+ * break); a block whose starts moved gets one more pass. At most three reads per render, whatever the number of operators,
+ * and one before them when the render holds a matrix (its rows are put Word's pitch apart first: matrixRowShifts).
  */
 export function layoutMath(root: Element) {
   const stretched = [...root.querySelectorAll<HTMLElement>(STRETCH)]
   const blocks = [...root.querySelectorAll<HTMLElement>(BLOCKS)]
   const pieceLists = blocks.map(block => [...block.querySelectorAll<HTMLElement>(':scope > math')])
   const repeatLists = pieceLists.map(pieces => pieces.map(piece => piece.querySelector<HTMLElement>(':scope > mrow > mo.omath-repeat')))
+  const matrices = [...root.querySelectorAll<HTMLElement>(MATRICES)]
   // write: back to the library's output, copies hidden
   for (const operator of stretched) operator.style.marginInline = ''
+  for (const matrix of matrices) {
+    // the library's row height (Word's pitch, a minimum for hosts without this layout) is kept on the table: a minimum would
+    // stop a row from closing up to the pitch
+    if (matrix.dataset.pitchEm === undefined) matrix.dataset.pitchEm = String(parseFloat((matrix.firstElementChild as HTMLElement | null)?.style.height ?? '') || '')
+    for (const row of matrix.children) { (row as HTMLElement).style.height = ''; setRowShift(row as HTMLElement, null) }
+  }
+  // a matrix's rows first (one more read when the render holds one): a stretched delimiter around it takes its width from the
+  // rows' final height
+  if (matrices.length > 0) for (const { row, shift } of matrices.flatMap(matrixRowShifts)) setRowShift(row, shift)
   blocks.forEach((block, b) => {
     // the library's own alignment (m:jc) is in the block's style: kept once, restored on every run
     if (!block.hasAttribute('data-align')) block.setAttribute('data-align', block.style.textAlign)
@@ -235,7 +288,7 @@ export const vFastDocViewMath = {
 }
 
 function schedule(element: HTMLElement) {
-  if (!element.querySelector(`${STRETCH}, ${BLOCKS}`)) return
+  if (!element.querySelector(`${STRETCH}, ${BLOCKS}, ${MATRICES}`)) return
   const run = () => {
     if (!element.isConnected) return
     const started = performance.now()
