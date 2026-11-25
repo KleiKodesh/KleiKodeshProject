@@ -129,6 +129,9 @@ namespace KitveiHakodeshLib
         // The last snapshot per app window: a window's strip may be made after its first one came.
         private readonly Dictionary<string, TabsStateChangedEventArgs> _lastTabsStates = new Dictionary<string, TabsStateChangedEventArgs>();
 
+        /// <summary>An extra app window closed: its last tab snapshot goes.</summary>
+        public void ForgetTabsState(string windowKey) => _lastTabsStates.Remove(windowKey ?? "");
+
         /// <summary>The page's last tab snapshot for an app window ("" = this viewer's own), or null.</summary>
         public TabsStateChangedEventArgs LastTabsState(string windowKey)
             => _lastTabsStates.TryGetValue(windowKey ?? "", out var state) ? state : null;

@@ -24,6 +24,12 @@ namespace KitveiHakodeshLib
         // splash. In the app root's page-snapshots\ folder (the app never writes outside its
         // folder), not the exe's KitveiHakodesh\ folder: the dev build mirrors the Vue dist over
         // that folder and deletes anything extra. The hosted test rig's profile folder still wins.
+        /// <summary>
+        /// Where docked windows' pictures wait while minimized (the group's taskbar preview):
+        /// the app root's window-pictures\ folder - beside the app, never elsewhere.
+        /// </summary>
+        public static string WindowPicturesFolder => KitveiHakodesh.Core.Common.AppRootFolder.Subfolder("window-pictures");
+
         private string SnapshotPath => Path.Combine(
             HostTestMode.ProfileDir ?? KitveiHakodesh.Core.Common.AppRootFolder.Subfolder(
                 KitveiHakodesh.Core.Common.AppRootFolder.PageSnapshots),

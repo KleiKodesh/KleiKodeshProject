@@ -25,6 +25,9 @@ namespace KitveiHakodeshDesktopApp
         /// <summary>A main window takes part in tab drags and screen docking.</summary>
         private static void AttachDocking(MainForm window)
         {
+            // Pictures of minimized docked windows (the group's taskbar preview): on disk beside the app.
+            if (ScreenDocking.PictureFolder == null)
+                ScreenDocking.PictureFolder = KitveiHakodeshLib.AppViewer.WindowPicturesFolder;
             ScreenDocking.Attach(window, Docking);
         }
 
@@ -34,10 +37,22 @@ namespace KitveiHakodeshDesktopApp
             PageWindows.Add(window);
             ScreenDocking.Attach(window, Docking);
             window.Activated += (s, e) => { lock (EarlyRequestsLock) _activeWindow = owner; };
-            window.FormClosed += (s, e) => PageWindows.Remove(window);
+            window.FormClosed += (s, e) =>
+            {
+                PageWindows.Remove(window);
+                if (!owner.IsDisposed) owner.Viewer.ForgetTabsState(window.WindowKey);
+            };
             Action<Form> place = _pendingPlacement;
             _pendingPlacement = null;
-            if (place != null) window.Shown += (s, e) => place(window);
+            if (place == null) return;
+            // Invisible until it has its place: shown first at its default spot and moved after,
+            // it would flash there on a busy computer.
+            window.Opacity = 0;
+            window.Shown += (s, e) =>
+            {
+                place(window);
+                window.BeginInvoke(new Action(() => { if (!window.IsDisposed) window.Opacity = 1; }));
+            };
         }
 
         /// <summary>A tool window (widget, commentary pop-out) of a page: it docks and tiles like the others.</summary>
