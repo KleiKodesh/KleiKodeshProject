@@ -58,3 +58,13 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
   behind the pin (`git merge-base --is-ancestor HEAD <pin>` inside it), fast-forward it:
   `git -C <path> merge --ff-only <pin>`. Never move a folder backward or touch one with
   uncommitted changes; report those instead.
+
+# Pushing - always `push.ps1`
+
+- Push only with `powershell -File push.ps1` (repo root), never a bare `git push`.
+- It pushes this checkout's commits even when GitHub's master moved on and another session has
+  uncommitted files here: it merges when it can, else it replays only the commits GitHub lacks
+  on GitHub's master in a temporary copy and pushes from there. No stash, no reset, no touching
+  other sessions' files.
+- Commit your own finished files promptly (`git commit -o <paths>`); uncommitted files block
+  this folder from catching up for every other session.
