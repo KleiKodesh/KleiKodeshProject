@@ -14,7 +14,11 @@
  *   (TAB_COMPAT); inside the hanging indent the start indent itself is a stop when no custom stop comes before it; a non-left stop
  *   past the right edge acts as a right stop at the edge.
  * - SwTabPortion::PostFormat: right -> the text up to the next tab ends at the stop; centre -> centred on it (kept inside the line);
- *   decimal -> the first decimal point sits on it (no point: as a right stop); a text too wide leaves the tab no width.
+ *   decimal -> the first decimal point sits on it (no point: as a right stop); a text too wide leaves the tab no width. The point
+ *   is the stop's own character (data-tabs: the system's decimal symbol, as Word uses; OpenDocument style:char), else '.'.
+ * - A tab in an underlined run is underlined across its width, leaders included (Word 16; not with w:u words, where the tab sits
+ *   outside the underlined words): padding never carries a text decoration, so the span gets data-underline and the run's line
+ *   style, colour and thickness, and the library stylesheet draws them under no-break spaces clipped to the tab.
  * - Leaders fill the tab's width (a pseudo-element, not text); bar stops draw a vertical line through the paragraph and take no
  *   tab (Word draws them; LibreOffice ignores them, ww8par.cxx Read_Tab).
  *
@@ -22,7 +26,7 @@
  * (line breaks move). A block that is not shown is never touched.
  */
 
-type Stop = { position: number; alignment: string; leader: string }
+type Stop = { position: number; alignment: string; leader: string; decimal?: string }
 type Data = { interval: number; start: number; firstLine: number; fromIndent: boolean; stops: Stop[] }
 type Tab = { span: HTMLElement; ptab: string[] | null }
 type Paragraph = { element: HTMLElement; data: Data; tabs: Tab[]; rightToLeft: boolean }
@@ -37,7 +41,11 @@ export function parseTabData(value: string | undefined): Data {
   const [interval = 36, start = 0, firstLine = 0, fromIndent = 0] = head.split(' ').map(Number)
   return {
     interval: interval > 0 ? interval : 36, start, firstLine, fromIndent: fromIndent === 1,
-    stops: stops.map((stop) => { const [position = '0', alignment = 'l', leader = ''] = stop.split(' '); return { position: Number(position), alignment, leader } })
+    stops: stops.map((stop) => {
+      // a decimal stop's own character as its UTF-16 code (the library writes it only when it is not '.')
+      const [position = '0', alignment = 'l', leader = '', code = ''] = stop.split(' ')
+      return { position: Number(position), alignment, leader, decimal: code ? String.fromCharCode(Number(code)) : '.' }
+    })
       .filter((stop) => Number.isFinite(stop.position)),
   }
 }
@@ -105,8 +113,8 @@ function widthOnLine(range: Range, line: DOMRect): number {
 // placeholders, shapes and text boxes, list labels, nested cells, equations) - a decimal point there does not count
 const NOT_RUN_TEXT = '.note-reference, .note-mark, .field-page-placeholder, .text-box, .word-shape, .word-picture-missing, .list-marker, td, math, sup, sub'
 
-/** The text after `tab` up to the next tab (or the paragraph's end), and the part of it before its first decimal point in the run text (null: none). */
-function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLElement | undefined): { segment: Range; decimal: Range | null } {
+/** The text after `tab` up to the next tab (or the paragraph's end), and the part of it before its first `point` in the run text (null: none). */
+function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLElement | undefined, point: string): { segment: Range; decimal: Range | null } {
   const segment = document.createRange()
   segment.setStartAfter(tab)
   if (next) segment.setEndBefore(next); else segment.setEnd(paragraph, paragraph.childNodes.length)
@@ -116,7 +124,7 @@ function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLEleme
     if (!segment.intersectsNode(node)) continue
     const nested = node.parentElement?.closest(NOT_RUN_TEXT)
     if (nested && paragraph.contains(nested)) continue
-    const at = (node.nodeValue ?? '').indexOf('.')
+    const at = (node.nodeValue ?? '').indexOf(point)
     if (at < 0) continue
     decimal = document.createRange()
     decimal.setStartAfter(tab)
@@ -187,6 +195,7 @@ export function layoutTabs(root: Element) {
       paragraph.tabs.slice(from).forEach(({ span }, k) => {
         span.style.paddingInlineEnd = '0px'
         delete span.dataset.leader
+        delete span.dataset.underline
         const previous = span.previousSibling
         if (from + k !== wrapped && isTabBreak(previous)) previous.remove()
       })
@@ -199,7 +208,7 @@ export function layoutTabs(root: Element) {
     }
     const results = jobs.map((job) => planTabs(job, pixelsPerPoint))
     for (const result of results)
-      for (const { span, width, leader, wraps } of result) {
+      for (const { span, width, leader, underline, wraps } of result) {
         // a left stop past the line's end: the tab goes to the next line (txttab.cxx PreFormat bFull) - a break before it
         const previous = span.previousSibling
         if (wraps && !isTabBreak(previous)) {
@@ -207,6 +216,12 @@ export function layoutTabs(root: Element) {
         }
         span.style.paddingInlineEnd = `${Math.floor(width * 100) / 100}pt`
         if (leader) span.dataset.leader = leader
+        if (underline) {
+          span.dataset.underline = ''
+          span.style.setProperty('--fdv-tab-underline-style', underline.style)
+          span.style.setProperty('--fdv-tab-underline-color', underline.color)
+          span.style.setProperty('--fdv-tab-underline-thickness', underline.thickness)
+        }
       }
     // where a set width sent a tab or its text to another line, or a tab went to the next line, it is laid out again there
     const next: Job[] = []
@@ -237,7 +252,7 @@ function planTabs({ paragraph, from }: Job, pixelsPerPoint: number) {
   // widths, line by line (a tab moves everything after it on its line); positions read live, so earlier tabs count as set
   let shift = 0, lineTop = NaN
   const lineStart = data.start + Math.max(0, data.firstLine) + 0.5
-  const planned: { span: HTMLElement; line: number; width: number; leader: string; wraps: boolean }[] = []
+  const planned: { span: HTMLElement; line: number; width: number; leader: string; underline: Underline | null; wraps: boolean }[] = []
   for (let i = from; i < tabs.length; i++) {
     const tab = tabs[i]!
     const line = tab.span.getBoundingClientRect()
@@ -245,7 +260,7 @@ function planTabs({ paragraph, from }: Job, pixelsPerPoint: number) {
     const x = toPoints(paragraph.rightToLeft ? line.right : line.left) + shift
     // the text after the tab is measured only for a stop that needs it (right / centre / decimal)
     let ranges: ReturnType<typeof segmentRanges> | null = null
-    const measure = () => (ranges ??= segmentRanges(element, tab.span, tabs[i + 1]?.span))
+    const measure = () => (ranges ??= segmentRanges(element, tab.span, tabs[i + 1]?.span, stop.alignment === 'd' ? stop.decimal ?? '.' : '.'))
     let stop: Stop
     if (tab.ptab) {
       const [alignment = 'l', leader = '-', relativeTo = 'm'] = tab.ptab
@@ -253,7 +268,7 @@ function planTabs({ paragraph, from }: Job, pixelsPerPoint: number) {
       stop = { position: alignment === 'r' ? right : alignment === 'c' ? (start + right) / 2 : start, alignment, leader: leader === '-' ? '' : leader }
     } else stop = nextStop(data, x, right)
     if (!tab.ptab && stop.alignment === 'l' && stop.position >= right - 0.01 && x > lineStart) {   // bFull: Width() <= X + PrtWidth()
-      planned.push({ span: tab.span, line: line.top, width: 0, leader: '', wraps: true })
+      planned.push({ span: tab.span, line: line.top, width: 0, leader: '', underline: null, wraps: true })
       break                                    // the rest is laid out after the break, on the next line
     }
     const segment = stop.alignment === 'l' ? 0 : widthOnLine(measure().segment, line) / pixelsPerPoint
@@ -261,9 +276,21 @@ function planTabs({ paragraph, from }: Job, pixelsPerPoint: number) {
     const decimal = decimalRange ? widthOnLine(decimalRange, line) / pixelsPerPoint : null
     const width = tabWidth(stop, x, segment, decimal, right)
     shift += width
-    planned.push({ span: tab.span, line: line.top, width, leader: width > 0 ? stop.leader : '', wraps: false })
+    planned.push({ span: tab.span, line: line.top, width, leader: width > 0 ? stop.leader : '', underline: width > 0 ? underlineOf(tab.span, element) : null, wraps: false })
   }
   return planned
+}
+
+type Underline = { style: string; color: string; thickness: string }
+
+/** The underline the tab's run draws (the nearest element inside the paragraph that sets one), or null. */
+function underlineOf(span: HTMLElement, paragraph: HTMLElement): Underline | null {
+  for (let element = span.parentElement; element && element !== paragraph; element = element.parentElement) {
+    const style = getComputedStyle(element)
+    if (!style.textDecorationLine.includes('underline')) continue
+    return { style: style.textDecorationStyle, color: style.textDecorationColor, thickness: style.textDecorationThickness }
+  }
+  return null
 }
 
 /** `v-fast-doc-view-tabs` on the element that holds block HTML: lays out its tabs after each render and when its width changes. */

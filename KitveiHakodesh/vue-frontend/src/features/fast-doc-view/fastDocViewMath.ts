@@ -52,25 +52,67 @@ function contentOf(operator: HTMLElement): Element | null {
   return wrapper.nextElementSibling
 }
 
+const INK_TOKENS = 'mi, mn, mo:not(.omath-stretch), mtext'
+
+/** A token's ink (px, top / bottom) and baseline from its box and the browser's text metrics; null for no ink. */
+function tokenInk(token: HTMLElement): { top: number; bottom: number; baseline: number } | null {
+  const text = token.textContent ?? ''
+  if (!text.trim() || token.closest('mphantom')) return null
+  const box = token.getBoundingClientRect()
+  if (!(box.height > 0)) return null
+  const style = getComputedStyle(token)
+  const ink = inkOf(text, `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`)
+  if (!ink) return null
+  // a token box is either the font's line box or the ink box: its baseline sits accordingly
+  const lineBox = ink.fontAscent + ink.fontDescent
+  if (!(lineBox > 0) || !Number.isFinite(ink.ascent) || !Number.isFinite(ink.descent)) return null
+  const baseline = Math.abs(box.height - lineBox) < Math.abs(box.height - (ink.ascent + ink.descent)) ? box.top + ink.fontAscent * box.height / lineBox : box.top + ink.ascent
+  return { top: baseline - ink.ascent, bottom: baseline + ink.descent, baseline }
+}
+
 /** The content's ink extent (px, top / bottom) from its tokens' boxes and text metrics. */
 function inkExtent(content: Element): { top: number; bottom: number } | null {
   let top = Infinity, bottom = -Infinity
-  for (const token of content.querySelectorAll<HTMLElement>('mi, mn, mo:not(.omath-stretch), mtext')) {
-    const text = token.textContent ?? ''
-    if (!text.trim() || token.closest('mphantom')) continue
-    const box = token.getBoundingClientRect()
-    if (!(box.height > 0)) continue
-    const style = getComputedStyle(token)
-    const ink = inkOf(text, `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`)
+  for (const token of content.querySelectorAll<HTMLElement>(INK_TOKENS)) {
+    const ink = tokenInk(token)
     if (!ink) continue
-    // a token box is either the font's line box or the ink box: its baseline sits accordingly
-    const lineBox = ink.fontAscent + ink.fontDescent
-    if (!(lineBox > 0) || !Number.isFinite(ink.ascent) || !Number.isFinite(ink.descent)) continue
-    const baseline = Math.abs(box.height - lineBox) < Math.abs(box.height - (ink.ascent + ink.descent)) ? box.top + ink.fontAscent * box.height / lineBox : box.top + ink.ascent
-    top = Math.min(top, baseline - ink.ascent)
-    bottom = Math.max(bottom, baseline + ink.descent)
+    top = Math.min(top, ink.top)
+    bottom = Math.max(bottom, ink.bottom)
   }
   return top < bottom ? { top, bottom } : null
+}
+
+/**
+ * The ink height (px) Word gives a matrix that is all of the content's ink, centred on the axis as Word centres it: its rows one
+ * math line apart (the library's `mtr` height, the font's line height - Word's pitch; Chromium spaces them by the font's box,
+ * ~1.32 em in Cambria Math, which put the 3-row matrix's ink past Word's variant), a row taller than that kept apart by its own ink,
+ * from the first row's ink above its baseline to the last row's below. Word 16 (test-data/word-math/brackets-cambria-v1.pdf):
+ * 3 rows of "1x" are 3.02 em of ink, centred on the delimiter within 0.27 pt. Null when the content has other ink.
+ */
+function matrixInkHeight(content: Element): number | null {
+  const tables = content.matches('mtable') ? [content] : [...content.querySelectorAll(':scope > mtable, :scope > mrow > mtable')]
+  if (tables.length !== 1) return null
+  const table = tables[0]!
+  const tokens = [...content.querySelectorAll<HTMLElement>(INK_TOKENS)]
+  if (tokens.some(token => !table.contains(token) && tokenInk(token))) return null
+  const rows = [...table.children].filter(row => row.tagName.toLowerCase() === 'mtr') as HTMLElement[]
+  const pitchEm = parseFloat(rows[0]?.style.height ?? '')
+  const size = parseFloat(getComputedStyle(table).fontSize)
+  if (rows.length < 2 || !(pitchEm > 0) || !(size > 0)) return null
+  const inks = rows.map(row => {
+    let top = Infinity, bottom = -Infinity, baseline = NaN
+    for (const token of row.querySelectorAll<HTMLElement>(INK_TOKENS)) {
+      const ink = tokenInk(token)
+      if (!ink) continue
+      if (Number.isNaN(baseline)) baseline = ink.baseline
+      top = Math.min(top, ink.top); bottom = Math.max(bottom, ink.bottom)
+    }
+    return Number.isNaN(baseline) ? null : { above: baseline - top, below: bottom - baseline }
+  })
+  if (inks.some(ink => !ink)) return null
+  let height = inks[0]!.above + inks[inks.length - 1]!.below
+  for (let i = 0; i + 1 < inks.length; i++) height += Math.max(pitchEm * size, inks[i]!.below + inks[i + 1]!.above)
+  return height
 }
 
 type Variants = { heights: number[]; widths: number[]; assembly: number }
@@ -135,7 +177,8 @@ export function layoutMath(root: Element) {
     const extent = content ? inkExtent(content) : null
     // the stretched operator is centred on the math axis: the axis is its middle
     const axis = box.top + box.height / 2
-    const distance = extent ? Math.max(axis - extent.top, extent.bottom - axis) : box.height / 2
+    const matrix = content ? matrixInkHeight(content) : null
+    const distance = matrix !== null ? matrix / 2 : extent ? Math.max(axis - extent.top, extent.bottom - axis) : box.height / 2
     const needed = Math.max(2 * distance * DELIMITER_FACTOR, 2 * distance - DELIMITER_SHORTFALL_EM * size)
     return { operator, width: box.width, height: needed, size }
   })
