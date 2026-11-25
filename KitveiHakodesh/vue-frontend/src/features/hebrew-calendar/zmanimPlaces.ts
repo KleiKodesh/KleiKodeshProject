@@ -90,8 +90,7 @@ export function dayTimedZmanim(place: Place, date: Date): DayTimedZmanim {
   return day
 }
 
-/** The day's printed zmanim, as the calendar shows them. */
-export function dayPrintedZmanim(place: Place, date: Date): CalendarZmanim {
-  const day = dayTimedZmanim(place, date)
+/** The printed HH:MM of each timed zman. */
+export function printedZmanim(day: DayTimedZmanim): CalendarZmanim {
   return Object.fromEntries(ZMAN_NAMES.map((name) => [name, day[name]?.printed ?? null])) as CalendarZmanim
 }

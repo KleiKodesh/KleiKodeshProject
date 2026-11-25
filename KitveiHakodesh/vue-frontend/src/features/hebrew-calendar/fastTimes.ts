@@ -1,8 +1,11 @@
 // Fast start / end times. hebcal only says WHICH days are fasts; the times come from our library,
 // on the chosen preset's lines: a minor fast runs from alot to tzeit; Tisha B'Av and Yom Kippur start
 // at sunset the evening before (Yom Kippur ends with havdalah, shown on its own row).
-import type { ZmanGroup, ZmanName } from 'kleikodesh-zmanim'
-import type { CalendarZmanim } from './calendarTypes'
+// Each edge is printed with its own rounding, the stringent side for its use: a start is the end of the
+// eating time (alot as the end of the night, or sunset), so it rounds DOWN (earlier) even though the alot
+// line of the day rounds up; the end is a nightfall, so it rounds UP (later).
+import { formatTime, type Rounding, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
+import type { DayTimedZmanim } from './zmanimPlaces'
 
 type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 
@@ -13,14 +16,22 @@ export const DEFAULT_FAST_LINES = { alot: 'alot90', sunset: 'sunset', tzeit: 'tz
 export const ALT_FAST_LINES = { minorStart: 'alot', end: 'tzeit7083' } as const satisfies Partial<Record<FastEdge, ZmanName>>
 
 /** The second opinion's line and time for a fast edge; null for the sunset start, or when it is the preset's own line. */
-export function altFastTime(edge: FastEdge, zmanim: CalendarZmanim, primary: PrimaryGroups | null): { name: ZmanName, time: string } | null {
+export function altFastTime(edge: FastEdge, zmanim: DayTimedZmanim, primary: PrimaryGroups | null, tzid: string): { name: ZmanName, time: string } | null {
   if (!primary || edge === 'majorStart') return null
   const name = ALT_FAST_LINES[edge]
-  const time = zmanim[name]
+  const time = printEdge(edge, zmanim, name, tzid)
   return name === fastLine(edge, primary) || !time ? null : { name, time }
 }
 
 export type FastEdge = 'minorStart' | 'majorStart' | 'end'
+
+/** Rounding of each fast edge: the starts are deadlines (round down, earlier), the end a nightfall (round up, later). */
+export const FAST_EDGE_ROUNDING: Readonly<Record<FastEdge, Rounding>> = { minorStart: 'down', majorStart: 'down', end: 'up' }
+
+function printEdge(edge: FastEdge, zmanim: DayTimedZmanim, name: ZmanName, tzid: string): string | null {
+  const z = zmanim[name]
+  return z ? formatTime(z.time.getTime(), FAST_EDGE_ROUNDING[edge], tzid) : null
+}
 
 /** The line a fast edge follows under a preset. */
 export function fastLine(edge: FastEdge, primary: PrimaryGroups): ZmanName {
@@ -30,6 +41,6 @@ export function fastLine(edge: FastEdge, primary: PrimaryGroups): ZmanName {
 }
 
 /** The printed time of a fast edge on this day (null until the preset is loaded, or where there is no such time). */
-export function fastTime(edge: FastEdge, zmanim: CalendarZmanim, primary: PrimaryGroups | null): string | null {
-  return primary ? zmanim[fastLine(edge, primary)] ?? null : null
+export function fastTime(edge: FastEdge, zmanim: DayTimedZmanim, primary: PrimaryGroups | null, tzid: string): string | null {
+  return primary ? printEdge(edge, zmanim, fastLine(edge, primary), tzid) : null
 }

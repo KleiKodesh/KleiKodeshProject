@@ -7,10 +7,10 @@ import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
 import { ZMAN_NAMES, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
 import { chosenCommunity, primaryGroupsFor } from './zmanimCommunity'
-import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
+import { dayTimedZmanim, JERUSALEM_ID, printedZmanim, type DayTimedZmanim, type Place } from './zmanimPlaces'
 import { specialDayRows } from './specialDayZmanim'
 import { altFastTime, fastTime } from './fastTimes'
-import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
+import type { CalendarDay, CalendarWeek } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -36,7 +36,8 @@ const YK_FAST_BEGINS = strip(new Event(new HDate(), 'Fast begins', flags.MAJOR_F
 
 type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 
-const NO_ZMANIM = Object.fromEntries(ZMAN_NAMES.map((name) => [name, null])) as CalendarZmanim
+const NO_TIMED = Object.fromEntries(ZMAN_NAMES.map((name) => [name, null])) as DayTimedZmanim
+const NO_ZMANIM = printedZmanim(NO_TIMED)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,9 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
     date.setHours(0, 0, 0, 0)
     const hd = new HDate(date)
     const dayEvents = byDate.get(date.toISOString().slice(0, 10)) ?? []
-    const zmanim = city ? dayPrintedZmanim(city, date) : NO_ZMANIM
+    const timed = city ? dayTimedZmanim(city, date) : NO_TIMED
+    const zmanim = city ? printedZmanim(timed) : NO_ZMANIM
+    const tzid = city?.tzid ?? 'Asia/Jerusalem'
 
     const holidays: string[] = []
     let parasha: string | null = null
@@ -144,14 +147,14 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
         const desc = e.getDesc()
         if (desc === 'Fast begins' || desc === 'Fast ends') {
           const edge = desc === 'Fast ends' ? 'end' : f & flags.MAJOR_FAST ? 'majorStart' : 'minorStart'
-          const time = fastTime(edge, zmanim, primary)
+          const time = fastTime(edge, timed, primary, tzid)
           const label = strip(e.renderBrief('he'))
           if (time) {
             if (edge === 'end') fastEnd = `${label}: ${time}`
             else fastStart = `${label}: ${time}`
           }
-          if (edge === 'end') fastEndAlt = altFastTime(edge, zmanim, primary)
-          else fastStartAlt = altFastTime(edge, zmanim, primary)
+          if (edge === 'end') fastEndAlt = altFastTime(edge, timed, primary, tzid)
+          else fastStartAlt = altFastTime(edge, timed, primary, tzid)
         } else {
           holidays.push(strip(e.render('he')))
         }
@@ -161,7 +164,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
     }
 
     if (hd.getMonth() === 7 && hd.getDate() === 9) {
-      const time = fastTime('majorStart', zmanim, primary)
+      const time = fastTime('majorStart', timed, primary, tzid)
       if (time) fastStart = `${YK_FAST_BEGINS}: ${time}`
     }
 
