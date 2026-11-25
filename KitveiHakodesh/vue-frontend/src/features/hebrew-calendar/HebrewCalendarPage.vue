@@ -122,7 +122,6 @@ onMounted(() => {
         <ZmanimWidget :date="selectedDate" />
       </section>
       <section class="calendar-side-learning">
-        <h3 class="calendar-side-title">{{ $t('layout.widgets.learning.label') }}</h3>
         <DailyLearningWidget :date="selectedDate" />
       </section>
     </aside>
@@ -140,6 +139,10 @@ onMounted(() => {
 .calendar-card { flex: 1 1 auto; min-width: 0; }
 /* Extended: the month takes two shares of the width, the side column one (never under 260px). */
 .page--extended .calendar-card { flex: 2 1 0; }
+/* The separate calendar app is the calendar itself: no card around it, at any width (as PageCard
+   already does in a narrow window) - painted straight onto the window, edge to edge. */
+.page--extended .calendar-card { max-width: none; padding: 0; }
+.page--extended .calendar-card :deep(.page-card) { border: none; border-radius: 0; background: var(--bg-primary); }
 .calendar-side {
   flex: 1 1 0;
   min-width: 260px;
@@ -160,13 +163,6 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
-}
-.calendar-side-title {
-  margin: 0;
-  padding: 8px 12px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 /* Narrow window: zmanim and learning go under the calendar. */
 @media (max-width: 640px) {

@@ -102,7 +102,8 @@ const log = standaloneOpener ? null : useDailyLearningLog(loggedDays)
 <template>
   <div class="learning-widget">
     <!-- Stays at the top while the list scrolls: the day, then the widget's own buttons. -->
-    <HebrewDayNav v-model="day" class="learning-top">
+    <!-- On the calendar page the calendar picks the day: a title line with the widget's own buttons. -->
+    <HebrewDayNav v-model="day" class="learning-top" :buttons-only="date !== undefined" :title="$t('layout.widgets.learning.label')">
       <button
         class="mark-btn"
         type="button"

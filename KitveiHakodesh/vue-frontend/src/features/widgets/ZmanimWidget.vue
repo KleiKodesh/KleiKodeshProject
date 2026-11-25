@@ -49,7 +49,8 @@ const placePath = computed(() => {
         @click="settingsOpen = true"
       ><IconSettings20Regular /></button>
     </div>
-    <HebrewDayNav v-model="day" />
+    <!-- On the calendar page the calendar itself picks the day. -->
+    <HebrewDayNav v-if="date === undefined" v-model="day" />
     <ZmanimSettingsDialog v-if="settingsOpen" :place-id="city?.id" @pick="setCity" @close="settingsOpen = false" />
     <NextZmanPopup :rows="rows" :city-name="''" />
   </div>
