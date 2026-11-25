@@ -42,15 +42,15 @@ const grid = computed<GridCell[]>(() => {
   const month = props.monthly.gregMonth.value
 
   const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
 
   // Start from Sunday of the first week
   const start = new Date(firstDay)
   start.setDate(start.getDate() - start.getDay())
 
-  // End on Saturday of the last week
-  const end = new Date(lastDay)
-  end.setDate(end.getDate() + (6 - end.getDay()))
+  // Always six weeks (42 days), as calendar apps do: the grid keeps one shape every month,
+  // the days after the month greyed out (ending on the month's last week would give 4-6 rows).
+  const end = new Date(start)
+  end.setDate(end.getDate() + 41)
 
   // Fetch events for the whole grid range
   const events = HebrewCalendar.calendar({
