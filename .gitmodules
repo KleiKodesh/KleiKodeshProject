@@ -13,3 +13,6 @@
 [submodule "KitveiHakodesh/vue-windowed-scroller"]
 	path = KitveiHakodesh/vue-windowed-scroller
 	url = https://github.com/KleiKodesh/vue-windowed-scroller.git
+[submodule "KitveiHakodesh/vue-frontend/pdf.js"]
+	path = KitveiHakodesh/vue-frontend/pdf.js
+	url = https://github.com/KleiKodesh/pdf.js.git
