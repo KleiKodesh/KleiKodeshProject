@@ -7,6 +7,8 @@ import type { FastDocViewBlock } from '@/webview-host/fastDocViewApi'
  */
 export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBlock> {
   private readonly blocks = new Map<number, T>()
+  /** Blocks still shown but to be fetched again (drawn before the index was final): missing to a fetch, kept for the eye. */
+  private readonly stale = new Set<number>()
 
   constructor(private readonly capacity: number) {}
 
@@ -24,26 +26,31 @@ export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBloc
 
   clear(): void {
     this.blocks.clear()
+    this.stale.clear()
   }
 
-  /** Drops the blocks matching `predicate`; returns how many went. */
-  dropWhere(predicate: (block: T) => boolean): number {
-    let dropped = 0
+  /**
+   * Marks the blocks matching `predicate` to be fetched again; returns how many. They stay readable
+   * (`get`) until the new copy is stored, so a row on screen keeps its content and height meanwhile
+   * (dropping it would collapse the row and move the reader).
+   */
+  markStaleWhere(predicate: (block: T) => boolean): number {
+    let marked = 0
     for (const [index, block] of this.blocks) {
-      if (predicate(block)) {
-        this.blocks.delete(index)
-        dropped++
+      if (!this.stale.has(index) && predicate(block)) {
+        this.stale.add(index)
+        marked++
       }
     }
-    return dropped
+    return marked
   }
 
-  /** The contiguous spans of [start, end) not in the cache, each as [first, end). */
+  /** The contiguous spans of [start, end) not in the cache (or stale), each as [first, end). */
   missingSpans(start: number, end: number): [number, number][] {
     const spans: [number, number][] = []
     let spanStart = -1
     for (let index = start; index < end; index++) {
-      if (this.blocks.has(index)) {
+      if (this.blocks.has(index) && !this.stale.has(index)) {
         if (spanStart >= 0) spans.push([spanStart, index])
         spanStart = -1
       } else if (spanStart < 0) spanStart = index
@@ -61,7 +68,10 @@ export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBloc
     focus: readonly [number, number],
     retained: ReadonlyArray<readonly [number, number]> = [],
   ): void {
-    for (const block of blocks) this.blocks.set(block.index, block)
+    for (const block of blocks) {
+      this.blocks.set(block.index, block)
+      this.stale.delete(block.index)
+    }
     if (this.blocks.size <= this.capacity) return
     const isRetained = (index: number) =>
       (index >= focus[0] && index < focus[1]) ||
@@ -75,6 +85,7 @@ export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBloc
     for (const index of candidates) {
       if (excess <= 0) break
       this.blocks.delete(index)
+      this.stale.delete(index)
       excess--
     }
   }

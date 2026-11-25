@@ -63,12 +63,13 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   let readErrorNeedsReopen = false
   /** Bumped when cached content is replaced under the same indexes (a reopen) - the scroller's rowSourceVersion. */
   const contentVersion = ref(0)
-  /** Bumped when provisional blocks (drawn before the index was final) are dropped - the scroller asks
+  /** Bumped when provisional blocks (drawn before the index was final) are marked stale - the scroller asks
    * for its window again and fetches only them; with contentVersion, the scroller's rowSourceVersion. */
   const refetchVersion = ref(0)
-  /** Drops provisional blocks once the index is final, so they are fetched again. */
-  function dropProvisionalBlocks() {
-    if (cache.dropWhere((block) => block.provisional === true) > 0) refetchVersion.value++
+  /** Marks provisional blocks stale once the index is final, so they are fetched again; they stay shown
+   * until the new copy arrives (the scroller holds the reader's row through the height change). */
+  function refetchProvisionalBlocks() {
+    if (cache.markStaleWhere((block) => block.provisional === true) > 0) refetchVersion.value++
   }
   /** Bumped on every cache write so rows reading the cache re-render. */
   const cacheRevision = ref(0)
@@ -227,9 +228,9 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       if (state.sections?.length) sections.value = state.sections
       if (state.isIndexComplete) {
         isIndexComplete.value = true
-        // Blocks drawn with what only the final index knows: dropped, so the scroller asks for
+        // Blocks drawn with what only the final index knows: marked stale, so the scroller asks for
         // the ones on screen again (only those - the rest are fetched when scrolled to).
-        dropProvisionalBlocks()
+        refetchProvisionalBlocks()
         await loadOutline(documentId, generation)
       }
     }
@@ -279,7 +280,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       cache.store(fetched, focus, options.retainedRanges?.() ?? [])
       cacheRevision.value++
       // a fetch begun before the index completed may still bring provisional blocks: fetch them again
-      if (isIndexComplete.value) dropProvisionalBlocks()
+      if (isIndexComplete.value) refetchProvisionalBlocks()
     }
   }
 
