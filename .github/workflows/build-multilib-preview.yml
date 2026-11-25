@@ -162,10 +162,10 @@ jobs:
         shell: pwsh
         working-directory: src
         run: |
-          $proj = "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj"
+          $app = if (Test-Path "KitveiHakodesh/CSharpBackend/KitveiHakodeshDesktopApp") { "KitveiHakodeshDesktopApp" } else { "KitveiHakodeshDemoApp" }; $proj = "KitveiHakodesh/CSharpBackend/$app/$app.csproj"
           msbuild $proj /p:Configuration=Release /p:Platform=AnyCPU /m /v:minimal /nologo
           if ($LASTEXITCODE -ne 0) { throw "msbuild failed ($LASTEXITCODE)" }
-          $out = "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/bin/Release"
+          $out = "KitveiHakodesh/CSharpBackend/$app/bin/Release"
           Write-Host "---- build output (top level) ----"
           Get-ChildItem $out | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
 
@@ -174,7 +174,7 @@ jobs:
         working-directory: src
         run: |
           $ErrorActionPreference = 'Stop'
-          $out  = (Resolve-Path "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/bin/Release").Path
+          $app = if (Test-Path "KitveiHakodesh/CSharpBackend/KitveiHakodeshDesktopApp") { "KitveiHakodeshDesktopApp" } else { "KitveiHakodeshDemoApp" }; $out  = (Resolve-Path "KitveiHakodesh/CSharpBackend/$app/bin/Release").Path
           $work = Join-Path $env:RUNNER_TEMP "mlp"
           $payload = Join-Path $work "payload"
           New-Item -ItemType Directory -Force -Path $payload | Out-Null
