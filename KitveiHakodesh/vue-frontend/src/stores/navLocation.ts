@@ -119,6 +119,7 @@ export function isHistoryWorthy(tab: Pick<Tab, 'route' | 'searchQuery'>): boolea
 /** Routes that show a tool rather than a document. */
 const NON_DOCUMENT_ROUTES = new Set<TabRoute>([
   '/settings',
+  '/about',
   '/books',
   '/hebrewbooks',
   '/websites',

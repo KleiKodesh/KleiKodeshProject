@@ -1,5 +1,5 @@
 /**
- * The credits shown in Settings -> About. One row per component or data set: its name, what
+ * The credits shown in About page. One row per component or data set: its name, what
  * the app uses it for (i18n key settings.credits.use.<id>), its license and a link.
  * Keep in step with KitveiHakodesh/ThirdPartyNotices/curated-notices.mjs (the full notices
  * file) and KleiKodeshVsto/Resources/About.*.html (the Word add-in About page).

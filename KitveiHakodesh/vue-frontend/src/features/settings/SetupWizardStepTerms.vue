@@ -6,7 +6,7 @@
  */
 import { ref, watch } from 'vue'
 import { useScroll } from '@vueuse/core'
-import { ZAYIT_ATTRIBUTION } from './credits'
+import { ZAYIT_ATTRIBUTION } from '@/features/about/credits'
 
 const agreed = defineModel<boolean>({ default: false })
 

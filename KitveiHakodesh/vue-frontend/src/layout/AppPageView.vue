@@ -38,6 +38,7 @@ const pages: Record<string, unknown> = {
   '/html-view': defineAsyncComponent(() => import('@/features/html-view/HtmlViewPage.vue')),
   '/fast-doc-view': defineAsyncComponent(() => import('@/features/fast-doc-view/FastDocViewPage.vue')),
   '/settings': defineAsyncComponent(() => import('@/features/settings/SettingsPage.vue')),
+  '/about': defineAsyncComponent(() => import('@/features/about/AboutPage.vue')),
   '/hebrewbooks': defineAsyncComponent(
     () => import('@/features/hebrewbooks/HebrewBooksPage.vue'),
   ),

@@ -437,6 +437,14 @@
     "toastOn": "Keep screen on: ON",
     "toastOff": "Keep screen on: OFF"
   },
+  "about": {
+    "section": "About",
+    "open": "About Kitvei Hakodesh",
+    "appName": "Kitvei Hakodesh",
+    "version": "Version {version}",
+    "otzariaPermission": "Kitvei Hakodesh uses the book database and other materials of the Otzaria Project (otzaria.org), such as dictionaries and acronym lists, with its permission. All rights in these materials belong to the Otzaria Project and are subject to its license terms.",
+    "booksOwnLicense": "The books in the library are not covered by the Otzaria software license. Each book remains subject to its own license and permissions, as set by its source and rights holders."
+  },
   "credits": {
     "section": "Credits and licenses",
     "intro": "Kitvei Hakodesh is built on the work of many people. These are the books, data, code, libraries and fonts it uses, each under its own license.",

@@ -63,6 +63,7 @@ export type TabRoute =
   | '/html-view'
   | '/fast-doc-view'
   | '/settings'
+  | '/about'
   | '/books'
   | '/book-view'
   | '/hebrewbooks'
@@ -563,6 +564,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   const DESTINATION_ROUTES: TabRoute[] = [
     '/settings',
+    '/about',
     '/books',
     '/hebrewbooks',
     '/websites',
@@ -572,6 +574,7 @@ export const useTabStore = defineStore('tabs', () => {
   ]
   const DESTINATION_TITLES: Record<string, string> = {
     '/settings': t('stores.tabTitle.settings'),
+    '/about': t('stores.tabTitle.about'),
     '/books': t('stores.tabTitle.catalog'),
     '/hebrewbooks': t('stores.tabTitle.hebrewbooks'),
     '/websites': t('stores.tabTitle.websites'),
