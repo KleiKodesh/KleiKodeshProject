@@ -79,9 +79,17 @@ namespace FluentChromeTabs
         private readonly List<FluentTab> _tabs = new List<FluentTab>();
         public IReadOnlyList<FluentTab> Tabs => _tabs;
         public FluentTab SelectedTab { get; set; }
+        // v10.7: tabs dragged between windows
+        public bool HostMovesTabsBetweenWindows { get; set; }
+        public bool DropHintVisible { get; set; }
+        public FluentTab DraggedTab { get { return null; } }
+        public FluentChromeTabsForm DraggedTabOrigin { get { return null; } }
+        public FluentTab TabAwayInDrag { get { return null; } }
+        public static FluentChromeTabsForm FormWithStripAt(Point screenPoint, IntPtr ignoreWindow) { return null; }
 
 #pragma warning disable CS0067
         public event EventHandler<FluentTabEventArgs> SelectedTabChanged;
+        public event EventHandler<FluentTabEventArgs> TabPressed;
         public event EventHandler<FluentTabClosingEventArgs> TabClosing;
         public event EventHandler<NewTabRequestedEventArgs> NewTabRequested;
         public event EventHandler SplitRatioChanged;
