@@ -69,6 +69,9 @@ public sealed class FastDocViewNote
     public int Number { get; set; }
     public string Label { get; set; } = "";
     public string Html { get; set; } = "";
+    /// <summary>Drawn while the index was still building with something only the final index knows (a field, a
+    /// numbering format): the notes pane fetches it again, and the notes search searches it again, once the index is complete.</summary>
+    public bool Provisional { get; set; }
 }
 
 [MessagePackObject(keyAsPropertyName: true)]
@@ -136,6 +139,9 @@ public sealed class FastDocViewSearchResult
     public int[] HitCounts { get; set; } = [];
     public int NextBlock { get; set; }
     public bool ReachedEnd { get; set; }
+    /// <summary>Scanned blocks whose text used what only the final index knows: the page searches them again once the
+    /// index is complete and replaces their hits (empty on a complete index).</summary>
+    public int[] ProvisionalBlocks { get; set; } = [];
 }
 
 /// <summary>The block holding a bookmark (an internal link's target), or null when there is none.</summary>

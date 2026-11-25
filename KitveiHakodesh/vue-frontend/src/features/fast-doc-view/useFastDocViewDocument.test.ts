@@ -435,3 +435,17 @@ describe('decodeFastDocViewWeights', () => {
     expect([...decodeFastDocViewWeights(new Uint8Array([1, 0, 0, 0, 0, 1, 0, 0]))]).toEqual([1, 256])
   })
 })
+
+describe('FastDocViewBlockCache stale blocks', () => {
+  it('keeps a stale block readable until its new copy is stored, and asks for it again', () => {
+    const cache = new FastDocViewBlockCache<{ index: number; provisional?: boolean; html: string }>(10)
+    cache.store([{ index: 0, html: 'a' }, { index: 1, html: 'old', provisional: true }, { index: 2, html: 'c' }], [0, 3])
+    expect(cache.markStaleWhere((block) => block.provisional === true)).toBe(1)
+    expect(cache.markStaleWhere((block) => block.provisional === true)).toBe(0)
+    expect(cache.get(1)?.html).toBe('old')
+    expect(cache.missingSpans(0, 3)).toEqual([[1, 2]])
+    cache.store([{ index: 1, html: 'new' }], [1, 2])
+    expect(cache.get(1)?.html).toBe('new')
+    expect(cache.missingSpans(0, 3)).toEqual([])
+  })
+})

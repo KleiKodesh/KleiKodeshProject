@@ -91,7 +91,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             {
                 var notes = new List<FastDocViewNote>(block.Notes.Count);
                 foreach (WordDocumentNoteHtml note in block.Notes)
-                    notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
+                    notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html, Provisional = note.IsProvisional });
                 blocks.Add(new FastDocViewBlock { Index = block.BlockIndex, Kind = BlockKindName(block.Kind), Html = block.Html, Notes = notes, Provisional = block.IsProvisional });
             }
             return blocks;
@@ -105,7 +105,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             IReadOnlyList<WordDocumentNoteHtml> rendered = document.RenderNotesForDisplay(Math.Max(0, first), Math.Clamp(count, 0, MaxBlocksPerRequest));
             var notes = new List<FastDocViewNote>(rendered.Count);
             foreach (WordDocumentNoteHtml note in rendered)
-                notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
+                notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html, Provisional = note.IsProvisional });
             return notes;
         });
 
@@ -145,7 +145,8 @@ public sealed class FastDocViewOpenDocuments : IDisposable
         {
             WordDocumentSearchBatch batch = document.Search(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
                                                             Math.Max(0, fromBlock), Math.Clamp(maxBlocks, 1, MaxBlocksPerSearch));
-            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
+            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd,
+                                                 ProvisionalBlocks = batch.ProvisionalBlocks };
         });
 
     /// <summary>
@@ -158,7 +159,8 @@ public sealed class FastDocViewOpenDocuments : IDisposable
         {
             WordDocumentSearchBatch batch = document.SearchNotes(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
                                                                  Math.Max(0, fromNote), Math.Clamp(maxNotes, 1, MaxBlocksPerSearch));
-            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
+            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd,
+                                                 ProvisionalBlocks = batch.ProvisionalBlocks };
         });
 
     /// <summary>The block holding bookmark <paramref name="name"/> (an internal link's target); an index
