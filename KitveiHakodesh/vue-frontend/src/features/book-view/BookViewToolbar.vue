@@ -253,7 +253,7 @@ useEventListener(hostWindow, 'resize', () => {
   isWindowResizing.value = true
   void endWindowResize()
 })
-const { isDragging, dropPreviewStyle } = useToolbarDrag(toolbarEl, toolbarPosition, '.book-view')
+const { isDragging, dropPreviewStyle, isOverBackground } = useToolbarDrag(toolbarEl, toolbarPosition, '.book-view')
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
 )
@@ -325,7 +325,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'has-overflow': hasToolbarOverflow, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'has-overflow': hasToolbarOverflow, 'window-resizing': isWindowResizing }]" :title="isOverBackground ? $t('bookView.toolbar.dragHint') : undefined">
     <Teleport :to="hostWindow.document.body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>

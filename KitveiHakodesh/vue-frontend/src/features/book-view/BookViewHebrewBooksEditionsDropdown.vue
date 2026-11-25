@@ -100,7 +100,6 @@ const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen,
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
-      <div class="editions-header">{{ $t('bookView.hebrewBooks.title') }}</div>
       <BookViewHebrewBooksEditionsList :editions="editions" :talmud-pdf-path="talmudPdfPath" @picked="setOpen(false)" @add-hebrew-book="openAddDialog" />
     </div>
     <BookViewHebrewBooksAddDialog
@@ -170,10 +169,4 @@ const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen,
   inset-inline-start: calc(100% + 4px);
 }
 
-.editions-header {
-  padding: 6px 12px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-}
 </style>

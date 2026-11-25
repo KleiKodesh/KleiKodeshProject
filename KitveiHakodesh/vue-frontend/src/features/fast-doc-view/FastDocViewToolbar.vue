@@ -71,7 +71,7 @@ const zoomRepeat = usePressRepeat()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 const toolbarEl = ref<HTMLElement | null>(null)
-const { isDragging, dropPreviewStyle } = useToolbarDrag(toolbarEl, toolbarPosition, '.fast-doc-view')
+const { isDragging, dropPreviewStyle, isOverBackground } = useToolbarDrag(toolbarEl, toolbarPosition, '.fast-doc-view')
 
 const notesPlaceMenu = ref<InstanceType<typeof ToolbarSplitDropdown> | null>(null)
 const NOTES_PLACES = [
@@ -102,7 +102,7 @@ const hostWindow = useHostWindow()
     class="fast-doc-view-toolbar reading-toolbar"
     dir="rtl"
     :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]"
-    :title="$t('bookView.toolbar.dragHint')"
+    :title="isOverBackground ? $t('bookView.toolbar.dragHint') : undefined"
   >
     <Teleport :to="hostWindow.document.body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />

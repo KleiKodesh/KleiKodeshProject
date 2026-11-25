@@ -102,6 +102,11 @@ namespace KitveiHakodeshLib.LocalFile
                 root.ValueKind == JsonValueKind.Object
                 && root.TryGetProperty("pickOnly", out var pickOnlyProp)
                 && pickOnlyProp.ValueKind == JsonValueKind.True;
+            // pdfOnly: offer PDF files only (the editions dropdown's "add a PDF from the computer").
+            bool pdfOnly =
+                root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("pdfOnly", out var pdfOnlyProp)
+                && pdfOnlyProp.ValueKind == JsonValueKind.True;
             // Lib's own WinForms dialog, not Core's NativeFilePicker: that one runs on its own STA
             // thread, and in VSTO (no WinForms sync context) the await resumed off the UI thread,
             // so RegisterFolder threw "CoreWebView2 can only be accessed from the UI thread".
@@ -113,7 +118,8 @@ namespace KitveiHakodeshLib.LocalFile
                     using (var dlg = new OpenFileDialog())
                     {
                         dlg.Title  = HostText.OpenFileTitle;
-                        dlg.Filter = HostText.Documents + " (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml|" + HostText.AllFiles + " (*.*)|*.*";
+                        if (pdfOnly) dlg.Filter = "PDF (*.pdf)|*.pdf";
+                        else dlg.Filter = HostText.Documents + " (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml|" + HostText.AllFiles + " (*.*)|*.*";
                         // A folder that has since been deleted must not sink the pick: the dialog
                         // silently falls back to its default when InitialDirectory does not exist.
                         if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;

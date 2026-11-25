@@ -67,6 +67,19 @@ export function useToolbarDrag(
 
   const isDragging = computed(() => dropTarget.value !== null)
 
+  /**
+   * True while the pointer is over the bare background - the only place a drag starts.
+   * The "drag to move" tooltip binds to this: a `title` on the toolbar itself would be
+   * inherited by every child without its own (dropdown panels, menus, inputs).
+   */
+  const isOverBackground = ref(false)
+  useEventListener(toolbarEl, 'mouseover', (e: MouseEvent) => {
+    isOverBackground.value = e.target === toolbarEl.value
+  })
+  useEventListener(toolbarEl, 'mouseleave', () => {
+    isOverBackground.value = false
+  })
+
   const dropPreviewStyle = computed(() => {
     const r = viewRect.value
     const edge = dropTarget.value
@@ -83,5 +96,5 @@ export function useToolbarDrag(
     }
   })
 
-  return { isDragging, dropPreviewStyle }
+  return { isDragging, dropPreviewStyle, isOverBackground }
 }

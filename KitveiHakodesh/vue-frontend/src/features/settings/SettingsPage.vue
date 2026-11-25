@@ -381,7 +381,7 @@ async function navigateToSection(sectionId: string) {
 /* One heading level, one rule: the card header underline. A group of settings
    that needs its own heading gets its own card instead of a heading nested
    inside one — so no two rules can ever meet. */
-.section-label {
+[data-section] > .section-label {
   font-size: 15px;
   position: sticky;
   top: var(--settings-toolbar-h, 0px);
@@ -412,7 +412,7 @@ async function navigateToSection(sectionId: string) {
     padding: 0 var(--settings-narrow-gutter);
     margin: 0 0 4px;
   }
-  .section-label {
+  [data-section] > .section-label {
     background: var(--bg-primary);
     margin-top: 0;
     margin-inline: 0;

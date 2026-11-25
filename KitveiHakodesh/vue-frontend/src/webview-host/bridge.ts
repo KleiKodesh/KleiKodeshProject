@@ -215,15 +215,15 @@ export async function pickLocalFile(
 }
 
 /**
- * Shows the open-file dialog and returns the chosen PATH only - nothing opens. Null on
+ * Shows the open-file dialog (PDF files only with `pdfOnly`) and returns the chosen PATH - nothing opens. Null on
  * cancel or failure. Used where the caller stores the path and opens it itself.
  */
-export async function pickLocalFilePath(): Promise<{ filePath: string; fileName: string } | null> {
+export async function pickLocalFilePath(options: { pdfOnly?: boolean } = {}): Promise<{ filePath: string; fileName: string } | null> {
   try {
     const res = typeof window.__webviewAction !== 'function'
-      ? await serviceCall<{ path?: string; fileName?: string; cancelled?: boolean }>('pickLocalFile', { value: '' })
+      ? await serviceCall<{ path?: string; fileName?: string; cancelled?: boolean }>(options.pdfOnly ? 'pickLocalPdf' : 'pickLocalFile', options.pdfOnly ? {} : { value: '' })
           .then((r) => ({ filePath: r?.path, fileName: r?.fileName, cancelled: r?.cancelled, error: undefined as string | undefined }))
-      : await action<{ filePath?: string; fileName?: string; cancelled?: boolean; error?: string }>('pickFile', { pickOnly: true })
+      : await action<{ filePath?: string; fileName?: string; cancelled?: boolean; error?: string }>('pickFile', { pickOnly: true, pdfOnly: !!options.pdfOnly })
     if (res.error) console.error('[bridge] pickFile (pick only) failed in the host: ' + res.error)
     if (!res.filePath || res.cancelled) return null
     const fileName = res.fileName || res.filePath.substring(Math.max(res.filePath.lastIndexOf('\\'), res.filePath.lastIndexOf('/')) + 1)

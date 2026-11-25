@@ -272,6 +272,15 @@ public sealed class Dispatcher(
                         : new PickLocalFileResult { Path = picked, FileName = System.IO.Path.GetFileName(picked) }));
                 }
 
+                // PDF-only picker for the book view's scanned editions ("add a PDF from the computer").
+                case "pickLocalPdf":
+                {
+                    string? pickedPdf = await NativeFilePicker.PickAsync(filter: NativeFilePicker.PdfFilter);
+                    return RpcResponse.Ok(MsgPack.Ser(pickedPdf is null
+                        ? new PickLocalFileResult { Cancelled = true }
+                        : new PickLocalFileResult { Path = pickedPdf, FileName = System.IO.Path.GetFileName(pickedPdf) }));
+                }
+
                 // Show the NATIVE browse-for-folder dialog on the service's desktop. The browser has
                 // no folder picker that yields an absolute path, so dev could not otherwise feed a
                 // real folder to the settings page. Returns only the chosen PATH — no grant is

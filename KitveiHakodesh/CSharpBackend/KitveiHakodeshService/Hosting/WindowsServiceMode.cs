@@ -29,7 +29,7 @@ public static class WindowsServiceMode
     /// themselves; the service refuses them plainly instead of hanging in session 0.</summary>
     private static readonly HashSet<string> DesktopOnlyOps = new(StringComparer.Ordinal)
     {
-        "pickLocalFile", "pickFolder", "pickSeforimDbPath",
+        "pickLocalFile", "pickLocalPdf", "pickFolder", "pickSeforimDbPath",
         "exportToWord", "pasteIntoWord", "openFileInDefaultApp", "revealFileInFolder",
     };
 

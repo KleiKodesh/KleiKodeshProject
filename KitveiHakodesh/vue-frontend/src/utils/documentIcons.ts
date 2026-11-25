@@ -179,7 +179,10 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
 export function iconKeyForEntry(
   entry: { route: string; isOtzariaAddin?: boolean; localFileName?: string; localFilePath?: string },
 ): DocumentIconKey {
-  const fileName = entry.localFileName || entry.localFilePath
+  // The name can be a display title without its extension (a scanned edition added from the
+  // computer is named after the file, minus ".pdf"); then the path tells the type.
+  const name = entry.localFileName
+  const fileName = name && /\.[^.\\/]+$/.test(name) ? name : entry.localFilePath || name
   if (entry.route !== '/book-view' && fileName && !entry.isOtzariaAddin) return iconKeyForFileName(fileName)
   return iconKeyForRoute(entry.route, entry.isOtzariaAddin)
 }

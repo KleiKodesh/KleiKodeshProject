@@ -109,7 +109,7 @@ function stripExtension(fileName: string): string {
 }
 
 async function onAddFile() {
-  const picked = await pickLocalFilePath()
+  const picked = await pickLocalFilePath({ pdfOnly: true })
   if (!picked) return
   const title = stripExtension(picked.fileName)
   await userEditionsStore.addFile(bookId.value, picked.filePath, title)
@@ -304,8 +304,13 @@ async function onAddFile() {
   background: color-mix(in srgb, var(--status-danger) 10%, transparent);
 }
 
+/* Always in view: pinned to the bottom of the scrolling panel. */
 .add-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 .add-row {
   justify-content: center;
