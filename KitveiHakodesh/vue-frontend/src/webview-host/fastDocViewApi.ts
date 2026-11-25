@@ -70,6 +70,12 @@ export interface FastDocViewSearchStep {
   hitCounts: number[]
   nextBlock: number
   reachedEnd: boolean
+  /**
+   * Scanned blocks whose text used what only the final index knows (a field reading the partial index, a web-archive
+   * rule needing an end not indexed yet - the facts that make a fetched block provisional): searched again once the
+   * index is complete, their hits replaced. Absent or empty on a complete index.
+   */
+  provisionalBlocks?: number[]
 }
 
 /** A run of blocks at one page text width (a Word section); twips = 1/1440 inch. */

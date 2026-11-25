@@ -62,4 +62,12 @@ describe('SearchMatchIndex', () => {
     expect(empty.at(0)).toBeNull()
     expect(empty.firstAtOrAfter(0)).toBe(0)
   })
+
+  it('recounts rows: a new count replaces the old, 0 removes the row, others stay', () => {
+    const recounted = index.withRowsRecounted([10, 40, 7], [0, 1, 2])
+    expect(Array.from(recounted.rows)).toEqual([3, 7, 40])
+    expect([recounted.countOf(3), recounted.countOf(7), recounted.countOf(40)]).toEqual([2, 2, 1])
+    expect(recounted.total).toBe(5)
+    expect(index.withRowsRecounted([], [])).toBe(index)
+  })
 })

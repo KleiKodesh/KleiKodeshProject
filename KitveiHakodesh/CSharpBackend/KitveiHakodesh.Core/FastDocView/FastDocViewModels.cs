@@ -136,6 +136,9 @@ public sealed class FastDocViewSearchResult
     public int[] HitCounts { get; set; } = [];
     public int NextBlock { get; set; }
     public bool ReachedEnd { get; set; }
+    /// <summary>Scanned blocks whose text used what only the final index knows: the page searches them again once the
+    /// index is complete and replaces their hits (empty on a complete index).</summary>
+    public int[] ProvisionalBlocks { get; set; } = [];
 }
 
 /// <summary>The block holding a bookmark (an internal link's target), or null when there is none.</summary>

@@ -119,6 +119,25 @@ export class SearchMatchIndex {
     return SearchMatchIndex.fromRowCounts(rows, counts)
   }
 
+  /**
+   * The same results with rows `rows` counted again: each takes its count from `counts` (0 = no longer a match), every
+   * other row keeps its own - for rows searched again once what their text depends on is known.
+   */
+  withRowsRecounted(rows: ArrayLike<number>, counts: ArrayLike<number>): SearchMatchIndex {
+    if (!rows.length) return this
+    const allRows: number[] = []
+    const allCounts: number[] = []
+    for (let i = 0; i < this.rows.length; i++) {
+      allRows.push(this.rows[i]!)
+      allCounts.push(this.firstOccurrence[i + 1]! - this.firstOccurrence[i]!)
+    }
+    for (let i = 0; i < rows.length; i++) {
+      allRows.push(rows[i]!)
+      allCounts.push(counts[i]!)
+    }
+    return SearchMatchIndex.fromRowCounts(allRows, allCounts)
+  }
+
   /** The position of the first row >= `row` in `rows`. */
   private lowerBound(row: number): number {
     let low = 0

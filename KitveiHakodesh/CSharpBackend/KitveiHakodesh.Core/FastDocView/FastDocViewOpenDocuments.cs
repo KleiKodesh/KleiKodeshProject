@@ -145,7 +145,8 @@ public sealed class FastDocViewOpenDocuments : IDisposable
         {
             WordDocumentSearchBatch batch = document.Search(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
                                                             Math.Max(0, fromBlock), Math.Clamp(maxBlocks, 1, MaxBlocksPerSearch));
-            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
+            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd,
+                                                 ProvisionalBlocks = batch.ProvisionalBlocks };
         });
 
     /// <summary>

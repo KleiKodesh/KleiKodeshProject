@@ -206,6 +206,7 @@ const search = useFastDocViewSearch({
   api: fastDocViewApi,
   documentId: () => fastDocument.summary.value?.documentId,
   currentBlock: () => windowedScroller.value?.readFirstVisible(0)?.index ?? 0,
+  isIndexComplete: () => fastDocument.isIndexComplete.value,
 })
 // The notes (footnotes, endnotes) are searched SEPARATELY, in the notes pane - as the book view
 // searches its commentary panel apart from its lines. A match in a note is never a match on the
