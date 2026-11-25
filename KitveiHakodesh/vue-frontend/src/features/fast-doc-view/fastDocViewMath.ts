@@ -1,7 +1,7 @@
 /**
  * Equations finished with the browser's layout - what the library's HTML writer cannot know (FastDocView
  * Html/WordOfficeMathHtml.cs). Measurement is batched for all the blocks a render holds: writes, then one read of every
- * block and operator, never a read per operator (layoutMath: at most three reads per render, four with a matrix).
+ * block and operator, never a read per operator (layoutMath: at most three reads per render, five with a matrix).
  *
  * - Matrices (`mtable.omath-matrix`): rows one math line apart as Word sets them (matrixRowShifts), not by the font's box.
  * - Stretched operators (`mo.omath-stretch[data-variants]`): Word draws a grown delimiter or n-ary operator with the
@@ -147,12 +147,17 @@ function matrixRowShifts(table: Element): { row: HTMLElement; shift: number }[] 
     const upper = read.inks[i], lower = read.inks[i + 1]
     if (!upper || !lower) continue
     const shift = wordRowPitch(read.pitch, upper, lower) - (lower.baseline - upper.baseline)
-    if (shift >= 0.25) shifts.push({ row: read.rows[i + 1]!, shift })
+    if (Math.abs(shift) >= 0.25) shifts.push({ row: read.rows[i + 1]!, shift })
   }
   return shifts
 }
 
-/** The space above a row's cells (px): a row only moves down, Chromium's own pitch without a row height is below Word's. */
+/** The space a row was given above its cells (px; 0 without). */
+function rowShift(row: HTMLElement): number {
+  return parseFloat((row.firstElementChild as HTMLElement | null)?.style.paddingTop ?? '') || 0
+}
+
+/** The space above a row's cells (px): padding moves the row down (none for a shift at or below 0). */
 function setRowShift(row: HTMLElement, shift: number | null) {
   for (const cell of row.children) (cell as HTMLElement).style.paddingTop = shift === null || shift <= 0 ? '' : `${shift}px`
 }
@@ -197,7 +202,8 @@ function setRepeat(repeat: HTMLElement, piece: HTMLElement | undefined, previous
  * once, never a read per operator. Pass 1 reads the stretched operators and the lines without repeated operators; pass 2
  * reads the lines with the copies shown where pass 1 found line starts (a shown copy widens its line and can move a later
  * break); a block whose starts moved gets one more pass. At most three reads per render, whatever the number of operators,
- * and one before them when the render holds a matrix (its rows are put Word's pitch apart first: matrixRowShifts).
+ * and two before them when the render holds a matrix (its rows are put Word's pitch apart first: matrixRowShifts, then
+ * corrected by what Chromium added to the padding).
  */
 export function layoutMath(root: Element) {
   const stretched = [...root.querySelectorAll<HTMLElement>(STRETCH)]
@@ -215,7 +221,12 @@ export function layoutMath(root: Element) {
   }
   // a matrix's rows first (one more read when the render holds one): a stretched delimiter around it takes its width from the
   // rows' final height
-  if (matrices.length > 0) for (const { row, shift } of matrices.flatMap(matrixRowShifts)) setRowShift(row, shift)
+  if (matrices.length > 0) {
+    for (const { row, shift } of matrices.flatMap(matrixRowShifts)) setRowShift(row, shift)
+    // a padded row lands ~0.85 px further down than its padding (Chromium's cell baseline alignment: 1.226 em apart for
+    // Word's 1.18 in Cambria Math): one more read takes what is left off each padding
+    for (const { row, shift } of matrices.flatMap(matrixRowShifts)) setRowShift(row, rowShift(row) + shift)
+  }
   blocks.forEach((block, b) => {
     // the library's own alignment (m:jc) is in the block's style: kept once, restored on every run
     if (!block.hasAttribute('data-align')) block.setAttribute('data-align', block.style.textAlign)
