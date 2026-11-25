@@ -69,6 +69,9 @@ public sealed class FastDocViewNote
     public int Number { get; set; }
     public string Label { get; set; } = "";
     public string Html { get; set; } = "";
+    /// <summary>Drawn while the index was still building with something only the final index knows (a field, a
+    /// numbering format): the notes pane fetches it again, and the notes search searches it again, once the index is complete.</summary>
+    public bool Provisional { get; set; }
 }
 
 [MessagePackObject(keyAsPropertyName: true)]

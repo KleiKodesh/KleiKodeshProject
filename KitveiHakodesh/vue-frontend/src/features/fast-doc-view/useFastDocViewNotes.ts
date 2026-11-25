@@ -36,6 +36,12 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
   const cacheRevision = ref(0)
   /** Bumped when the notes are replaced under the same indexes (a reopen) - the scroller's rowSourceVersion. */
   const contentVersion = ref(0)
+  /** Bumped when provisional notes are marked stale (the text's refetchVersion): with contentVersion, the scroller's rowSourceVersion. */
+  const refetchVersion = ref(0)
+  /** Once the index is final: notes drawn provisionally stay shown but are fetched again (the blocks' refresh, same signal). */
+  function refetchProvisionalNotes() {
+    if (cache.markStaleWhere((note) => note.provisional === true) > 0) refetchVersion.value++
+  }
 
   let loadedFor: string | null = null
   let refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -95,6 +101,7 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
         return
       }
       if (isComplete) {
+        refetchProvisionalNotes()
         if (refreshTimer) clearTimeout(refreshTimer)
         refreshTimer = null
         startRefresh(documentId)
@@ -134,6 +141,8 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
         options.retainedRanges?.() ?? [],
       )
       cacheRevision.value++
+      // a fetch begun before the index completed may still bring provisional notes: fetch them again
+      if (options.summary.value?.isIndexComplete) refetchProvisionalNotes()
       if (fetched.length < count) break   // clamped to the notes known so far
     }
   }
@@ -239,6 +248,7 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
   return {
     noteCount,
     contentVersion,
+    refetchVersion,
     ensureNotes,
     noteAt,
     noteBlockAt: (index: number) => noteBlocks.value[index],

@@ -217,6 +217,7 @@ const notesSearch = useFastDocViewSearch({
   documentId: () => fastDocument.summary.value?.documentId,
   currentBlock: () => notesPaneRef.value?.windowedScroller()?.readFirstVisible(0)?.index ?? 0,
   scope: 'notes',
+  isIndexComplete: () => fastDocument.isIndexComplete.value,
 })
 const searchMode = ref<SearchMode>('content')
 /** The search bar's slot for the notes pane: where it sits (bottom, right, left). */
@@ -608,6 +609,14 @@ if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
           currentMatch: search.currentMatch.value,
           current: search.currentMatchAsBlock() ?? null,
         },
+        notesSearch: {
+          active: isNotesSearch.value,
+          isSearching: notesSearch.isSearching.value,
+          matchCount: notesSearch.matchCount.value,
+          currentMatch: notesSearch.currentMatch.value,
+          current: notesSearch.currentMatchAsBlock() ?? null,
+        },
+        notesFirstVisible: notesPaneRef.value?.windowedScroller()?.readFirstVisible(0)?.index ?? null,
       }
     },
     scrollToBlock: (index: number) => windowedScroller.value?.scrollToIndex(index),
@@ -616,6 +625,8 @@ if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
     setZoom,
     setNotesZoom,
     setNotesPlace,
+    /** The search bar's target: the text, or the notes pane (as its mode switch does). */
+    searchNotes: (on: boolean) => { searchMode.value = on ? `commentary-${notesSearchSlot.value}` : 'content' },
     pictureSourceCount: () => pictures.sourceCount(),
     reopen: () => fastDocument.reopen(),
   }
@@ -947,7 +958,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
               :note-count="fastNotes.noteCount.value"
               :ensure-notes="fastNotes.ensureNotes"
               :note-at="fastNotes.noteAt"
-              :row-source-version="fastNotes.contentVersion.value"
+              :row-source-version="fastNotes.contentVersion.value + fastNotes.refetchVersion.value"
               :column-style="blockColumnStyle"
               :is-right-to-left="isRightToLeft"
               :land-index="landNoteIndex"

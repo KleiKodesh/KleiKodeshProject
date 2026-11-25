@@ -32,6 +32,9 @@ export interface FastDocViewNote {
   /** The mark as the document shows it (a custom mark, or the number in its format). */
   label: string
   html: string
+  /** Drawn before the index was final with something only the final index knows (a field, a numbering
+   * format): fetched again (and searched again by the notes search) once the index is complete. */
+  provisional?: boolean
 }
 
 export interface FastDocViewBlock {

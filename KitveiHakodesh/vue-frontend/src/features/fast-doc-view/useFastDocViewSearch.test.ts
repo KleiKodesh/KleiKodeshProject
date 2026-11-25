@@ -117,4 +117,26 @@ describe('useFastDocViewSearch - provisional blocks', () => {
     expect(search.matchCount.value).toBe(0)
     scope.stop()
   })
+
+  it('the notes search (scope notes) recounts its provisional notes on the same signal', async () => {
+    vi.useFakeTimers()
+    // note 3: a NOTEREF to a note not reached yet (shown empty, then "Target"); note 7: unchanged but provisional
+    const { api, state } = fakeSearchApi(12, { 1: 1, 7: 1 }, { 1: 1, 3: 2, 7: 1 }, [7])
+    const notesOnly = { searchNotes: api.searchNotes, search: () => { throw new Error('the text search must not run') } } as unknown as FastDocViewApi
+    const complete = ref(false)
+    const scope = effectScope()
+    const search = scope.run(() => useFastDocViewSearch({ api: notesOnly, documentId: () => 'doc', currentBlock: () => 0, scope: 'notes', isIndexComplete: () => complete.value }))!
+    search.query.value = 'Target'
+    await vi.advanceTimersByTimeAsync(200)
+    await settle()
+    expect(Array.from(search.matches.value.rows)).toEqual([1, 7])
+    const callsBefore = state.calls.length
+    state.complete = true
+    complete.value = true
+    await settle()
+    expect(Array.from(search.matches.value.rows)).toEqual([1, 3, 7])
+    expect(search.matchCount.value).toBe(4)
+    expect(state.calls.slice(callsBefore)).toEqual([[3, 1], [7, 1]])
+    scope.stop()
+  })
 })
