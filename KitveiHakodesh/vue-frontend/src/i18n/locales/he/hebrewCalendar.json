@@ -168,6 +168,12 @@
     "dec": "דצמבר"
   },
   "zmanimNotReached": "השמש אינה מגיעה לזווית זו הלילה",
+  "rounded": {
+    "earlier": "עוגל מוקדם יותר",
+    "later": "עוגל מאוחר יותר",
+    "legendEarlier": "עוגל מוקדם (הזמן האמיתי מעט אחריו)",
+    "legendLater": "עוגל מאוחר (הזמן האמיתי מעט לפניו)"
+  },
   "otherOpinions": "שיטות נוספות",
   "specialZmanim": {
     "sofAchilatChametzMga": "סוף זמן אכילת חמץ – מגן אברהם (72 דקות קבועות)",

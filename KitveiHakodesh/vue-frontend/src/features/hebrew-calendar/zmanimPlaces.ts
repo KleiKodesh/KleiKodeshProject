@@ -9,6 +9,9 @@ import {
 } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
 import { ELEVATED_ZMANIM, type CalendarZmanim } from './calendarTypes'
+import { roundSign, type RoundSign } from './zmanRounding'
+
+export { roundSign, type RoundSign }
 
 export { ELEVATED_ZMANIM }
 
@@ -64,10 +67,11 @@ export function placeTree(): Promise<PlaceTree> {
   return libraryPlaceTree(lang)
 }
 
-/** One zman: its instant and its printed HH:MM. */
+/** One zman: its instant, its printed HH:MM and which way that minute was rounded. */
 export interface TimedZman {
   time: Date
   printed: string
+  sign: RoundSign
 }
 
 export type DayTimedZmanim = Record<ZmanName, TimedZman | null>
@@ -85,9 +89,14 @@ export function dayTimedZmanim(place: Place, date: Date): DayTimedZmanim {
     const ns = instants[name]
     if (ns == null || (place.elevation <= 0 && ELEVATED_ZMANIM.has(name))) { day[name] = null; continue }
     const ms = epochMs(ns)
-    day[name] = { time: new Date(ms), printed: formatTime(ms, ROUNDING[name], place.tzid) }
+    day[name] = { time: new Date(ms), printed: formatTime(ms, ROUNDING[name], place.tzid), sign: roundSign(ms, ROUNDING[name]) }
   }
   return day
+}
+
+/** The rounding direction of each timed zman's printed minute. */
+export function zmanimSigns(day: DayTimedZmanim): Record<ZmanName, RoundSign> {
+  return Object.fromEntries(ZMAN_NAMES.map((name) => [name, day[name]?.sign ?? null])) as Record<ZmanName, RoundSign>
 }
 
 /** The printed HH:MM of each timed zman. */

@@ -7,9 +7,9 @@ import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
 import { ZMAN_NAMES, type ZmanGroup, type ZmanName } from 'kleikodesh-zmanim'
 import { chosenCommunity, primaryGroupsFor } from './zmanimCommunity'
-import { dayTimedZmanim, JERUSALEM_ID, printedZmanim, type DayTimedZmanim, type Place } from './zmanimPlaces'
+import { dayTimedZmanim, JERUSALEM_ID, printedZmanim, zmanimSigns, type DayTimedZmanim, type Place, type RoundSign } from './zmanimPlaces'
 import { specialDayRows } from './specialDayZmanim'
-import { altFastTime, fastTime } from './fastTimes'
+import { altFastTime, fastSign, fastTime } from './fastTimes'
 import type { CalendarDay, CalendarWeek } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
 
@@ -123,6 +123,10 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
     let fastEnd: string | null = null
     let fastStartAlt: CalendarDay['fastStartAlt'] = null
     let fastEndAlt: CalendarDay['fastEndAlt'] = null
+    let candleSign: RoundSign = null
+    let havdalahSign: RoundSign = null
+    let fastStartSign: RoundSign = null
+    let fastEndSign: RoundSign = null
 
     for (const e of dayEvents) {
       if (!isShownEvent(e)) continue
@@ -131,8 +135,10 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
         parasha = strip(e.render('he')).replace(/^פרשת\s+/, '')
       } else if (f & flags.LIGHT_CANDLES) {
         candleLighting = primary?.candles ? zmanim[primary.candles] ?? null : null
+        candleSign = primary?.candles ? timed[primary.candles]?.sign ?? null : null
       } else if (f & flags.YOM_TOV_ENDS || f & flags.LIGHT_CANDLES_TZEIS) {
         havdalah = primary ? zmanim[primary.tzeitShabbat ?? DEFAULT_TZEIT_SHABBAT] ?? null : null
+        havdalahSign = primary ? timed[primary.tzeitShabbat ?? DEFAULT_TZEIT_SHABBAT]?.sign ?? null : null
       } else if (f & flags.OMER_COUNT) {
         omer = strip(e.render('he'))
       } else if (f & flags.CHANUKAH_CANDLES) {
@@ -150,8 +156,8 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
           const time = fastTime(edge, timed, primary, tzid)
           const label = strip(e.renderBrief('he'))
           if (time) {
-            if (edge === 'end') fastEnd = `${label}: ${time}`
-            else fastStart = `${label}: ${time}`
+            if (edge === 'end') { fastEnd = `${label}: ${time}`; fastEndSign = fastSign(edge, timed, primary) }
+            else { fastStart = `${label}: ${time}`; fastStartSign = fastSign(edge, timed, primary) }
           }
           if (edge === 'end') fastEndAlt = altFastTime(edge, timed, primary, tzid)
           else fastStartAlt = altFastTime(edge, timed, primary, tzid)
@@ -165,7 +171,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
 
     if (hd.getMonth() === 7 && hd.getDate() === 9) {
       const time = fastTime('majorStart', timed, primary, tzid)
-      if (time) fastStart = `${YK_FAST_BEGINS}: ${time}`
+      if (time) { fastStart = `${YK_FAST_BEGINS}: ${time}`; fastStartSign = fastSign('majorStart', timed, primary) }
     }
 
     days.push({
@@ -190,6 +196,11 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date, primary: Prim
       fastEnd,
       fastStartAlt,
       fastEndAlt,
+      candleSign,
+      havdalahSign,
+      fastStartSign,
+      fastEndSign,
+      zmanimSigns: zmanimSigns(timed),
       learning: getDailyLearning(hd),
       zmanim,
       specialZmanim: city ? specialDayRows(city, date) : [],
