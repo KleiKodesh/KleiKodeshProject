@@ -84,6 +84,7 @@ jobs:
             $has = (Select-String -Path ".gitmodules" -Pattern "KitveiHakodesh/FastDocView" -Quiet)
             if ($has) { git submodule update --init --recursive --depth 1 KitveiHakodesh/FastDocView; if ($LASTEXITCODE -ne 0) { throw "FastDocView submodule failed" } }
             else { Write-Host "No FastDocView submodule in this source." }
+            if (Select-String -Path ".gitmodules" -Pattern "KitveiHakodesh/kleikodesh-zmanim.js" -Quiet) { git submodule update --init --depth 1 KitveiHakodesh/kleikodesh-zmanim.js; if ($LASTEXITCODE -ne 0) { throw "zmanim submodule failed" } }
           }
 
       - name: Record what is being built
