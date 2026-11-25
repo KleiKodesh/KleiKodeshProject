@@ -660,3 +660,26 @@ internal static class RpcResponse
     public static byte[] Err(string op, Exception ex) => Err(ex.Message, $"op '{op}' threw:\n{ex}");
 }
 
+
+/// <summary>Args of the daily-learning log ops (<c>dailyLearningDay/Mark/Unmark</c>); date = yyyy-MM-dd.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DailyLearningLogArgs
+{
+    public string Date { get; set; } = "";
+    public string Cycle { get; set; } = "";
+    public string Place { get; set; } = "";
+}
+
+/// <summary>Args of <c>findBooksByName</c>: groups of names, each tried in order.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class FindBooksByNameArgs
+{
+    public List<List<global::KitveiHakodesh.Core.SeforimDb.BookNameQuery>> Groups { get; set; } = [];
+}
+
+/// <summary>Result of <c>findBooksByName</c>: one book id per group, 0 when none is in the library.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class FindBooksByNameResult
+{
+    public List<int> BookIds { get; set; } = [];
+}

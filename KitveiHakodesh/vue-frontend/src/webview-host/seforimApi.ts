@@ -553,6 +553,14 @@ export async function getBookIdsByTitlePattern(pattern: string): Promise<{ id: n
   return (await seforimOp<{ rows: { id: number }[] }>('getBookIdsByTitlePattern', { pattern })).rows
 }
 
+/**
+ * Library books by name, matched in the service (folded titles, optional category path).
+ * One group of names per wanted book, tried in order; the result has one id per group, 0 = none.
+ */
+export async function findBooksByName(groups: Array<Array<{ title: string; section?: string }>>): Promise<number[]> {
+  return (await seforimOp<{ bookIds: number[] }>('findBooksByName', { groups })).bookIds
+}
+
 export async function getBookIdByExactTitle(title: string): Promise<{ id: number }[]> {
   return (await seforimOp<{ rows: { id: number }[] }>('getBookIdByExactTitle', { title })).rows
 }

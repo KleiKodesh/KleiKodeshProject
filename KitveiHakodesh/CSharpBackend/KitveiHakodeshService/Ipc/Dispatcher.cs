@@ -1,4 +1,5 @@
 using KitveiHakodeshService.Catalog;
+using KitveiHakodesh.Core.DailyLearning;
 using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.SeforimLibraryDownload;
 using KitveiHakodesh.Core.HebrewBooks;
@@ -284,6 +285,22 @@ public sealed class Dispatcher(
                         ? new PickFolderResult { Cancelled = true }
                         : new PickFolderResult { Path = picked }));
                 }
+
+                // Daily-learning log: a sorted CSV in a folder the user picks (Core DailyLearningLog).
+                case "dailyLearningDay":
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Day(MsgPack.De<DailyLearningLogArgs>(req.Args).Date)));
+                case "dailyLearningMark":
+                {
+                    var a = MsgPack.De<DailyLearningLogArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Mark(a.Date, a.Cycle, a.Place)));
+                }
+                case "dailyLearningUnmark":
+                {
+                    var a = MsgPack.De<DailyLearningLogArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Unmark(a.Date, a.Cycle)));
+                }
+                case "dailyLearningMoveTo":
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.MoveTo(MsgPack.De<StringArg>(req.Args).Value ?? "")));
 
                 // One level of a folder on disk for UserSpace's tree (Core LocalFolderListing).
                 // Names only - opening a file still goes through openLocalFile's grant.
@@ -1110,6 +1127,13 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<TitlePatternArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new BookIdsResult { Rows = seforim.GetBookIdsByTitlePattern(a.Pattern) }));
+                }
+
+                // Library books by name (daily-learning cycles): per group, the first found; 0 = none.
+                case "findBooksByName":
+                {
+                    var a = MsgPack.De<FindBooksByNameArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new FindBooksByNameResult { BookIds = seforim.FindBooksByName(a.Groups) }));
                 }
 
                 case "getBookIdByExactTitle":

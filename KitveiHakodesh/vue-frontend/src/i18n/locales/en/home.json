@@ -7,6 +7,19 @@
     "full": "Full calendar"
   },
   "searchButtonTitle": "Type to search a book title. Click here to search content in the library",
+  "learningLog": {
+    "mark": "Mark as learned (click again for another time)",
+    "unmark": "Remove one mark",
+    "excelHint": "Your marks are saved in a file you can open and edit in Excel or LibreOffice",
+    "noFile": "Choose a folder to save your marks (you can edit them in Excel or LibreOffice)",
+    "openExcel": "Open in your spreadsheet program (Excel, LibreOffice)",
+    "showInFolder": "Show the file in its folder",
+    "move": "Move the file to another folder",
+    "pickFolder": "Choose a folder for the learning file",
+    "locked": "The learning file is open in another program (Excel or LibreOffice). Close it and try again",
+    "exists": "That folder already has a learning file",
+    "failed": "The learning file could not be saved"
+  },
   "dateBar": {
     "pin": "Pin: show this bar at the bottom of every page, not just the home page",
     "unpin": "Unpin: show this bar on the home page only",

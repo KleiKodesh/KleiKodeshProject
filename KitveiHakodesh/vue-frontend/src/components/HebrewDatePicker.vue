@@ -15,7 +15,10 @@ const hostWindow = useHostWindow()
 const open = ref(false)
 const btn = useTemplateRef<HTMLElement>('btn')
 const pop = useTemplateRef<HTMLElement>('pop')
-const { bottom, right } = useElementBounding(btn)
+// Its own window/scroll listeners go on the window it is drawn in (VueUse's default is the main one).
+const { bottom, right, update: updatePosition } = useElementBounding(btn, { windowResize: false, windowScroll: false })
+useEventListener(hostWindow, 'resize', updatePosition, { passive: true })
+useEventListener(hostWindow, 'scroll', updatePosition, { capture: true, passive: true })
 const closer = useDropdownClose(pop, () => { open.value = false }, { toggleButton: btn })
 /** Classic keys: arrows move the focused day (RTL), PageUp/Down a month, Enter picks, Esc closes. */
 const focusDay = shallowRef(new Date())
@@ -26,14 +29,21 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   const step: Record<string, number> = { ArrowLeft: 1, ArrowRight: -1, ArrowUp: -7, ArrowDown: 7 }
   let hd = new HDate(focusDay.value)
   if (e.key in step) hd = hd.add(step[e.key]!, 'd')
-  else if (e.key === 'PageUp') hd = hd.subtract(30, 'd')
-  else if (e.key === 'PageDown') hd = hd.add(30, 'd')
+  else if (e.key === 'PageUp' || e.key === 'PageDown') hd = sameDayInMonth(hd, e.key === 'PageUp' ? -1 : 1)
   else return
   e.preventDefault()
   focusDay.value = hd.greg()
   mode.value = 'days'
   shownMonth.value = new HDate(1, hd.getMonth(), hd.getFullYear())
 })
+
+/** The same day of the month a Hebrew month back/forward (the month's last day when it is shorter). */
+function sameDayInMonth(hd: HDate, by: number): HDate {
+  const first = new HDate(1, hd.getMonth(), hd.getFullYear())
+  const target = by > 0 ? first.add(first.daysInMonth(), 'd') : first.subtract(1, 'd')
+  const days = new HDate(1, target.getMonth(), target.getFullYear()).daysInMonth()
+  return new HDate(Math.min(hd.getDate(), days), target.getMonth(), target.getFullYear())
+}
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 const gemDay = (hd: HDate) => hd.renderGematriya().split(' ')[0] ?? ''
@@ -49,6 +59,7 @@ function toggle() {
     shownMonth.value = new HDate(1, hd.getMonth(), hd.getFullYear())
     focusDay.value = model.value
     mode.value = 'days'
+    today.value = new Date() // the today ring stays right past midnight
   }
   open.value = !open.value
 }
@@ -95,7 +106,7 @@ const cells = computed(() => {
   }
   return out
 })
-const today = new Date()
+const today = shallowRef(new Date())
 
 function pick(d: Date) {
   model.value = d

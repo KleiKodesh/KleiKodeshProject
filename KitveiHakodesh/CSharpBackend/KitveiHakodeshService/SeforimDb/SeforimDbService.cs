@@ -239,6 +239,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<BookIdRow> GetBookIdsByTitlePattern(string pattern) =>
         Run(() => _queries.GetBookIdsByTitlePattern(pattern), new List<BookIdRow>(), "getBookIdsByTitlePattern");
 
+    public List<int> FindBooksByName(List<List<BookNameQuery>> groups) =>
+        Run(() => _queries.FindBooksByName(groups), new List<int>(), "findBooksByName");
+
     public List<BookIdRow> GetBookIdByExactTitle(string title) =>
         Run(() => _queries.GetBookIdByExactTitle(title), new List<BookIdRow>(), "getBookIdByExactTitle");
 
