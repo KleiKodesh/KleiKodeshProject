@@ -16,6 +16,8 @@ $repo = (git rev-parse --show-toplevel).Trim()
 Set-Location $repo
 
 function Invoke-Git([string[]] $GitArgs) {
+    # Git writes its messages to stderr; Windows PowerShell would turn them into errors.
+    $ErrorActionPreference = 'Continue'
     $out = & git @GitArgs 2>&1
     return [pscustomobject]@{ Ok = ($LASTEXITCODE -eq 0); Text = ($out | Out-String).Trim() }
 }
