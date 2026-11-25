@@ -394,6 +394,11 @@ namespace KitveiHakodeshLib
                 _pendingDailyLearning = null;
                 PushOpenDailyLearning(dailyLearning);
             }
+            if (_pendingCalendarWindow)
+            {
+                _pendingCalendarWindow = false;
+                _bridge.PushEvent(new { @event = "openCalendarAppWindow" });
+            }
         }
 
         /// <summary>The Hebrew-capable font families on THIS machine, enumerated in this process

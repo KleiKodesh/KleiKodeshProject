@@ -36,6 +36,10 @@ namespace KitveiHakodeshDesktopApp
         // running instance older than this drops it in MainForm.OpenRequest.
         private const string NewWindowRequest = "--new-window";
 
+        // The installer's calendar shortcut: the calendar as a widget window
+        // (opened, or brought to the front when one is open). Forwarded like --new-window.
+        private const string CalendarRequest = "--calendar";
+
         // The window a forwarded file or link opens in: the last one activated.
         private static MainForm _activeWindow;
 
@@ -115,7 +119,7 @@ namespace KitveiHakodeshDesktopApp
                     }
 
                     // A new window shows itself; nothing to restore.
-                    if (newWindow) return;
+                    if (newWindow || request == CalendarRequest) return; // these show their own window
 
                     // Only restore if minimized — do NOT call SetForegroundWindow on the
                     // OTHER process's window from here. (The running instance calls it on its
@@ -159,6 +163,11 @@ namespace KitveiHakodeshDesktopApp
             // GetOpenRequestArgument) opens in the first of them.
             string[] windowIds = AppSettingsRegistry.GetOpenWindowIds();
             var first = CreateWindow(windowIds[0], GetOpenRequestArgument());
+            // Launched by the calendar shortcut with no app running: the calendar window opens
+            // once the first window can take it (DrainEarlyRequests).
+            string[] launchArgs = Environment.GetCommandLineArgs();
+            if (launchArgs.Length > 1 && launchArgs[1] == CalendarRequest)
+                lock (EarlyRequestsLock) EarlyRequests.Add(CalendarRequest);
             first.HandleCreated += (s, e) => first.BeginInvoke(new Action(DrainEarlyRequests));
             lock (EarlyRequestsLock) _activeWindow = first;
             for (int i = 1; i < windowIds.Length; i++)
@@ -513,6 +522,11 @@ namespace KitveiHakodeshDesktopApp
             {
                 // Another window of the same page (the VS Code model), not another page.
                 window.Viewer.OpenNewAppWindow();
+                return;
+            }
+            if (request == CalendarRequest)
+            {
+                window.Viewer.OpenCalendarAppWindow();
                 return;
             }
 #if DEBUG

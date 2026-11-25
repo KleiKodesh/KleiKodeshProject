@@ -9,7 +9,7 @@ import { lsGet, lsSet } from '@/utils/persistence'
  * One window per widget; opening an open one brings it to the front. Where each window
  * sits and how big it is the host remembers, by the window's name.
  */
-export type BuiltinWidgetId = 'dict' | 'calendar' | 'ruler' | 'worldClock' | 'zmanim' | 'learning' | 'keepScreenOn' | 'about'
+export type BuiltinWidgetId = 'dict' | 'calendar' | 'ruler' | 'worldClock' | 'zmanim' | 'learning' | 'keepScreenOn' | 'about' | 'calendarApp'
 /** A widget the user added: a local HTML page or an Otzaria add-in. */
 export type CustomWidgetId = `custom:${string}`
 export type WidgetId = BuiltinWidgetId | CustomWidgetId
@@ -93,7 +93,7 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 
 /** The size a widget's window first opens at; after that the host keeps the user's. */
 export function widgetWindowSize(id: WidgetId): { width: number; height: number; minWidth?: number } {
-  if (id === 'calendar' && CALENDAR_EXTENDED) return CALENDAR_EXTENDED_SIZE
+  if ((id === 'calendar' && CALENDAR_EXTENDED) || id === 'calendarApp') return CALENDAR_EXTENDED_SIZE
   return id.startsWith('custom:') ? CUSTOM_SIZE : WIDGET_WINDOW_SIZE
 }
 

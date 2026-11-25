@@ -153,6 +153,8 @@ namespace KitveiHakodeshLib
         private HostLink _pendingOpenBook;
         // A daily-learning link (standalone calendar) waiting for 'appReady'; only the last is kept.
         private DailyLearningLink _pendingDailyLearning;
+        // A "--calendar" launch (the installer's calendar shortcut) waiting for 'appReady'.
+        private bool _pendingCalendarWindow;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
         // Completed by the page's 'persistenceFlushed' message while FlushPersistenceAsync
@@ -406,6 +408,19 @@ namespace KitveiHakodeshLib
                 _pendingDailyLearning = link;
             else
                 PushOpenDailyLearning(link);
+        }
+
+        /// <summary>
+        /// The calendar as a widget window (the installer's calendar shortcut launches the app
+        /// with --calendar): the page opens it, or brings an open one to the front. Held until the
+        /// page is ready on a cold start.
+        /// </summary>
+        public void OpenCalendarAppWindow()
+        {
+            if (!_appReady)
+                _pendingCalendarWindow = true;
+            else
+                _bridge.PushEvent(new { @event = "openCalendarAppWindow" });
         }
 
         private void PushOpenDailyLearning(DailyLearningLink link)

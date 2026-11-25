@@ -10,6 +10,7 @@ import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/we
 import { iconKeyForEntry, isDocumentIconKey } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
 import { openWidgetTab } from '@/features/widgets/openWidgetTab'
+import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
 import {
   activateStripTab,
   closeStripTab,
@@ -171,6 +172,11 @@ export function initTabMirror(): void {
         break
       case 'openNewAppWindow':
         tabStore.openNewWindow()
+        break
+      case 'openCalendarAppWindow':
+        // The installer's calendar shortcut (--calendar): the calendar as a widget window
+        // (opened, or brought to the front when it is open).
+        useWidgetWindowStore().open('calendarApp')
         break
       case 'openWidgetAsTab':
         // A widget window dropped on this window's tab strip (AppViewer.OpenWidgetAsTab).
