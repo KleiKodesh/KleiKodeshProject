@@ -37,14 +37,11 @@ provide(PANE_NAVIGATION_KEY, {
 
 <template>
   <div class="app-shell">
-    <!-- The nav menu as an always-on panel docked to the shell's edge: it owns the edge
-         for the full height, and everything belonging to the document - title bar
-         included, since that is where the tab's title, breadcrumb and per-tab controls
-         live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
-         rail splits with it. -->
-    <AppNavSidebar v-if="settingsStore.getNavSidebarVisible()" />
+    <!-- Title bar (address bar) spans the full width on top; the nav rail sits below it,
+         beside the content. One rail per pane: a pane here is a whole shell. -->
+    <AppTitleBar />
     <div class="app-shell-main">
-      <AppTitleBar />
+      <AppNavSidebar v-if="settingsStore.getNavSidebarVisible()" />
       <main class="app-shell-content">
         <AppPageView />
       </main>
@@ -55,9 +52,8 @@ provide(PANE_NAVIGATION_KEY, {
 <style scoped>
 .app-shell {
   display: flex;
-  /* A row, not a column: the nav rail owns the shell's edge for its full height and the
-     title-bar-plus-content column sits beside it. */
-  flex-direction: row;
+  /* Title bar on top, then the rail-plus-content row. */
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
   min-width: 0;
@@ -74,8 +70,9 @@ provide(PANE_NAVIGATION_KEY, {
 .app-shell-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
 }
 .app-shell-content {
