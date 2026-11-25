@@ -178,8 +178,9 @@ const RELAY_TOUCH_THRESHOLD_PX = 60
 
 const iframeContentWindow = shallowRef<Window | null>(null)
 
+// To this page's own window, where its swipe handler listens (useTabSwipeNavigation).
 function fireSwipe(direction: 'next' | 'previous') {
-  window.dispatchEvent(
+  hostWindow.dispatchEvent(
     new CustomEvent<TabSwipeGestureEventDetail>(TAB_SWIPE_EVENT, {
       detail: { direction },
     }),

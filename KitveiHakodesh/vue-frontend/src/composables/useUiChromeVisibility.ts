@@ -1,3 +1,4 @@
+import { allHostWindows, onDetachedWindowOpened } from '@/composables/detachedWindow/hostWindow'
 import { effectScope, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -66,7 +67,10 @@ function revealScrollbarFor(target: Element) {
 }
 
 function onAnyScroll(event: Event) {
-  revealScrollbarFor(event.target instanceof Element ? event.target : document.documentElement)
+  const target = event.target
+  if (target instanceof Element) revealScrollbarFor(target)
+  else if (target instanceof Document) revealScrollbarFor(target.documentElement)
+  else revealScrollbarFor(document.documentElement)
 }
 
 /**
@@ -86,13 +90,21 @@ export function revealScrollbarOnHover(target: Element | null) {
   revealScrollbarFor(target)
 }
 
+// While the mode is on, a window opened later (an extra app window) gets the scroll listener too.
+let stopWatchingNewWindows: (() => void) | null = null
+
 function applyScrollbarsHidden(hidden: boolean) {
+  // The class reaches every window: extra windows mirror the main root's attributes (mirrorPageStyles).
   document.documentElement.classList.toggle('scrollbars-hidden', hidden)
   if (hidden) {
     // Re-adding an identical listener is a no-op, so this is idempotent.
-    window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
+    for (const host of allHostWindows()) host.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
+    stopWatchingNewWindows ??= onDetachedWindowOpened((host) =>
+      host.addEventListener('scroll', onAnyScroll, { capture: true, passive: true }))
   } else {
-    window.removeEventListener('scroll', onAnyScroll, { capture: true })
+    for (const host of allHostWindows()) host.removeEventListener('scroll', onAnyScroll, { capture: true })
+    stopWatchingNewWindows?.()
+    stopWatchingNewWindows = null
     clearScrollingFlag()
   }
 }

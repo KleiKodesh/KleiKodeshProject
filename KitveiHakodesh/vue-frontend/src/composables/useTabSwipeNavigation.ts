@@ -248,7 +248,11 @@ if (typeof window !== 'undefined') {
  * TAB_SWIPE_EVENT CustomEvent on the parent window when a swipe is detected.
  * This composable listens for that event and handles it identically to native gestures.
  */
-export function useTabSwipeNavigation() {
+/**
+ * Swipe gestures for one app window: `host` is the window they are made in, `windowKey`
+ * whose tab they move (App.vue: the main window; AppWindowShell.vue: each extra window).
+ */
+export function useTabSwipeNavigation(host: Window = window, windowKey = '') {
   const tabStore = useTabStore()
 
   /**
@@ -261,13 +265,13 @@ export function useTabSwipeNavigation() {
    * runt handling — is gesture DETECTION and is deliberately untouched.
    */
   function switchToAdjacentTab(direction: 'next' | 'previous') {
-    tabStore.goHistory(tabStore.activeTabId, direction === 'next' ? 1 : -1)
+    tabStore.goHistory(tabStore.activeIdIn(windowKey), direction === 'next' ? 1 : -1)
   }
 
   // ── Touch swipe (native — document body) ────────────────────────────────────
 
   let touchStartedInScroller = false
-  useSwipe(document.body, {
+  useSwipe(host.document.body, {
     threshold: TOUCH_THRESHOLD_PX,
     onSwipeStart(event) {
       touchStartedInScroller = isInsideHorizontalScroller(event.target)
@@ -284,7 +288,7 @@ export function useTabSwipeNavigation() {
   // propagation; passive since we no longer preventDefault (overscroll is handled by
   // CSS overscroll-behavior on the root). The C# host also forwards WM_MOUSEHWHEEL as
   // a synthetic wheel event here when the web content lacks OS focus (AppViewerFocus.cs).
-  useEventListener(document, 'wheel', createWheelSwipeHandler(switchToAdjacentTab), {
+  useEventListener(host.document, 'wheel', createWheelSwipeHandler(switchToAdjacentTab), {
     passive: true,
     capture: true,
   })
@@ -295,7 +299,7 @@ export function useTabSwipeNavigation() {
   // on the parent window when a swipe completes. We handle it here exactly like
   // a native swipe so the tab-switching logic stays in one place.
 
-  useEventListener(window, TAB_SWIPE_EVENT, (event: Event) => {
+  useEventListener(host, TAB_SWIPE_EVENT, (event: Event) => {
     const { direction } = (event as CustomEvent<TabSwipeGestureEventDetail>).detail
     switchToAdjacentTab(direction)
   })

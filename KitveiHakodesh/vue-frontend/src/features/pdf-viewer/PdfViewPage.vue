@@ -55,6 +55,7 @@ const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, 
 })
 import { useHostSearchStore } from '@/stores/hostSearchStore'
 
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'
 import { shallowRef } from 'vue'
@@ -69,9 +70,11 @@ import { shallowRef } from 'vue'
 const RELAY_TOUCH_THRESHOLD_PX = 60
 
 const iframeContentWindow = shallowRef<Window | null>(null)
+const hostWindow = useHostWindow()
 
+// To this page's own window, where its swipe handler listens (useTabSwipeNavigation).
 function fireSwipe(direction: 'next' | 'previous') {
-  window.dispatchEvent(
+  hostWindow.dispatchEvent(
     new CustomEvent<TabSwipeGestureEventDetail>(TAB_SWIPE_EVENT, {
       detail: { direction },
     }),
