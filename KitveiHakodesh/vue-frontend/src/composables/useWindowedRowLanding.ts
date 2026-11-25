@@ -10,7 +10,7 @@
  *   2. Optional refinement: apply the `.current` mark for a search occurrence and nudge it
  *      into view.
  */
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import { setCurrentMark } from '@/utils/searchMatchHighlight'
 
 /**

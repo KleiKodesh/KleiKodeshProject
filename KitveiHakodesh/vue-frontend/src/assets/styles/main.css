@@ -575,8 +575,13 @@ h1::after {
 :root.scrollbars-hidden :not(.scrollbars-scrolling) {
   scrollbar-color: transparent transparent !important;
 }
-/* The WindowedScroller draws its own bar beside its viewport; it follows the same
-   rule, keyed on the viewport that `scrollbars-scrolling` lands on. */
+/* The WindowedScroller (vue-windowed-scroller) draws its own bar: thumb in the same
+   colour as every native bar (theme.css: text-secondary). */
+.windowed-scroller {
+  --windowed-scroller-color: var(--text-secondary);
+}
+/* ...and follows the hidden-scrollbars rule, keyed on the viewport that
+   `scrollbars-scrolling` lands on. */
 :root.scrollbars-hidden
   .windowed-scroller:not(:has(> .windowed-scroller-viewport.scrollbars-scrolling))
   .windowed-scroller-bar {

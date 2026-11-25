@@ -12,6 +12,7 @@
  * re-creates it), so reading this once in setup is enough.
  */
 import { hasInjectionContext, inject, provide, type InjectionKey } from 'vue'
+import { provideScrollerHostWindow } from 'vue-windowed-scroller'
 
 export type HostWindow = Window & typeof globalThis
 
@@ -20,6 +21,8 @@ const HOST_WINDOW: InjectionKey<HostWindow> = Symbol('hostWindow')
 /** Everything rendered below the caller lives in `hostWindow`. */
 export function provideHostWindow(hostWindow: HostWindow): void {
   provide(HOST_WINDOW, hostWindow)
+  // The windowed scrollers below listen, measure and observe in it too.
+  provideScrollerHostWindow(hostWindow)
 }
 
 /** The window this component is rendered in. Call during setup. */

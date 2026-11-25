@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import WindowedScroller from '@/components/WindowedScroller.vue'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import { WindowedScroller } from 'vue-windowed-scroller'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import {
   IconWindowArrowUp20Regular,
   IconFolderOpen20Regular,

@@ -1,6 +1,9 @@
 import { createApp } from 'vue'
+import { VueWindowedScroller } from 'vue-windowed-scroller'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import LoadingAnimation from './components/LoadingAnimation.vue'
+import { revealScrollbarOnHover } from './composables/useUiChromeVisibility'
 import { i18n, uiLanguage } from './i18n'
 import './assets/styles/main.css'
 import './assets/styles/readingColumn.css'
@@ -42,6 +45,9 @@ const pinia = createPinia()
 document.documentElement.lang = uiLanguage
 document.documentElement.dir = uiLanguage === 'en' ? 'ltr' : 'rtl'
 const app = createApp(App).use(pinia).use(i18n)
+// Every windowed scroller: its drawn bar follows the hidden-scrollbars mode (shown while
+// hovered), and a scroller opening deep in a slow list shows the app's loading dots.
+app.use(VueWindowedScroller, { onBarHover: revealScrollbarOnHover, openingIndicator: LoadingAnimation })
 
 // All synchronous — reads from localStorage
 useWorkspaceStore().init()

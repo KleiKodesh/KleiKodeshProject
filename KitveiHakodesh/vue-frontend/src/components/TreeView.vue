@@ -17,7 +17,7 @@
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
-import WindowedScroller from './WindowedScroller.vue'
+import { WindowedScroller } from 'vue-windowed-scroller'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { SegmentSearchTree, type TreeSearcher } from '@/utils/segmentSearchTree'

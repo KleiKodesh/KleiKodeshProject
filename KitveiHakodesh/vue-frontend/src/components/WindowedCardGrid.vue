@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useElementSize } from '@vueuse/core'
-import WindowedScroller from './WindowedScroller.vue'
+import { WindowedScroller } from 'vue-windowed-scroller'
 import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import type { CardsViewMode } from '@/stores/settingsStore'
 

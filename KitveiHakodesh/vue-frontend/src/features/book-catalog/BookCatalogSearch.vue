@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
-import WindowedScroller from '@/components/WindowedScroller.vue'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import { WindowedScroller } from 'vue-windowed-scroller'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import BookCatalogSearchTiles from './BookCatalogSearch.Tiles.vue'
 import type { FileSearchFsItem, SearchFsItem, TocFsItem } from './useBookCatalogSearch'

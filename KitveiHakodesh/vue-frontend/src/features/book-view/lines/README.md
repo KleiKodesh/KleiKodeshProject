@@ -1,10 +1,10 @@
 # lines
 
-The book view's main text: a `WindowedScroller` (src/components) mounting a sliding window of real line rows. Handles line rendering, selection, and persistence.
+The book view's main text: a `WindowedScroller` (the vue-windowed-scroller package, submodule `KitveiHakodesh/vue-windowed-scroller`) mounting a sliding window of real line rows. Handles line rendering, selection, and persistence.
 
 ## Components
 
-**BookViewLinesContent.vue** - the main text, rendered through `WindowedScroller.vue` (`src/components`): the scroller asks for each range of lines (`ensureLines`) before mounting it, so no row is ever a placeholder, and it is created AT the saved line (`initialIndex`, read once at creation) — never opened at the top and moved. Handles line selection, scroll position persistence, and communicates the selected line to the commentary panel. Any change to how lines are rendered or selected belongs here.
+**BookViewLinesContent.vue** - the main text, rendered through `WindowedScroller.vue` (vue-windowed-scroller): the scroller asks for each range of lines (`ensureLines`) before mounting it, so no row is ever a placeholder, and it is created AT the saved line (`initialIndex`, read once at creation) — never opened at the top and moved. Handles line selection, scroll position persistence, and communicates the selected line to the commentary panel. Any change to how lines are rendered or selected belongs here.
 
 **BookViewAnnotationMenuRow.vue** - context menu row for highlight color selection and note editing. Uses `HIGHLIGHT_COLORS_LIST` from `bookViewAnnotationColors.ts`. Shows color swatches, an edit button for existing notes, and an eraser to clear highlights.
 

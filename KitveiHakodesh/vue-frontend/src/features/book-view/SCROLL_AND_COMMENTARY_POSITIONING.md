@@ -14,7 +14,7 @@ place. Where this document says "the commentary panel", read "each commentary pa
 ## The model — read this first
 
 The lines pane and the commentary panels are `WindowedScroller` lists
-(`src/components/WindowedScroller.vue`).
+(`KitveiHakodesh/vue-windowed-scroller/src/WindowedScroller.vue`, the vue-windowed-scroller package).
 
 1. **A windowed scroller shows "the rows from index N". That is all it knows.** The
    top of the list is not special: row 0 and row 5000 are the same kind of window.

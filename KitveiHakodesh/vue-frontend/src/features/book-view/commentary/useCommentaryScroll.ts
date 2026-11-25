@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
-import type { WindowedScrollerApi, WindowedScrollerMoveSource } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi, WindowedScrollerMoveSource } from 'vue-windowed-scroller'
 
 /**
  * Where a group's header sits below the viewport's top, and where the sticky header

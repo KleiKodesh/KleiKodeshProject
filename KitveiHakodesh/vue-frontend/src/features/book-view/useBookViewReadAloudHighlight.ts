@@ -1,6 +1,6 @@
 import { computed, nextTick, watch } from 'vue'
 import type { BookViewReadAloud } from './useBookViewReadAloud'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import type { ReadAloudWordMark } from './lines/readAloudWordMark'
 
 /**

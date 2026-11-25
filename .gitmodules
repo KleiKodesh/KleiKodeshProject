@@ -10,3 +10,6 @@
 [submodule "KitveiHakodesh/kleikodesh-zmanim.js"]
 	path = KitveiHakodesh/kleikodesh-zmanim.js
 	url = https://github.com/KleiKodesh/kleikodesh-zmanim.js.git
+[submodule "KitveiHakodesh/vue-windowed-scroller"]
+	path = KitveiHakodesh/vue-windowed-scroller
+	url = https://github.com/KleiKodesh/vue-windowed-scroller.git

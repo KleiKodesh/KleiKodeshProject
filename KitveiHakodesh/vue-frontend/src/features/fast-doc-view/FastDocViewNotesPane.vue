@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import WindowedScroller from '@/components/WindowedScroller.vue'
+import { WindowedScroller } from 'vue-windowed-scroller'
 import type { FastDocViewIndexedNote } from './useFastDocViewNotes'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import { vFastDocViewTabs } from './fastDocViewTabs'
 
 /**

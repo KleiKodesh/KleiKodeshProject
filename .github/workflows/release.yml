@@ -118,7 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive   # WpfLib, ChromeTabs, FastDocView + its submodules
+          submodules: recursive   # WpfLib, ChromeTabs, FastDocView + its submodules, zmanim, vue-windowed-scroller
 
       # The typing tutor ships in the setup but is its own repo (not tracked here):
       # the latest version, beside the project as on a dev machine.

@@ -15,7 +15,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
  * letters survive all of them, so a count of letters points at the same word either way.
  * Counting text nodes, not pixels, also makes it survive zoom and pane width.
  */
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 
 export interface BookViewLinesBookmarkPoint {

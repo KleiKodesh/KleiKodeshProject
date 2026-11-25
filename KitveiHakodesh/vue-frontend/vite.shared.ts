@@ -28,6 +28,8 @@ export const appResolve = {
     '@': fileURLToPath(new URL('./src', import.meta.url)),
     // The zmanim library, compiled from its TypeScript source in the submodule.
     'kleikodesh-zmanim': fileURLToPath(new URL('../kleikodesh-zmanim.js/src/index.ts', import.meta.url)),
+    // The windowed scroller (vue-windowed-scroller), compiled from its source in the submodule.
+    'vue-windowed-scroller': fileURLToPath(new URL('../vue-windowed-scroller/src/index.ts', import.meta.url)),
     // @hebcal/core (molad.js) imports temporal-polyfill/global as a side-effectful
     // install of Temporal onto globalThis. Redirect to our conditional stub which
     // only runs the polyfill when native Temporal is absent (Chromium < 138 /
@@ -35,4 +37,7 @@ export const appResolve = {
     // as-is, saving the 118KB polyfill from the bundle.
     'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
   },
+  // The submodule's source imports these; it has no node_modules of its own, so they
+  // resolve to the app's copies - one Vue, one VueUse.
+  dedupe: ['vue', '@vueuse/core'],
 }

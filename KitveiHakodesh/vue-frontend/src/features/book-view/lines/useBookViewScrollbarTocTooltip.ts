@@ -24,7 +24,7 @@
 import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { TocEntry } from '@/webview-host/queries.types'
-import type { WindowedScrollerMoveSource, WindowedScrollerThumbRect } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerMoveSource, WindowedScrollerThumbRect } from 'vue-windowed-scroller'
 
 export interface ScrollbarTocTooltipData {
   /** Viewport Y of the pointer, so the label sits beside the pointer on the track. */

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
-import WindowedScroller from '@/components/WindowedScroller.vue'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import { WindowedScroller } from 'vue-windowed-scroller'
+import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import type { BookRow } from '@/webview-host/queries.types'
 const props = defineProps<{
