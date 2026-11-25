@@ -55,6 +55,9 @@ namespace KitveiHakodeshDesktopApp
         /// <summary>The reader closed this window while others of its page stay: hidden, its page still running.</summary>
         internal bool ClosedWhileOthersStay { get; set; }
 
+        /// <summary>The reader asked to close this window while others of its page stay; the page is closing its tabs.</summary>
+        internal bool CloseRequestedWhileOthersStay { get; set; }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.UserClosing && !ClosedWhileOthersStay

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using FluentChromeTabs;
 using KitveiHakodesh.Core.Settings;
+using KitveiHakodeshLib;
 
 namespace KitveiHakodeshDesktopApp
 {
@@ -19,8 +21,15 @@ namespace KitveiHakodeshDesktopApp
 
         private static readonly List<PageWindowForm> PageWindows = new List<PageWindowForm>();
 
-        // The window a page opens next for a dropped tab is placed by this, once shown.
-        private static Action<Form> _pendingPlacement;
+        // The window a page opens next for a dropped tab: placed by this once it shows that tab.
+        private sealed class PendingPlacement
+        {
+            public MainForm Page;
+            public string TabId;
+            public Action<Form> Place;
+        }
+
+        private static PendingPlacement _pendingPlacement;
 
         /// <summary>A main window takes part in tab drags and screen docking.</summary>
         private static void AttachDocking(MainForm window)
@@ -40,19 +49,38 @@ namespace KitveiHakodeshDesktopApp
             window.FormClosed += (s, e) =>
             {
                 PageWindows.Remove(window);
-                if (!owner.IsDisposed) owner.Viewer.ForgetTabsState(window.WindowKey);
+                if (owner.IsDisposed) return;
+                owner.Viewer.ForgetTabsState(window.WindowKey);
+                // The main window was closed while this one stayed: with the last of its page's
+                // windows gone, it closes for real (the app quits, or its page goes).
+                if (owner.ClosedWhileOthersStay && !owner.Visible && !PageWindows.Exists(w => w.PageOwner == owner && !w.IsDisposed))
+                    owner.BeginInvoke(new Action(() => { if (!owner.IsDisposed) owner.Close(); }));
             };
-            Action<Form> place = _pendingPlacement;
+
+            // Only the window opened for the dropped tab takes its placement: one opened for
+            // anything else (a new window, another page) is left alone.
+            PendingPlacement pending = _pendingPlacement;
+            if (pending == null || pending.Page != owner) return;
             _pendingPlacement = null;
-            if (place == null) return;
             // Invisible until it has its place: shown first at its default spot and moved after,
             // it would flash there on a busy computer.
             window.Opacity = 0;
-            window.Shown += (s, e) =>
+            bool settled = false;
+            EventHandler<TabsStateChangedEventArgs> onTabs = null;
+            Action settle = () =>
             {
-                place(window);
+                if (settled || window.IsDisposed || !window.Visible) return;
+                TabsStateChangedEventArgs tabs = owner.Viewer.LastTabsState(window.WindowKey);
+                if (tabs == null) return; // its first tab list is still on its way
+                settled = true;
+                owner.Viewer.TabsStateChanged -= onTabs;
+                if (tabs.Tabs.Any(t => t.Id == pending.TabId)) pending.Place(window);
                 window.BeginInvoke(new Action(() => { if (!window.IsDisposed) window.Opacity = 1; }));
             };
+            onTabs = (s, e) => { if (e.WindowKey == window.WindowKey && !window.IsDisposed) window.BeginInvoke(settle); };
+            owner.Viewer.TabsStateChanged += onTabs;
+            window.Shown += (s, e) => settle();
+            window.FormClosed += (s, e) => owner.Viewer.TabsStateChanged -= onTabs;
         }
 
         /// <summary>A tool window (widget, commentary pop-out) of a page: it docks and tiles like the others.</summary>
@@ -97,7 +125,7 @@ namespace KitveiHakodeshDesktopApp
             {
                 MainForm page = PageOf(source);
                 if (!(tab?.Tag is string tabId) || page == null || page.IsDisposed) return;
-                _pendingPlacement = place;
+                _pendingPlacement = new PendingPlacement { Page = page, TabId = tabId, Place = place };
                 page.Viewer.MoveTabToAppWindow(tabId, null, -1);
             }
 

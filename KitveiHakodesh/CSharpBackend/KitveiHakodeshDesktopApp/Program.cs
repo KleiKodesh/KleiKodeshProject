@@ -190,11 +190,18 @@ namespace KitveiHakodeshDesktopApp
         private static MainForm CreateWindow(string windowId, string initialRequest)
         {
             var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood, CloseOnlyThisWindow = CloseOnlyThisWindow };
-            // Its tabs are gone after the reader closed it while other windows stay: it hides.
+            // Its tabs are gone after the reader closed it while other windows stay: now it leaves its
+            // place and hides (not before - the page may still keep it, for unsaved work).
             form.Viewer.TabsStateChanged += (s, e) =>
             {
-                if (form.ClosedWhileOthersStay && e.WindowKey.Length == 0 && e.Tabs.Count == 0 && form.Visible)
-                    form.BeginInvoke(new Action(form.Hide));
+                if (form.CloseRequestedWhileOthersStay && e.WindowKey.Length == 0 && e.Tabs.Count == 0 && form.Visible)
+                    form.BeginInvoke(new Action(() =>
+                    {
+                        if (form.IsDisposed) return;
+                        form.ClosedWhileOthersStay = true;
+                        ScreenDocking.Forget(form); // the others take the space
+                        form.Hide();
+                    }));
             };
             form.Activated += (s, e) =>
             {
@@ -256,8 +263,11 @@ namespace KitveiHakodeshDesktopApp
 
         private static bool AnotherWindowStays(MainForm form)
         {
+            // A hidden main window only stays while windows its page draws are shown.
             foreach (MainForm other in OpenWindows)
-                if (other != form && !ClosingWindows.Contains(other)) return true;
+                if (other != form && !ClosingWindows.Contains(other)
+                    && (other.Visible || PageWindows.Exists(w => w.PageOwner == other && !w.IsDisposed && w.Visible)))
+                    return true;
             return false;
         }
 
@@ -271,8 +281,7 @@ namespace KitveiHakodeshDesktopApp
         private static bool CloseOnlyThisWindow(MainForm form)
         {
             if (!PageWindows.Exists(w => w.PageOwner == form && !w.IsDisposed && w.Visible)) return false;
-            form.ClosedWhileOthersStay = true;
-            ScreenDocking.Forget(form); // it leaves its place: the others take the space
+            form.CloseRequestedWhileOthersStay = true;
             form.Viewer.CloseAppWindow("");
             return true;
         }
