@@ -193,6 +193,48 @@ namespace KitveiHakodeshLib
         /// pane's title) redraws then: removing the splash moves focus into the page, and Office repaints its pane.
         /// </summary>
         public event EventHandler SplashHidden;
+        /// <summary>
+        /// The page has restored its view and drawn it (its 'contentReady'): every window it opened at
+        /// startup is up by now, and drawn. Windows shown early with the startup picture can show it.
+        /// </summary>
+        public event EventHandler ContentReady;
+
+        /// <summary>True once <see cref="ContentReady"/> was raised.</summary>
+        public bool IsContentReady { get; private set; }
+
+        private void OnContentReady()
+        {
+            if (IsContentReady) return;
+            IsContentReady = true;
+            ContentReady?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// A window shown before the page was up, with <paramref name="splash"/> over it: the splash goes
+        /// once both the page has drawn (<see cref="ContentReady"/>) and <paramref name="view"/> has loaded.
+        /// </summary>
+        public void RemoveSplashWhenDrawn(Control splash, WebView2 view)
+        {
+            if (splash == null) return;
+            splash.BringToFront();
+            bool loaded = false;
+            Action tryRemove = () =>
+            {
+                if (!loaded || !IsContentReady || splash.IsDisposed) return;
+                splash.Parent?.Controls.Remove(splash);
+                splash.Dispose();
+            };
+            EventHandler onReady = null;
+            onReady = (s, e) => { ContentReady -= onReady; if (!splash.IsDisposed) splash.BeginInvoke(tryRemove); };
+            if (!IsContentReady) ContentReady += onReady;
+            view.CoreWebView2InitializationCompleted += (s, e) =>
+            {
+                if (view.CoreWebView2 == null) { loaded = true; tryRemove(); return; }
+                view.CoreWebView2.NavigationCompleted += (s2, e2) => { loaded = true; tryRemove(); };
+            };
+            splash.Disposed += (s, e) => ContentReady -= onReady;
+        }
+
         /// <summary>The loading splash is still up (<see cref="SplashHidden"/> not raised yet).</summary>
         public bool IsSplashShowing => _splash != null;
 

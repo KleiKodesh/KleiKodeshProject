@@ -59,6 +59,14 @@ namespace KitveiHakodeshLib
         /// </summary>
         public event EventHandler<AppWindowRequestedEventArgs> AppWindowRequested;
 
+        /// <summary>
+        /// Set by the host: a window it already shows for a popup of this name (shown at startup
+        /// with the startup picture, before the page could open it), or null. The popup takes it
+        /// over where it is; the picture goes once the page has drawn. Its splash is the window's
+        /// control of type returned by <see cref="CreateStartupSplash"/>.
+        /// </summary>
+        public Func<string, Form> TakeWaitingPopupWindow { get; set; }
+
         private const string AppWindowPrefix = "appwindow-";
 
         private async void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
@@ -134,6 +142,13 @@ namespace KitveiHakodeshLib
                         else form.Size = OwnNormalBounds()?.Size ?? form.Size;
                     }
                 }
+                Control waitingSplash = null;
+                if (form == null && TakeWaitingPopupWindow?.Invoke(name) is Form waiting && !waiting.IsDisposed)
+                {
+                    form = waiting;
+                    keepsPlace = true;
+                    foreach (Control c in form.Controls) if (c is SplashOverlay) waitingSplash = c;
+                }
                 if (form == null)
                 form = new Form
                 {
@@ -155,9 +170,11 @@ namespace KitveiHakodeshLib
 
                 var popupView = new WebView2 { Dock = DockStyle.Fill };
                 (contentHost ?? form).Controls.Add(popupView);
+                RemoveSplashWhenDrawn(waitingSplash, popupView);
 
                 var owner = GetAncestor(Handle, GA_ROOT);
-                if (isAppWindow) { if (!form.Visible) form.Show(); } // a window of its own, like the main one
+                if (form.Visible) { } // already on screen (the host showed it at startup)
+                else if (isAppWindow) form.Show(); // a window of its own, like the main one
                 else if (SetPopupOwner != null)
                 {
                     SetPopupOwner(form.Handle); // VSTO: owned by the Word window
@@ -186,11 +203,16 @@ namespace KitveiHakodeshLib
                 {
                     if (name.Length == 0 || form.WindowState != FormWindowState.Normal) return;
                     if (pageKeepsBounds)
+                    {
                         _bridge?.PushEvent(new
                         {
                             @event = "popupBounds", name,
                             x = form.Left, y = form.Top, width = form.ClientSize.Width, height = form.ClientSize.Height,
                         });
+                        // Also where the host can read it before the page is up: the window it shows
+                        // at startup goes there (TakeWaitingPopupWindow).
+                        AppSettingsRegistry.SetPopupBounds(name, form.Left, form.Top, form.ClientSize.Width, form.ClientSize.Height);
+                    }
                     else
                         AppSettingsRegistry.SetPopupBounds(name, form.Left, form.Top,
                             form.ClientSize.Width, form.ClientSize.Height);

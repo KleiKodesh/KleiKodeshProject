@@ -75,16 +75,11 @@ namespace KitveiHakodeshDesktopApp
                 _splash = AppViewer.CreateStartupSplash(KitveiHakodesh.Core.Settings.AppSettingsRegistry.GetDarkMode());
                 Content.Controls.Add(_splash);
             }
-            // The page's view arrives: the startup picture goes once it has drawn.
+            // The page's view arrives: the startup picture goes once the page has drawn it.
             Content.ControlAdded += (s, e) =>
             {
-                if (_splash == null || !(e.Control is Microsoft.Web.WebView2.WinForms.WebView2 view)) return;
-                _splash.BringToFront();
-                view.CoreWebView2InitializationCompleted += (s2, e2) =>
-                {
-                    if (view.CoreWebView2 != null) view.CoreWebView2.NavigationCompleted += (s3, e3) => RemoveSplash();
-                    else RemoveSplash();
-                };
+                if (_splash == null || _splash.IsDisposed || !(e.Control is Microsoft.Web.WebView2.WinForms.WebView2 view)) return;
+                PageOwner.Viewer.RemoveSplashWhenDrawn(_splash, view);
             };
         }
 
@@ -93,15 +88,8 @@ namespace KitveiHakodeshDesktopApp
         {
             WindowKey = windowKey;
             TabsMirror = new ChromeTabsMirror(this, PageOwner.Viewer, windowKey,
-                () => { foreach (Control c in Content.Controls) if (c != _splash) { c.Focus(); break; } });
+                () => { foreach (Control c in Content.Controls) if (c is Microsoft.Web.WebView2.WinForms.WebView2) { c.Focus(); break; } });
         }
 
-        private void RemoveSplash()
-        {
-            if (_splash == null || IsDisposed) return;
-            Content.Controls.Remove(_splash);
-            _splash.Dispose();
-            _splash = null;
-        }
     }
 }

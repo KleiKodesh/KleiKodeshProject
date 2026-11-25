@@ -114,39 +114,24 @@ namespace KitveiHakodeshDesktopApp
         /// <summary>
         /// The main window only hosts the page and never shows: shown invisible once (its page has
         /// to start), then hidden. In its place a window shows at once with the startup picture,
-        /// which the page's first window takes over (unless <see cref="MainForm.ShowsStartupWindow"/>
-        /// is off: the calendar launched on its own).
+        /// which the page's windows take over (Program.StartupWindows; for the calendar launched on its
+        /// own, only the calendar's window).
         /// </summary>
         private static void MakePageHost(MainForm main)
         {
             main.Viewer.IsPageHost = true;
             main.Viewer.HostWindowHidden = true;
             main.Opacity = 0;
-            main.Load += (s, e) => { if (main.ShowsStartupWindow) ShowStartupWindow(main); };
+            main.Load += (s, e) => ShowStartupWindows(main);
+            main.Viewer.TakeWaitingPopupWindow = name => TakeWaitingWindow(main, name);
+            main.Viewer.ContentReady += (s, e) => main.BeginInvoke(new Action(() => CloseUnclaimedWaitingWindows(main)));
             main.Shown += (s, e) => main.BeginInvoke(new Action(() =>
             {
                 if (main.IsDisposed) return;
                 main.Hide();
-                PageWindowForm front = main.StartupWindow ?? main.LastActiveWindow;
+                Form front = (Form)main.LastActiveWindow ?? main.WaitingWindows.Values.LastOrDefault();
                 if (front != null && !front.IsDisposed && front.Visible) front.Activate();
             }));
-        }
-
-        /// <summary>A window with the startup picture, at the page host's saved place, until the page opens its window there.</summary>
-        private static void ShowStartupWindow(MainForm main)
-        {
-            if (main.StartupWindow != null && !main.StartupWindow.IsDisposed) return;
-            var window = new PageWindowForm(main, null)
-            {
-                ClientSize = new Size(1000, 750),
-                StartPosition = FormStartPosition.CenterScreen,
-            };
-            main.LoadPlaceInto(window);
-            // Closed before the page took it over: quitting, or simply gone.
-            window.FormClosed += (s, e) => { if (main.StartupWindow == window) main.StartupWindow = null; };
-            main.StartupWindow = window;
-            window.Show();
-            window.Activate();
         }
 
         /// <summary>
@@ -161,12 +146,13 @@ namespace KitveiHakodeshDesktopApp
                 shown = PageWindows.LastOrDefault(w => w.PageOwner == host && !w.IsDisposed && w.Visible);
             if (shown == null)
             {
-                if (host.StartupWindow == null)
+                Form waiting = host.WaitingWindows.Values.FirstOrDefault(w => w is PageWindowForm);
+                if (waiting == null)
                 {
                     host.Viewer.OpenWindowForWaitingTabs();
-                    ShowStartupWindow(host);
+                    ShowAnyAppWindow(host);
                 }
-                else host.StartupWindow.Activate();
+                else waiting.Activate();
                 if (request != NewWindowRequest) host.OpenRequest(request);
                 return;
             }

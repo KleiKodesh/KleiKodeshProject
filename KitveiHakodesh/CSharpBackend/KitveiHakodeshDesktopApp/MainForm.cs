@@ -46,13 +46,13 @@ namespace KitveiHakodeshDesktopApp
         internal MainForm OpenedFrom { get; set; }
 
         /// <summary>
-        /// The window shown at startup with the startup picture, until the page opens its first
-        /// window and takes it over (Program.MakePageHost). Null once taken.
+        /// Windows shown at startup with the startup picture, by the popup name the page will open
+        /// them under, until it does and takes them over (Program.StartupWindows).
         /// </summary>
-        internal PageWindowForm StartupWindow { get; set; }
+        internal System.Collections.Generic.Dictionary<string, Form> WaitingWindows { get; } = new System.Collections.Generic.Dictionary<string, Form>();
 
-        /// <summary>Off for a start that shows no app window (the calendar launched on its own).</summary>
-        internal bool ShowsStartupWindow { get; set; } = true;
+        /// <summary>The calendar launched on its own: only the calendar's window shows at start.</summary>
+        internal bool StartsWithCalendarOnly { get; set; }
 
         /// <summary>The window of this page the reader worked in last (a file or link opens there).</summary>
         internal PageWindowForm LastActiveWindow { get; set; }

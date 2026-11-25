@@ -133,7 +133,7 @@ namespace KitveiHakodeshLib
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
                         // The restored view has fetched and painted: the snapshot splash can go.
-                        case "contentReady": _HideSplash(); break;
+                        case "contentReady": _HideSplash(); OnContentReady(); break;
                         case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;
                         case "tabMoveResult": HandleTabMoveResult(root); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;

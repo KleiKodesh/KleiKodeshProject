@@ -128,6 +128,16 @@ namespace KitveiHakodesh.Core.Settings
         public static void SetOpenWindowIds(System.Collections.Generic.IEnumerable<string> ids) =>
             Set(AppKitveiHakodesh, "MainWindow", "OpenWindows", string.Join("|", System.Linq.Enumerable.Select(ids, id => "w" + id)));
 
+        /// <summary>
+        /// The windows a page host had on screen when the app last quit ("name@x,y,w,h,max" joined
+        /// by '|'): shown at once with the startup picture on the next start, until the page opens them.
+        /// </summary>
+        public static string GetStartupWindows(string windowId) =>
+            Get(AppKitveiHakodesh, "MainWindow", "StartupWindows-w" + (windowId ?? ""), "");
+
+        public static void SetStartupWindows(string windowId, string windows) =>
+            Set(AppKitveiHakodesh, "MainWindow", "StartupWindows-w" + (windowId ?? ""), windows ?? "");
+
         public static bool GetWindowMaximized(string windowId) =>
             string.IsNullOrEmpty(windowId)
                 ? GetMainWindowMaximized()

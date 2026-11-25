@@ -181,7 +181,7 @@ namespace KitveiHakodeshDesktopApp
                 // Like a program of its own: only the calendar shows. The main window starts hidden
                 // (its page runs the calendar), and no other saved window opens.
                 first.Viewer.StartHidden = true;
-                first.ShowsStartupWindow = false;
+                first.StartsWithCalendarOnly = true;
                 windowIds = new[] { windowIds[0] };
             }
             first.HandleCreated += (s, e) => first.BeginInvoke(new Action(DrainEarlyRequests));
@@ -233,9 +233,8 @@ namespace KitveiHakodeshDesktopApp
             form.Viewer.AppWindowRequested += (s, e) =>
             {
                 // The page's first window takes over the window shown at startup.
-                PageWindowForm window = form.StartupWindow;
-                form.StartupWindow = null;
-                if (window != null && !window.IsDisposed)
+                PageWindowForm window = TakeWaitingAppWindow(form, e.WindowKey);
+                if (window != null)
                 {
                     window.BecomeWindow(e.WindowKey);
                     e.KeepsPlace = true;
@@ -335,6 +334,8 @@ namespace KitveiHakodeshDesktopApp
 
         private static void OnWindowClosing(MainForm form)
         {
+            // Quitting or not, what is on screen now: a window closing for good clears it (OnWindowClosed).
+            if (form.Viewer.IsPageHost && !ClosingWindows.Contains(form)) RememberStartupWindows(form);
             ClosingWindows.Add(form);
             lock (EarlyRequestsLock)
             {
@@ -356,13 +357,11 @@ namespace KitveiHakodeshDesktopApp
                 drawn.ClosingByPage = true;
                 drawn.Close();
             }
-            if (form.StartupWindow != null && !form.StartupWindow.IsDisposed)
-            {
-                form.StartupWindow.ClosingByPage = true;
-                form.StartupWindow.Close();
-            }
+            CloseUnclaimedWaitingWindows(form);
             OpenWindows.Remove(form);
             ClosingWindows.Remove(form);
+            // Gone for good: nothing of it comes back at the next start.
+            if (WindowsClosingForGood.Contains(form)) AppSettingsRegistry.SetStartupWindows(form.WindowId, "");
             WindowsClosingForGood.Remove(form);
             WindowsEmptiedByMove.Remove(form);
             lock (EarlyRequestsLock)

@@ -153,6 +153,7 @@
     <Compile Include="Program.TabMoves.cs" />
     <Compile Include="Program.SnapDebug.cs" />
     <Compile Include="Program.Docking.cs" />
+    <Compile Include="Program.StartupWindows.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>

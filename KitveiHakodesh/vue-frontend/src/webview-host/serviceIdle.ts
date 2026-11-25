@@ -1,3 +1,5 @@
+import { allHostWindows } from '@/composables/detachedWindow/hostWindow'
+
 /**
  * Counts service calls in flight so startup can tell when the restored view has its data.
  *
@@ -29,7 +31,16 @@ function whenServiceIdle(): Promise<void> {
   return new Promise((resolve) => idleWaiters.push(resolve))
 }
 
-const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+// A frame of a window on screen. The desktop app's own window only hosts the page and stays
+// hidden (window.__khsPageHost), and a hidden window draws no frames: there, a frame of one of
+// the windows the page opened. With none open yet, the next task stands in.
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    const shown = window.__khsPageHost ? allHostWindows().find((w) => w !== window) : window
+    if (shown) shown.requestAnimationFrame(() => resolve())
+    else setTimeout(resolve, 0)
+  })
 
 /**
  * Resolves once the startup view has fetched and painted: one frame for the restored
