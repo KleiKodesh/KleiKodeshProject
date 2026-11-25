@@ -113,6 +113,7 @@ namespace FluentChromeTabs
             return tab;
         }
 
+        public int MinimumWindowWidthPx { get { return 0; } }
         public int DropIndexAtScreenPoint(Point screenPoint) { return -1; }
         public bool CloseTab(FluentTab tab) => _tabs.Remove(tab);
         public void ShowTabListMenu(int group, int quickSwitchStep) { }
