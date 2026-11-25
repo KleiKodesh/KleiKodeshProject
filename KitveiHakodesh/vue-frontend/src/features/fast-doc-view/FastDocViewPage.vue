@@ -23,6 +23,7 @@ import { isLibraryAppLink, parseBookLink, parseSearchLink, type ParsedBookLink }
 import { useHostSearchStore } from '@/stores/hostSearchStore'
 import type { ConversionActionState } from '@/components/ConversionActionButton.vue'
 import { useFastDocViewDocument } from './useFastDocViewDocument'
+import { useFastDocViewEmbeddedFonts, withoutEmbeddedFonts } from './useFastDocViewEmbeddedFonts'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
 import FastDocViewToolbar from './FastDocViewToolbar.vue'
 import FastDocViewToc, { type FastDocViewTocState } from './FastDocViewToc.vue'
@@ -315,7 +316,7 @@ function onScrollerMounted(instance: unknown) {
 const contentRootId = `fast-doc-view-${tabId}`
 const scopedStylesheet = computed(() => {
   const css = fastDocument.summary.value?.stylesheet
-  return css ? `@scope ([data-fast-doc-view-root="${contentRootId}"]) {\n${css}\n}` : ''
+  return css ? `@scope ([data-fast-doc-view-root="${contentRootId}"]) {\n${withoutEmbeddedFonts(css)}\n}` : ''
 })
 useStyleTag(scopedStylesheet)
 
@@ -323,6 +324,9 @@ const isRightToLeft = computed(() => fastDocument.summary.value?.isRightToLeft ?
 
 // ── Side panel (TOC) and notes pane ──────────────────────────────────────────
 const pageElement = ref<HTMLElement | null>(null)
+// the document's embedded fonts, registered when the machine lacks them (the stylesheet's @font-face rules)
+useFastDocViewEmbeddedFonts(fastDocViewApi, () => fastDocument.summary.value?.documentId, () => fastDocument.summary.value?.stylesheet,
+  () => pageElement.value?.ownerDocument.fonts ?? document.fonts)
 // The TOC panel: inline with a sash on a wide page (0.1..0.5 of the row), overlay on a narrow one - as in the book view.
 const sidePanelResizeArea = ref<HTMLElement | null>(null)
 const {
