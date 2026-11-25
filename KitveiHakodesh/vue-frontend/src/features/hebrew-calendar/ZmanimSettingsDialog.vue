@@ -89,6 +89,14 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
+  padding: 0;
+  /* Icon lines up with the content edge, not the button's padding box. */
+  margin-inline-end: -6px;
+  flex-shrink: 0;
+}
+.zs-close svg {
+  width: 16px;
+  height: 16px;
 }
 .zs-close:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -101,6 +109,9 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   overflow-y: auto;
   min-height: 0;
   scrollbar-width: thin;
+  /* Scrollbar sits at the dialog edge, with a gap from the content. */
+  margin-inline-end: -12px;
+  padding-inline-end: 8px;
 }
 .zs-label {
   font-size: 11px;
