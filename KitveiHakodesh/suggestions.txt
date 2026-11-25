@@ -5,10 +5,36 @@ add a search in many docs pane with the fast doc view logic also support wild ca
 daress bar settings remove that section and inteasd introduce over floew
 rts 
 
+show scoller toltip after three screens no other ui
+
+add stop winows from sleeping widget
+
+vsto taskapnes add dock to righ and dock to left to teh dropdown
+
+idea add fal back switch to outer scroller so scerolling never gets stuck
+
 commentary toolbar push aside the bookview toolbar
 
-allow tearing a tab to tool window and back
-change split view to behave like bwroser
+read aloud feed the פרק זין with nikuud so its reads as פרק זיין
+also skipping mראי מקומות  within th etext like ויקרא ג יד etc seems to still be buggy the rest of teh skip options work perfectly
+
+gh build action to always kee teh מצודת ציון מלבים etc table up to date
+or rather do it n the app
+
+need to make sure dbs are wlays up to date
+
+שחרר זכרון for websites alos showed not hwen switching tabs ut when tab closed
+
+the vsto dro down sqitcher teh aption background doenst reach the end
+
+broken link icon showing on kiwix and not the rest while all weren't vailable and only kiwix was available since its offline
+actaullynow it is showing but not in the sidebar cion
+
+nakdan דיקטה when becomes visible wil ping the api to see if its aviable ifnotthe will show caption in red at bottom
+
+fast doc view what margins wil txt files use?
+
+side panek under the address bar when in small width vp?
 
 chrime tabs ui is too isntnt
 aloow תלישה
