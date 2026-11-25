@@ -40,6 +40,14 @@ namespace KitveiHakodeshDesktopApp
         // (opened, or brought to the front when one is open). Forwarded like --new-window.
         private const string CalendarRequest = "--calendar";
 
+        // The same as --calendar, as a link: a Windows reminder's "open calendar" button
+        // (Core WindowsReminders) launches it through the registered kitveihakodeshapp:// scheme.
+        private const string CalendarLink = "kitveihakodeshapp://calendar";
+
+        /// <summary>The launch argument, with the calendar link read as --calendar.</summary>
+        private static string LaunchRequest(string arg) =>
+            arg != null && arg.TrimEnd('/').Equals(CalendarLink, StringComparison.OrdinalIgnoreCase) ? CalendarRequest : arg;
+
         // The window a forwarded file or link opens in: the last one activated.
         private static MainForm _activeWindow;
 
@@ -95,7 +103,7 @@ namespace KitveiHakodeshDesktopApp
                     // nothing to open asks it for a new empty window.
                     // Forwarded RAW: MainForm.OpenRequest validates whatever arrives over the
                     // pipe, so parsing it here would only cost the lib load this path avoids.
-                    string request = args.Length > 1 ? args[1] : NewWindowRequest;
+                    string request = args.Length > 1 ? LaunchRequest(args[1]) : NewWindowRequest;
                     bool newWindow = request == NewWindowRequest;
                     // A relative path must resolve against OUR working directory, not the
                     // running instance's. Links pass through untouched.
@@ -166,13 +174,14 @@ namespace KitveiHakodeshDesktopApp
             // Launched by the calendar shortcut with no app running: the calendar window opens
             // once the first window can take it (DrainEarlyRequests).
             string[] launchArgs = Environment.GetCommandLineArgs();
-            bool calendarOnly = launchArgs.Length > 1 && launchArgs[1] == CalendarRequest;
+            bool calendarOnly = launchArgs.Length > 1 && LaunchRequest(launchArgs[1]) == CalendarRequest;
             if (calendarOnly)
             {
                 lock (EarlyRequestsLock) EarlyRequests.Add(CalendarRequest);
                 // Like a program of its own: only the calendar shows. The main window starts hidden
                 // (its page runs the calendar), and no other saved window opens.
-                StartHidden(first);
+                first.Viewer.StartHidden = true;
+                first.ShowsStartupWindow = false;
                 windowIds = new[] { windowIds[0] };
             }
             first.HandleCreated += (s, e) => first.BeginInvoke(new Action(DrainEarlyRequests));
@@ -205,20 +214,9 @@ namespace KitveiHakodeshDesktopApp
 
         private static MainForm CreateWindow(string windowId, string initialRequest)
         {
-            var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood, CloseOnlyThisWindow = CloseOnlyThisWindow };
-            // Its tabs are gone after the reader closed it while other windows stay: now it leaves its
-            // place and hides (not before - the page may still keep it, for unsaved work).
-            form.Viewer.TabsStateChanged += (s, e) =>
-            {
-                if (form.CloseRequestedWhileOthersStay && e.WindowKey.Length == 0 && e.Tabs.Count == 0 && form.Visible)
-                    form.BeginInvoke(new Action(() =>
-                    {
-                        if (form.IsDisposed) return;
-                        form.ClosedWhileOthersStay = true;
-                        ScreenDocking.Forget(form); // the others take the space
-                        form.Hide();
-                    }));
-            };
+            var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood };
+            // Every window the reader sees is one the page opens; this one only hosts the page.
+            MakePageHost(form);
             form.Activated += (s, e) =>
             {
                 lock (EarlyRequestsLock) _activeWindow = form;
@@ -234,7 +232,15 @@ namespace KitveiHakodeshDesktopApp
             // The page opens extra windows of itself (VS Code model): full app windows with their own strip.
             form.Viewer.AppWindowRequested += (s, e) =>
             {
-                var window = new PageWindowForm(form, e.WindowKey);
+                // The page's first window takes over the window shown at startup.
+                PageWindowForm window = form.StartupWindow;
+                form.StartupWindow = null;
+                if (window != null && !window.IsDisposed)
+                {
+                    window.BecomeWindow(e.WindowKey);
+                    e.KeepsPlace = true;
+                }
+                else window = new PageWindowForm(form, e.WindowKey);
                 e.Window = window;
                 e.ContentHost = window.Content;
                 e.ClosingByPage = () => window.ClosingByPage = true;
@@ -291,17 +297,6 @@ namespace KitveiHakodeshDesktopApp
         // VS Code window: its saved tabs are deleted and it is not reopened. The last window
         // keeps its tabs for the next start, and so does every window when Windows shuts
         // down, the app is quit from outside, or all windows close together.
-        // The reader closed a main window while windows its page draws stay open: like any
-        // window, it goes with its tabs, and the app keeps running in the others. The page
-        // closes the tabs (asking about unsaved work); the window hides once they are gone.
-        private static bool CloseOnlyThisWindow(MainForm form)
-        {
-            if (!OtherWindowsOfPageShown(form)) return false;
-            form.CloseRequestedWhileOthersStay = true;
-            form.Viewer.CloseAppWindow("");
-            return true;
-        }
-
         /// <summary>True when no other window of the app is open on screen: closing this one is quitting.</summary>
         internal static bool IsLastOpenWindow(System.Windows.Forms.Form window)
         {
@@ -360,6 +355,11 @@ namespace KitveiHakodeshDesktopApp
             {
                 drawn.ClosingByPage = true;
                 drawn.Close();
+            }
+            if (form.StartupWindow != null && !form.StartupWindow.IsDisposed)
+            {
+                form.StartupWindow.ClosingByPage = true;
+                form.StartupWindow.Close();
             }
             OpenWindows.Remove(form);
             ClosingWindows.Remove(form);
@@ -538,19 +538,15 @@ namespace KitveiHakodeshDesktopApp
                 window.Viewer.OpenCalendarAppWindow();
                 return;
             }
-            // A normal launch, or a file or link, while the main window is hidden (closed while
-            // other windows stayed, or the calendar was launched on its own): it is shown again.
-            if (!window.Visible && window.ClosedWhileOthersStay && !ClosingWindows.Contains(window))
-                ShowHiddenMainWindow(window);
-            if (request == NewWindowRequest && window.Visible && window.ShownAgainJustNow)
-            {
-                window.ShownAgainJustNow = false;
-                return; // the main window itself is the new window
-            }
 #if DEBUG
             if (DebugTabMoves.TryRun(request)) return;
             if (TryRunSnapDebug(request)) return;
 #endif
+            if (window.Viewer.IsPageHost && !ClosingWindows.Contains(window))
+            {
+                DispatchToPageWindows(window, request);
+                return;
+            }
             // Every window is closing: the request gets a window of its own rather than a
             // tab in one that is about to go.
             if (ClosingWindows.Contains(window))

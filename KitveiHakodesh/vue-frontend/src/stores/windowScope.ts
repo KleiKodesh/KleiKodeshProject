@@ -2,8 +2,13 @@ declare global {
   interface Window {
     /** This desktop-app window's id, injected by the C# host (MainForm / AppViewer.WindowId). */
     __webviewWindowId?: string
-    /** Injected by the C# host for a launch that starts with the main window hidden (the calendar alone). */
+    /** Injected by the C# host for a launch that opens no app window (the calendar alone): the tabs wait. */
     __khsStartHidden?: boolean
+    /**
+     * Injected by the desktop app: this page's own window only hosts it and never shows; every
+     * window the reader sees is one the page opened (AppWindowLayer.vue), so '' holds no tabs.
+     */
+    __khsPageHost?: boolean
   }
 }
 

@@ -54,6 +54,18 @@ namespace KitveiHakodeshLib
             _splash.BringToFront();
         }
 
+        /// <summary>
+        /// The startup picture (logo and version) for a window shown before the page is up;
+        /// the host removes it once the window's page draws.
+        /// </summary>
+        public static Control CreateStartupSplash(bool dark)
+        {
+            Image logo = null;
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("KitveiHakodesh.png"))
+                if (stream != null) logo = Image.FromStream(stream);
+            return new SplashOverlay(logo, GetInstalledVersionText()) { Dock = DockStyle.Fill, BackColor = dark ? _darkBg : _lightBg };
+        }
+
         private bool _TryInitSnapshotSplash()
         {
             Image snapshot;

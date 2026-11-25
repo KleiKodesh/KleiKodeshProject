@@ -1,4 +1,4 @@
-using FluentChromeTabs;
+﻿using FluentChromeTabs;
 using KitveiHakodeshLib;
 using KitveiHakodesh.Core.Settings;
 using System;
@@ -46,31 +46,34 @@ namespace KitveiHakodeshDesktopApp
         internal MainForm OpenedFrom { get; set; }
 
         /// <summary>
-        /// Asked when the reader closes this window: true when other windows of its page stay
-        /// open, so only this window and its tabs go - the page lives on, hidden here, for the
-        /// others (Program.CloseOnlyThisWindow). Set by Program.
+        /// The window shown at startup with the startup picture, until the page opens its first
+        /// window and takes it over (Program.MakePageHost). Null once taken.
         /// </summary>
-        internal Func<MainForm, bool> CloseOnlyThisWindow { get; set; }
+        internal PageWindowForm StartupWindow { get; set; }
 
-        /// <summary>The reader closed this window while others of its page stay: hidden, its page still running.</summary>
-        internal bool ClosedWhileOthersStay { get; set; }
+        /// <summary>Off for a start that shows no app window (the calendar launched on its own).</summary>
+        internal bool ShowsStartupWindow { get; set; } = true;
 
-        /// <summary>Set when a launch just showed this hidden window again (a "new window" request then needs nothing more).</summary>
-        internal bool ShownAgainJustNow { get; set; }
+        /// <summary>The window of this page the reader worked in last (a file or link opens there).</summary>
+        internal PageWindowForm LastActiveWindow { get; set; }
+
+        /// <summary>Gives <paramref name="window"/> the place and size this window had last (its saved settings).</summary>
+        internal void LoadPlaceInto(Form window)
+        {
+            FormSettingsHelper.LoadFormSettings(window, "KitveiHakodesh", FormSettingsName);
+            if (AppSettingsRegistry.GetWindowMaximized(WindowId)) window.WindowState = FormWindowState.Maximized;
+        }
+
+        /// <summary>Keeps <paramref name="window"/>'s place and size as this window's, for the next start.</summary>
+        internal void SavePlaceFrom(Form window)
+        {
+            Rectangle normal = window.WindowState == FormWindowState.Normal ? window.Bounds : window.RestoreBounds;
+            AppSettingsRegistry.SetWindowMaximized(WindowId, window.WindowState == FormWindowState.Maximized);
+            FormSettingsHelper.SaveFormSettings(window, "KitveiHakodesh", FormSettingsName, normal);
+        }
 
         /// <summary>The reader asked to close this window while others of its page stay; the page is closing its tabs.</summary>
         internal bool CloseRequestedWhileOthersStay { get; set; }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            if (e.CloseReason == CloseReason.UserClosing && !ClosedWhileOthersStay
-                && CloseOnlyThisWindow != null && CloseOnlyThisWindow(this))
-            {
-                e.Cancel = true;
-                return;
-            }
-            base.OnFormClosing(e);
-        }
 
         /// <summary>This window's page (tabs move between windows through it, Program.TabMoves).</summary>
         internal AppViewer Viewer => _viewer;
@@ -168,8 +171,12 @@ namespace KitveiHakodeshDesktopApp
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            AppSettingsRegistry.SetWindowMaximized(WindowId, WindowState == FormWindowState.Maximized);
-            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", FormSettingsName, _lastNormalBounds);
+            // A page host never shows: the window it started with keeps the place (SavePlaceFrom).
+            if (!_viewer.IsPageHost)
+            {
+                AppSettingsRegistry.SetWindowMaximized(WindowId, WindowState == FormWindowState.Maximized);
+                FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", FormSettingsName, _lastNormalBounds);
+            }
             // The page's pending persistence writes go out before the WebView2 is
             // disposed: the first close is held for the page's ack, the second runs through.
             // A window closed while others stay open deletes its saved tabs instead.
@@ -179,6 +186,7 @@ namespace KitveiHakodeshDesktopApp
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)
         {
+            if (_viewer.IsPageHost) return;
             AppSettingsRegistry.SetWindowMaximized(WindowId, WindowState == FormWindowState.Maximized);
         }
 

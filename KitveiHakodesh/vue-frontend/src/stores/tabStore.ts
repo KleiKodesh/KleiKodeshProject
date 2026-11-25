@@ -338,9 +338,12 @@ export const useTabStore = defineStore('tabs', () => {
     while (String(n) in activeByWindow.value) n++
     return String(n)
   }
-  // The reader closed the main window while extra windows stay: it holds no tabs from here on
-  // and nothing opens there (the host keeps it hidden). Not saved: the next start shows it again.
-  let mainWindowClosed = false
+  // The desktop app: the page's own window ('') only hosts it and never shows. Every window the
+  // reader sees is one this page opened, so '' holds no tabs - only tabs waiting for a window
+  // (a launch that opened none: the calendar alone).
+  const isPageHost = hasNativeChromeTabs && !!window.__khsPageHost
+  // '' takes no tabs and never gets the focus.
+  let mainWindowClosed = isPageHost
 
   function windowOf(tabId: string): string {
     return tabs.value.find((t) => t.id === tabId)?.windowKey ?? ''
@@ -430,17 +433,18 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   /**
-   * The main window is shown again (the app launched normally while only other windows were
-   * open): it takes tabs again, and gets a home tab when it has none.
+   * A window for the tabs waiting in '' (a page host's own window never shows): they all move
+   * into one new window, or it gets a home tab when none wait. Returns its key.
    */
-  function reopenMainWindow() {
-    mainWindowClosed = false
-    if (tabsIn('').length === 0) {
-      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
-      tabs.value.push(home)
-      activeByWindow.value = { ...activeByWindow.value, '': home.id }
-    }
-    focusedWindow.value = ''
+  function openWindowForWaitingTabs(): string {
+    const waiting = tabsIn('')
+    if (waiting.length === 0) return openNewWindow()
+    const key = freeWindowKey()
+    const active = activeIdIn('')
+    tabs.value = tabs.value.map((tab) => ((tab.windowKey ?? '') === '' ? { ...tab, windowKey: key } : tab))
+    activeByWindow.value = { ...activeByWindow.value, '': '', [key]: active }
+    focusedWindow.value = key
+    return key
   }
 
   /**
@@ -550,6 +554,10 @@ export const useTabStore = defineStore('tabs', () => {
         accessTick = live.size > 0 ? Math.max(...live.values()) : 0
       }
     }
+
+    // The page host's tabs come back in windows it opens; the first takes the main window's
+    // tabs (an older session's too). A launch that opens no window leaves them waiting.
+    if (isPageHost && !window.__khsStartHidden) openWindowForWaitingTabs()
 
     // Recents live in IDB, so they arrive after the synchronous restore above. They
     // are locations, not tabs, so there is nothing to reconcile against the live
@@ -1458,7 +1466,7 @@ export const useTabStore = defineStore('tabs', () => {
     focusWindow,
     moveTabToWindow,
     openNewWindow,
-    reopenMainWindow,
+    openWindowForWaitingTabs,
     closeWindow,
     mruTabs,
     init,

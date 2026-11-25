@@ -189,14 +189,23 @@ namespace KitveiHakodeshLib
         public bool StartHidden { get; set; }
 
         /// <summary>
+        /// Set before the viewer starts: this viewer's window is only the page's host and stays
+        /// hidden; every window the reader sees is one the page opened (the desktop app).
+        /// </summary>
+        public bool IsPageHost { get; set; }
+
+        /// <summary>
         /// True while this viewer's window is hidden with the page still running for other windows:
         /// tool windows (widgets) then open as windows of their own, with a taskbar button, since
         /// a window owned by a hidden one would have none. Set by the host.
         /// </summary>
         public bool HostWindowHidden { get; set; }
 
-        /// <summary>The window is shown again after being hidden: it takes tabs again (a home tab if it has none).</summary>
-        public void ReopenMainWindow() => _bridge?.PushEvent(new { @event = "reopenMainWindow" });
+        /// <summary>
+        /// A page host with no window on screen (the calendar launched on its own) is asked for
+        /// one: the page opens a window with the tabs waiting in it (a home tab if none wait).
+        /// </summary>
+        public void OpenWindowForWaitingTabs() => _bridge?.PushEvent(new { @event = "openWindowForWaitingTabs" });
 
         /// <summary>
         /// Set by a host whose pane is not a window (the Word task pane): asked to put this viewer into a
@@ -524,6 +533,8 @@ namespace KitveiHakodeshLib
                 return;
             }
 
+            // A page host's window is always hidden, and its page draws every window on screen.
+            if (IsPageHost) return;
             if (_webView.CoreWebView2 == null) return;    // not yet initialised
             if (_webView.CoreWebView2.IsSuspended) return; // already suspended
 
@@ -930,6 +941,7 @@ namespace KitveiHakodeshLib
             (string.IsNullOrEmpty(WindowId) ? "" : "window.__webviewWindowId=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(WindowId) + ";") +
             "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";" +
             (StartHidden ? "window.__khsStartHidden=true;" : "") +
+            (IsPageHost ? "window.__khsPageHost=true;" : "") +
             KiwixHostFact();
 
         // ── Dispose ─────────────────────────────────────────────────────────────────

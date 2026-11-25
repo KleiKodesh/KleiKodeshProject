@@ -34,6 +34,12 @@ namespace KitveiHakodeshLib
 
         /// <summary>Set by the host: runs just before the page closes the window itself.</summary>
         public Action ClosingByPage { get; set; }
+
+        /// <summary>
+        /// Set by the host when <see cref="Window"/> is already on screen (the window shown at
+        /// startup, before the page could open it): it keeps its place and size.
+        /// </summary>
+        public bool KeepsPlace { get; set; }
     }
 
     /// <summary>A tool window (widget or commentary pop-out) of the page opened.</summary>
@@ -110,6 +116,7 @@ namespace KitveiHakodeshLib
                 Control contentHost = null;
                 bool isAppWindow = false;
                 Action closingByPage = null;
+                bool keepsPlace = false;
                 if (name.StartsWith(AppWindowPrefix, StringComparison.Ordinal) && AppWindowRequested != null)
                 {
                     var request = new AppWindowRequestedEventArgs(name.Substring(AppWindowPrefix.Length));
@@ -120,8 +127,10 @@ namespace KitveiHakodeshLib
                         contentHost = request.ContentHost;
                         isAppWindow = true;
                         closingByPage = request.ClosingByPage;
+                        keepsPlace = request.KeepsPlace;
                         form.StartPosition = FormStartPosition.Manual;
-                        if (pageKeepsBounds && x != -1) form.ClientSize = new Size(width, height);
+                        if (keepsPlace) { }
+                        else if (pageKeepsBounds && x != -1) form.ClientSize = new Size(width, height);
                         else form.Size = OwnNormalBounds()?.Size ?? form.Size;
                     }
                 }
@@ -138,6 +147,7 @@ namespace KitveiHakodeshLib
                 };
                 // The page's left/top are CSS pixels, not ours — only the saved spot counts.
                 var saved = new Rectangle(new Point(x, y), form.Size);
+                if (!keepsPlace)
                 form.Location = x != -1 && y != -1 && IsOnScreen(saved)
                     ? saved.Location
                     : isAppWindow ? CascadeFrom(form.Size) : CenterOnScreen(form.Size);
@@ -147,7 +157,7 @@ namespace KitveiHakodeshLib
                 (contentHost ?? form).Controls.Add(popupView);
 
                 var owner = GetAncestor(Handle, GA_ROOT);
-                if (isAppWindow) form.Show(); // a window of its own, like the main one
+                if (isAppWindow) { if (!form.Visible) form.Show(); } // a window of its own, like the main one
                 else if (SetPopupOwner != null)
                 {
                     SetPopupOwner(form.Handle); // VSTO: owned by the Word window

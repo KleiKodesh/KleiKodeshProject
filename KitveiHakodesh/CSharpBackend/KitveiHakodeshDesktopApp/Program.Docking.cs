@@ -45,10 +45,22 @@ namespace KitveiHakodeshDesktopApp
         {
             PageWindows.Add(window);
             ScreenDocking.Attach(window, Docking);
-            window.Activated += (s, e) => { lock (EarlyRequestsLock) _activeWindow = owner; };
+            window.Activated += (s, e) =>
+            {
+                owner.LastActiveWindow = window;
+                lock (EarlyRequestsLock) _activeWindow = owner;
+            };
+            owner.LastActiveWindow = owner.LastActiveWindow ?? window;
+            // Widgets opened while an app window is on screen need no taskbar button of their own.
+            owner.Viewer.HostWindowHidden = false;
+            // The page host's place for the next start: the last of its windows to close.
+            window.FormClosing += (s, e) => { if (!owner.IsDisposed) owner.SavePlaceFrom(window); };
             window.FormClosed += (s, e) =>
             {
                 PageWindows.Remove(window);
+                if (owner.LastActiveWindow == window)
+                    owner.LastActiveWindow = PageWindows.LastOrDefault(w => w.PageOwner == owner && !w.IsDisposed);
+                owner.Viewer.HostWindowHidden = !PageWindows.Exists(w => w.PageOwner == owner && !w.IsDisposed);
                 if (owner.IsDisposed) return;
                 owner.Viewer.ForgetTabsState(window.WindowKey);
                 // The main window was closed while this one stayed: with the last of its page's
@@ -100,21 +112,75 @@ namespace KitveiHakodeshDesktopApp
         // ── The main window hidden while its page runs other windows ──────────────
 
         /// <summary>
-        /// The calendar launched on its own: the main window starts hidden - shown invisible once
-        /// (its page has to start), then hidden - and counts as closed while other windows stay.
+        /// The main window only hosts the page and never shows: shown invisible once (its page has
+        /// to start), then hidden. In its place a window shows at once with the startup picture,
+        /// which the page's first window takes over (unless <see cref="MainForm.ShowsStartupWindow"/>
+        /// is off: the calendar launched on its own).
         /// </summary>
-        private static void StartHidden(MainForm main)
+        private static void MakePageHost(MainForm main)
         {
-            main.Viewer.StartHidden = true;
+            main.Viewer.IsPageHost = true;
             main.Viewer.HostWindowHidden = true;
-            main.ClosedWhileOthersStay = true;
             main.Opacity = 0;
+            main.Load += (s, e) => { if (main.ShowsStartupWindow) ShowStartupWindow(main); };
             main.Shown += (s, e) => main.BeginInvoke(new Action(() =>
             {
-                if (main.IsDisposed || !main.ClosedWhileOthersStay) return;
+                if (main.IsDisposed) return;
                 main.Hide();
-                main.Opacity = 1;
+                PageWindowForm front = main.StartupWindow ?? main.LastActiveWindow;
+                if (front != null && !front.IsDisposed && front.Visible) front.Activate();
             }));
+        }
+
+        /// <summary>A window with the startup picture, at the page host's saved place, until the page opens its window there.</summary>
+        private static void ShowStartupWindow(MainForm main)
+        {
+            if (main.StartupWindow != null && !main.StartupWindow.IsDisposed) return;
+            var window = new PageWindowForm(main, null)
+            {
+                ClientSize = new Size(1000, 750),
+                StartPosition = FormStartPosition.CenterScreen,
+            };
+            main.LoadPlaceInto(window);
+            // Closed before the page took it over: quitting, or simply gone.
+            window.FormClosed += (s, e) => { if (main.StartupWindow == window) main.StartupWindow = null; };
+            main.StartupWindow = window;
+            window.Show();
+            window.Activate();
+        }
+
+        /// <summary>
+        /// A launch request for a page host: a file or link opens in the window the reader worked
+        /// in last, brought to the front; with no window on screen (the calendar alone) the page
+        /// opens one first - with its tabs, if it has any waiting.
+        /// </summary>
+        private static void DispatchToPageWindows(MainForm host, string request)
+        {
+            PageWindowForm shown = host.LastActiveWindow;
+            if (shown == null || shown.IsDisposed || !shown.Visible)
+                shown = PageWindows.LastOrDefault(w => w.PageOwner == host && !w.IsDisposed && w.Visible);
+            if (shown == null)
+            {
+                if (host.StartupWindow == null)
+                {
+                    host.Viewer.OpenWindowForWaitingTabs();
+                    ShowStartupWindow(host);
+                }
+                else host.StartupWindow.Activate();
+                if (request != NewWindowRequest) host.OpenRequest(request);
+                return;
+            }
+            if (request == NewWindowRequest)
+            {
+                host.Viewer.OpenNewAppWindow();
+                return;
+            }
+            if (IsIconic(shown.Handle)) ShowWindow(shown.Handle, SW_RESTORE);
+            // Our own window, on our own UI thread (see DispatchRequest): the launcher handed us
+            // the foreground rights.
+            shown.Activate();
+            SetForegroundWindow(shown.Handle);
+            host.OpenRequest(request);
         }
 
         /// <summary>Windows its page draws besides the main one are on screen: extra app windows or tool windows.</summary>
@@ -126,25 +192,13 @@ namespace KitveiHakodeshDesktopApp
             return false;
         }
 
-        /// <summary>The app launched normally (or a file opened) while the main window is hidden: it is shown again.</summary>
-        private static void ShowHiddenMainWindow(MainForm main)
-        {
-            main.ClosedWhileOthersStay = false;
-            main.CloseRequestedWhileOthersStay = false;
-            main.Viewer.HostWindowHidden = false;
-            main.Viewer.ReopenMainWindow();
-            main.Opacity = 1;
-            main.ShownAgainJustNow = true;
-            main.Show();
-        }
-
         /// <summary>
         /// A window of a hidden main window's page closed: with nothing of that page left on screen,
         /// the main window closes for real (the app quits, or that page goes).
         /// </summary>
         private static void CloseHiddenMainIfNothingLeft(MainForm main)
         {
-            if (main.IsDisposed || !main.ClosedWhileOthersStay || main.Visible) return;
+            if (main.IsDisposed || !main.Viewer.IsPageHost) return;
             if (!OtherWindowsOfPageShown(main)) main.BeginInvoke(new Action(() => { if (!main.IsDisposed) main.Close(); }));
         }
 
@@ -207,7 +261,7 @@ namespace KitveiHakodeshDesktopApp
                 => main != null && !main.IsDisposed && OpenWindows.Contains(main) && !ClosingWindows.Contains(main);
 
             public int TabCount(FluentChromeTabsForm window)
-                => (window as MainForm)?.TabsMirror.PageTabCount ?? (window as PageWindowForm)?.TabsMirror.PageTabCount ?? window.Tabs.Count;
+                => (window as MainForm)?.TabsMirror.PageTabCount ?? (window as PageWindowForm)?.TabsMirror?.PageTabCount ?? window.Tabs.Count;
 
             // Called as a drag starts: the floating tab takes the app's current colors, and shows
             // the page (a page window draws in its owner's renderer: no picture yet).
