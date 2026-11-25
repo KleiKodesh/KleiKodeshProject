@@ -28,7 +28,7 @@ describe('fast times follow the preset lines', () => {
     expect(fastTime('majorStart', zmanim, {}, TZ)).toBe('19:47')
   })
   it('starts round down, the end rounds up', () => expect(FAST_EDGE_ROUNDING).toEqual({ minorStart: 'down', majorStart: 'down', end: 'up' }))
-  it('second line: alot 16.1 deg (rounded down) and tzeit 7.083 deg (rounded up)', () => {
+  it('second line: alot 16.05 deg (rounded down) and tzeit 7.083 deg (rounded up)', () => {
     expect(altFastTime('minorStart', zmanim, {}, TZ)).toEqual({ name: 'alot', time: '04:11' })
     expect(altFastTime('end', zmanim, mizrach, TZ)).toEqual({ name: 'tzeit7083', time: '20:16' })
     expect(altFastTime('majorStart', zmanim, {}, TZ)).toBeNull()

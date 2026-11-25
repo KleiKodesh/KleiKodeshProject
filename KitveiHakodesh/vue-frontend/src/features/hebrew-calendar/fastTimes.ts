@@ -12,7 +12,7 @@ type PrimaryGroups = Partial<Record<ZmanGroup, ZmanName>>
 /** The lines used when the preset names none: the default list's alot / sunset / tzeit lines. */
 export const DEFAULT_FAST_LINES = { alot: 'alot90', sunset: 'sunset', tzeit: 'tzeit18Sun' } as const satisfies Record<string, ZmanName>
 
-/** The other common opinion, shown as a second line: alot at 16.1 deg, tzeit at 7.083 deg (three medium stars). */
+/** The other common opinion, shown as a second line: alot at 16.05 deg, tzeit at 7.083 deg (three medium stars). */
 export const ALT_FAST_LINES = { minorStart: 'alot', end: 'tzeit7083' } as const satisfies Partial<Record<FastEdge, ZmanName>>
 
 /** The second opinion's line and time for a fast edge; null for the sunset start, or when it is the preset's own line. */
