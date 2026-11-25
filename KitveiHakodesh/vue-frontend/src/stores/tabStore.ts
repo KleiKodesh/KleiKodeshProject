@@ -430,6 +430,20 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   /**
+   * The main window is shown again (the app launched normally while only other windows were
+   * open): it takes tabs again, and gets a home tab when it has none.
+   */
+  function reopenMainWindow() {
+    mainWindowClosed = false
+    if (tabsIn('').length === 0) {
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
+      tabs.value.push(home)
+      activeByWindow.value = { ...activeByWindow.value, '': home.id }
+    }
+    focusedWindow.value = ''
+  }
+
+  /**
    * The reader closed this window: its tabs close with it, and the window goes with its last
    * tab (leaveWindowIfEmpty). A tab with unsaved work asks first and keeps the window open.
    */
@@ -437,11 +451,11 @@ export const useTabStore = defineStore('tabs', () => {
     if (!(windowKey in activeByWindow.value)) return
     const closing = tabsIn(windowKey)
     if (guardPdfClose(closing, () => closeWindow(windowKey))) return
-    // The main window: only while an extra window stays (the host asks only then).
+    // The main window: the host asks only while other windows of the page stay (extra app
+    // windows, or tool windows such as the calendar).
     if (windowKey === '') {
-      if (extraWindowKeys.value.length === 0) return
       mainWindowClosed = true
-      if (focusedWindow.value === '') focusedWindow.value = extraWindowKeys.value[0]!
+      if (focusedWindow.value === '' && extraWindowKeys.value.length > 0) focusedWindow.value = extraWindowKeys.value[0]!
     }
     for (const tab of closing) closeTab(tab.id)
   }
@@ -500,7 +514,10 @@ export const useTabStore = defineStore('tabs', () => {
       // missing from the list) does the survivor take over.
       // Extra windows come back with their tabs (each tab names its window); a host without
       // a tab strip shows one window only.
-      if (!hasNativeChromeTabs) for (const tab of tabs.value) delete tab.windowKey
+      // A host without a tab strip shows one window only; a launch that starts with the main
+      // window hidden (the calendar on its own, window.__khsStartHidden) opens no other window -
+      // their tabs wait in the main window for when it is shown.
+      if (!hasNativeChromeTabs || window.__khsStartHidden) for (const tab of tabs.value) delete tab.windowKey
       const windows: Record<string, string> = { '': '' }
       for (const tab of tabs.value) {
         const key = tab.windowKey ?? ''
@@ -1441,6 +1458,7 @@ export const useTabStore = defineStore('tabs', () => {
     focusWindow,
     moveTabToWindow,
     openNewWindow,
+    reopenMainWindow,
     closeWindow,
     mruTabs,
     init,

@@ -170,6 +170,10 @@ export function initTabMirror(): void {
         // The reader closed a window this page draws (its X): its tabs close with it.
         if (typeof msg.windowKey === 'string') tabStore.closeWindow(msg.windowKey)
         break
+      case 'reopenMainWindow':
+        // The main window shown again after it was hidden (AppViewer.ReopenMainWindow).
+        tabStore.reopenMainWindow()
+        break
       case 'openNewAppWindow':
         tabStore.openNewWindow()
         break

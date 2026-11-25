@@ -2,6 +2,8 @@ declare global {
   interface Window {
     /** This desktop-app window's id, injected by the C# host (MainForm / AppViewer.WindowId). */
     __webviewWindowId?: string
+    /** Injected by the C# host for a launch that starts with the main window hidden (the calendar alone). */
+    __khsStartHidden?: boolean
   }
 }
 

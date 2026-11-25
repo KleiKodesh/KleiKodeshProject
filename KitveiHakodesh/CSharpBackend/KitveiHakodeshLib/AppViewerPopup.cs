@@ -153,6 +153,12 @@ namespace KitveiHakodeshLib
                     SetPopupOwner(form.Handle); // VSTO: owned by the Word window
                     form.Show();
                 }
+                else if (HostWindowHidden)
+                {
+                    // Its owner would be hidden: a window of its own, on the taskbar.
+                    form.ShowInTaskbar = true;
+                    form.Show();
+                }
                 else if (owner != IntPtr.Zero) form.Show(new OwnerWindow(owner));
                 else form.Show();
 

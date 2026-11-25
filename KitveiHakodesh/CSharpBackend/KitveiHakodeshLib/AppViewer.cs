@@ -183,6 +183,22 @@ namespace KitveiHakodeshLib
         public string WindowId { get; set; } = "";
 
         /// <summary>
+        /// Set before the viewer starts: this window starts hidden (the calendar launched on its
+        /// own). The page then reopens no other window; their tabs wait in this one.
+        /// </summary>
+        public bool StartHidden { get; set; }
+
+        /// <summary>
+        /// True while this viewer's window is hidden with the page still running for other windows:
+        /// tool windows (widgets) then open as windows of their own, with a taskbar button, since
+        /// a window owned by a hidden one would have none. Set by the host.
+        /// </summary>
+        public bool HostWindowHidden { get; set; }
+
+        /// <summary>The window is shown again after being hidden: it takes tabs again (a home tab if it has none).</summary>
+        public void ReopenMainWindow() => _bridge?.PushEvent(new { @event = "reopenMainWindow" });
+
+        /// <summary>
         /// Set by a host whose pane is not a window (the Word task pane): asked to put this viewer into a
         /// full-screen window when the page requests fullscreen. Once in a window, fullscreen toggles that window.
         /// </summary>
@@ -913,6 +929,7 @@ namespace KitveiHakodeshLib
             "window.__webviewIsVsto=" + (IsVstoHost ? "true" : "false") + ";" +
             (string.IsNullOrEmpty(WindowId) ? "" : "window.__webviewWindowId=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(WindowId) + ";") +
             "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";" +
+            (StartHidden ? "window.__khsStartHidden=true;" : "") +
             KiwixHostFact();
 
         // ── Dispose ─────────────────────────────────────────────────────────────────

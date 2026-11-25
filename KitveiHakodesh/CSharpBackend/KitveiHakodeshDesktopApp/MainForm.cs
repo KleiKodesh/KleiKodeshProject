@@ -55,6 +55,9 @@ namespace KitveiHakodeshDesktopApp
         /// <summary>The reader closed this window while others of its page stay: hidden, its page still running.</summary>
         internal bool ClosedWhileOthersStay { get; set; }
 
+        /// <summary>Set when a launch just showed this hidden window again (a "new window" request then needs nothing more).</summary>
+        internal bool ShownAgainJustNow { get; set; }
+
         /// <summary>The reader asked to close this window while others of its page stay; the page is closing its tabs.</summary>
         internal bool CloseRequestedWhileOthersStay { get; set; }
 

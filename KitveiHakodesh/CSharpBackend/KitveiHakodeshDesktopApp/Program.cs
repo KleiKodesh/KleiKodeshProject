@@ -166,8 +166,15 @@ namespace KitveiHakodeshDesktopApp
             // Launched by the calendar shortcut with no app running: the calendar window opens
             // once the first window can take it (DrainEarlyRequests).
             string[] launchArgs = Environment.GetCommandLineArgs();
-            if (launchArgs.Length > 1 && launchArgs[1] == CalendarRequest)
+            bool calendarOnly = launchArgs.Length > 1 && launchArgs[1] == CalendarRequest;
+            if (calendarOnly)
+            {
                 lock (EarlyRequestsLock) EarlyRequests.Add(CalendarRequest);
+                // Like a program of its own: only the calendar shows. The main window starts hidden
+                // (its page runs the calendar), and no other saved window opens.
+                StartHidden(first);
+                windowIds = new[] { windowIds[0] };
+            }
             first.HandleCreated += (s, e) => first.BeginInvoke(new Action(DrainEarlyRequests));
             lock (EarlyRequestsLock) _activeWindow = first;
             for (int i = 1; i < windowIds.Length; i++)
@@ -289,7 +296,7 @@ namespace KitveiHakodeshDesktopApp
         // closes the tabs (asking about unsaved work); the window hides once they are gone.
         private static bool CloseOnlyThisWindow(MainForm form)
         {
-            if (!PageWindows.Exists(w => w.PageOwner == form && !w.IsDisposed && w.Visible)) return false;
+            if (!OtherWindowsOfPageShown(form)) return false;
             form.CloseRequestedWhileOthersStay = true;
             form.Viewer.CloseAppWindow("");
             return true;
@@ -301,6 +308,8 @@ namespace KitveiHakodeshDesktopApp
             foreach (MainForm open in OpenWindows)
                 if (open != window && !open.IsDisposed && open.Visible) return false;
             foreach (PageWindowForm open in PageWindows)
+                if (open != window && !open.IsDisposed && open.Visible) return false;
+            foreach (Form open in ToolWindowPages.Keys)
                 if (open != window && !open.IsDisposed && open.Visible) return false;
             return true;
         }
@@ -528,6 +537,15 @@ namespace KitveiHakodeshDesktopApp
             {
                 window.Viewer.OpenCalendarAppWindow();
                 return;
+            }
+            // A normal launch, or a file or link, while the main window is hidden (closed while
+            // other windows stayed, or the calendar was launched on its own): it is shown again.
+            if (!window.Visible && window.ClosedWhileOthersStay && !ClosingWindows.Contains(window))
+                ShowHiddenMainWindow(window);
+            if (request == NewWindowRequest && window.Visible && window.ShownAgainJustNow)
+            {
+                window.ShownAgainJustNow = false;
+                return; // the main window itself is the new window
             }
 #if DEBUG
             if (DebugTabMoves.TryRun(request)) return;

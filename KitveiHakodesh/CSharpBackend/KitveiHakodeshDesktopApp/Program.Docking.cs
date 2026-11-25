@@ -53,8 +53,7 @@ namespace KitveiHakodeshDesktopApp
                 owner.Viewer.ForgetTabsState(window.WindowKey);
                 // The main window was closed while this one stayed: with the last of its page's
                 // windows gone, it closes for real (the app quits, or its page goes).
-                if (owner.ClosedWhileOthersStay && !owner.Visible && !PageWindows.Exists(w => w.PageOwner == owner && !w.IsDisposed))
-                    owner.BeginInvoke(new Action(() => { if (!owner.IsDisposed) owner.Close(); }));
+                CloseHiddenMainIfNothingLeft(owner);
             };
 
             // Only the window opened for the dropped tab takes its placement: one opened for
@@ -87,12 +86,67 @@ namespace KitveiHakodeshDesktopApp
         private static void AttachToolWindow(MainForm owner, Form window)
         {
             ToolWindowPages[window] = owner;
-            window.FormClosed += (s, e) => ToolWindowPages.Remove(window);
+            window.FormClosed += (s, e) =>
+            {
+                ToolWindowPages.Remove(window);
+                CloseHiddenMainIfNothingLeft(owner);
+            };
             ScreenDocking.AttachWindow(window, Docking);
         }
 
         // The main window whose page draws each open tool window.
         private static readonly Dictionary<Form, MainForm> ToolWindowPages = new Dictionary<Form, MainForm>();
+
+        // ── The main window hidden while its page runs other windows ──────────────
+
+        /// <summary>
+        /// The calendar launched on its own: the main window starts hidden - shown invisible once
+        /// (its page has to start), then hidden - and counts as closed while other windows stay.
+        /// </summary>
+        private static void StartHidden(MainForm main)
+        {
+            main.Viewer.StartHidden = true;
+            main.Viewer.HostWindowHidden = true;
+            main.ClosedWhileOthersStay = true;
+            main.Opacity = 0;
+            main.Shown += (s, e) => main.BeginInvoke(new Action(() =>
+            {
+                if (main.IsDisposed || !main.ClosedWhileOthersStay) return;
+                main.Hide();
+                main.Opacity = 1;
+            }));
+        }
+
+        /// <summary>Windows its page draws besides the main one are on screen: extra app windows or tool windows.</summary>
+        private static bool OtherWindowsOfPageShown(MainForm main)
+        {
+            if (PageWindows.Exists(w => w.PageOwner == main && !w.IsDisposed && w.Visible)) return true;
+            foreach (var kv in ToolWindowPages)
+                if (kv.Value == main && !kv.Key.IsDisposed && kv.Key.Visible) return true;
+            return false;
+        }
+
+        /// <summary>The app launched normally (or a file opened) while the main window is hidden: it is shown again.</summary>
+        private static void ShowHiddenMainWindow(MainForm main)
+        {
+            main.ClosedWhileOthersStay = false;
+            main.CloseRequestedWhileOthersStay = false;
+            main.Viewer.HostWindowHidden = false;
+            main.Viewer.ReopenMainWindow();
+            main.Opacity = 1;
+            main.ShownAgainJustNow = true;
+            main.Show();
+        }
+
+        /// <summary>
+        /// A window of a hidden main window's page closed: with nothing of that page left on screen,
+        /// the main window closes for real (the app quits, or that page goes).
+        /// </summary>
+        private static void CloseHiddenMainIfNothingLeft(MainForm main)
+        {
+            if (main.IsDisposed || !main.ClosedWhileOthersStay || main.Visible) return;
+            if (!OtherWindowsOfPageShown(main)) main.BeginInvoke(new Action(() => { if (!main.IsDisposed) main.Close(); }));
+        }
 
         // The main window whose page shows this window's tabs.
         private static MainForm PageOf(FluentChromeTabsForm window)
