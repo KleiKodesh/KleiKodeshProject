@@ -152,8 +152,8 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
       </div>
       <div class="zmanim-grid">
         <template v-for="z in day.specialZmanim" :key="z.key">
-          <span class="zg-label primary" data-special-zman>{{ $t(specialZmanLabelKey(z.key)) }}</span>
-          <span class="zg-value primary">{{ z.value ?? '—' }}</span>
+          <span class="zg-label" data-special-zman>{{ $t(specialZmanLabelKey(z.key)) }}</span>
+          <span class="zg-value">{{ z.value ?? '—' }}</span>
         </template>
         <template v-for="z in zmanRows" :key="z.key">
           <span class="zg-label" :class="{ primary: z.primary }" :data-primary-zman="z.primary || undefined">{{ z.label }}</span>
@@ -372,7 +372,6 @@ button.chip {
 .zg-label.primary, .zg-value.primary {
   color: var(--text-primary);
   font-weight: 700;
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 .zg-value {
   font-size: 12px;
