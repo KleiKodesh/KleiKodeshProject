@@ -5,8 +5,8 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import NextZmanPopup from '@/features/home/NextZmanPopup.vue'
 import { useNextZman } from '@/features/home/useNextZman'
-import { IconChevronLeft20Regular, IconChevronRight20Regular, IconHome20Regular, IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
-import HebrewDatePicker from '@/components/HebrewDatePicker.vue'
+import { IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
+import HebrewDayNav from '@/components/HebrewDayNav.vue'
 import ZmanimSettingsDialog from '@/features/hebrew-calendar/ZmanimSettingsDialog.vue'
 import { placeTree, type PlaceTree } from '@/features/hebrew-calendar/zmanimPlaces'
 
@@ -15,11 +15,6 @@ const props = defineProps<{ date?: Date | null }>()
 /** The day shown: the calendar's picked day, moved by the widget's own back/forward/today. */
 const day = ref(props.date ?? new Date())
 watch(() => props.date, (d) => { day.value = d ?? new Date() })
-function shiftDay(by: number) {
-  const d = new Date(day.value)
-  d.setDate(d.getDate() + by)
-  day.value = d
-}
 const { rows, city, setCity } = useNextZman(day)
 const settingsOpen = ref(false)
 
@@ -54,12 +49,7 @@ const placePath = computed(() => {
         @click="settingsOpen = true"
       ><IconSettings20Regular /></button>
     </div>
-    <div class="zw-nav">
-      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.prev')" @click="shiftDay(-1)"><IconChevronRight20Regular /></button>
-      <HebrewDatePicker v-model="day" />
-      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.next')" @click="shiftDay(1)"><IconChevronLeft20Regular /></button>
-      <button class="zw-gear" type="button" :title="$t('hebrewCalendar.nav.today')" @click="day = new Date()"><IconHome20Regular /></button>
-    </div>
+    <HebrewDayNav v-model="day" />
     <ZmanimSettingsDialog v-if="settingsOpen" :place-id="city?.id" @pick="setCity" @close="settingsOpen = false" />
     <NextZmanPopup :rows="rows" :city-name="''" />
   </div>
@@ -71,13 +61,6 @@ const placePath = computed(() => {
   align-items: center;
   gap: 6px;
   margin: 8px 8px 0;
-}
-.zw-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  margin: 4px 8px 0;
 }
 .zw-place {
   flex: 1;

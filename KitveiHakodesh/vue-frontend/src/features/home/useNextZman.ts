@@ -95,6 +95,9 @@ export function useNextZman(shownDay?: Ref<Date | null>) {
   let cachedDayKey = ''
   let cachedToday: DayTimedZmanim | null = null
   let cachedTomorrow: DayTimedZmanim | null = null
+  // The one other day picked (calendar / widget day nav): one slot, replaced on each pick.
+  let pickedKey = ''
+  let pickedDay: DayTimedZmanim | null = null
 
   function ensureDay(reference: Date) {
     if (!calc || !city.value) return
@@ -167,8 +170,12 @@ export function useNextZman(shownDay?: Ref<Date | null>) {
     const picked = shownDay?.value
     if (picked && picked.toDateString() !== current.toDateString()) {
       if (!calc || !city.value) return []
-      return dayRows(calc(city.value, picked), null, null)
+      const key = `${city.value.id}|${picked.toDateString()}`
+      if (key !== pickedKey || !pickedDay) { pickedKey = key; pickedDay = calc(city.value, picked) }
+      return dayRows(pickedDay, null, null)
     }
+    pickedKey = ''
+    pickedDay = null // back on today: drop the other day's times
     const n = next.value
     if (!cachedToday) return []
     const nextTime = n?.time.getTime()
