@@ -110,19 +110,17 @@ export function useBookViewAnnotations(
 
       const strippedText = (lineElement.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
 
+      // Any DOM position, not just a text node inside this line: a drag across lines
+      // often ends on a row wrapper or an element boundary. A position before the
+      // line counts as 0, one after it as the line's full length.
       function countStrippedOffset(node: Node, offsetInNode: number): number {
-        const walker = document.createTreeWalker(lineElement, NodeFilter.SHOW_TEXT)
-        let strippedCount = 0
-        let currentNode: Text | null
-        while ((currentNode = walker.nextNode() as Text | null)) {
-          if (currentNode === node) {
-            const slice = currentNode.textContent?.slice(0, offsetInNode) ?? ''
-            strippedCount += slice.replace(/[\u0591-\u05C7]/g, '').length
-            return strippedCount
-          }
-          strippedCount += (currentNode.textContent ?? '').replace(/[\u0591-\u05C7]/g, '').length
-        }
-        return strippedCount
+        const ownerDocument = lineElement.ownerDocument
+        const lineRange = ownerDocument.createRange()
+        lineRange.selectNodeContents(lineElement)
+        if (lineRange.comparePoint(node, offsetInNode) < 0) return 0
+        if (lineRange.comparePoint(node, offsetInNode) > 0) return strippedText.length
+        lineRange.setEnd(node, offsetInNode)
+        return lineRange.toString().replace(/[\u0591-\u05C7]/g, '').length
       }
 
       const isFirstLine = i === 0

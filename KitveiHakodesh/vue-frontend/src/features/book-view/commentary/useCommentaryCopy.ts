@@ -207,19 +207,16 @@ export function useCommentaryCopy(
 
       const strippedText = (lineEl.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
 
+      // Any DOM position, not just a text node inside this line: a drag across lines
+      // often ends on a row wrapper or an element boundary. A position before the
+      // line counts as 0, one after it as the line's full length.
       function countStrippedOffset(node: Node, offsetInNode: number): number {
-        const walker = hostWindow.document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
-        let stripped = 0
-        let current: Text | null
-        while ((current = walker.nextNode() as Text | null)) {
-          if (current === node) {
-            const slice = current.textContent?.slice(0, offsetInNode) ?? ''
-            stripped += slice.replace(/[\u0591-\u05C7]/g, '').length
-            return stripped
-          }
-          stripped += (current.textContent ?? '').replace(/[\u0591-\u05C7]/g, '').length
-        }
-        return stripped
+        const lineRange = lineEl.ownerDocument.createRange()
+        lineRange.selectNodeContents(lineEl)
+        if (lineRange.comparePoint(node, offsetInNode) < 0) return 0
+        if (lineRange.comparePoint(node, offsetInNode) > 0) return strippedText.length
+        lineRange.setEnd(node, offsetInNode)
+        return lineRange.toString().replace(/[\u0591-\u05C7]/g, '').length
       }
 
       const isFirstLine = i === 0

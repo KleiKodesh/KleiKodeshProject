@@ -19,7 +19,7 @@
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useTextareaAutosize } from '@vueuse/core'
-import { IconDelete24Regular, IconNote20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDelete24Regular, IconComment20Regular } from '@iconify-prerendered/vue-fluent'
 import { HDate } from '@hebcal/hdate'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import type { Note } from './useBookViewNotes'
@@ -165,7 +165,7 @@ async function onDelete() {
       @keydown="onKeydown"
     >
       <div class="note-bubble-header">
-        <IconNote20Regular class="note-icon" />
+        <IconComment20Regular class="note-icon" />
         <span
           class="note-bubble-time"
           :title="isEdited ? $t('bookView.note.updated', { time: formatTimestamp(note.updatedAt) }) : undefined"
@@ -212,8 +212,8 @@ async function onDelete() {
 }
 
 .note-icon {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   color: var(--accent-color);
   flex-shrink: 0;
 }
