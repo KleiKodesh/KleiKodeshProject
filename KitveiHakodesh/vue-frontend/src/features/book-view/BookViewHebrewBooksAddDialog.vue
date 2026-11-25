@@ -58,7 +58,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="hb-add-backdrop" @click.self="emit('close')">
       <div class="hb-add-dialog" dir="rtl" role="dialog" :aria-label="$t('bookView.hebrewBooks.addFromHebrewBooks')">
         <p class="hb-add-title">{{ $t('bookView.hebrewBooks.addFromHebrewBooks') }}</p>

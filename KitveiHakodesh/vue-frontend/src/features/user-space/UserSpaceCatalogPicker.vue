@@ -39,7 +39,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="picker-backdrop" dir="rtl" @click.self="emit('cancel')">
       <div class="picker-dialog" role="dialog" :aria-label="$t('userSpace.picker.title')">
         <p class="picker-title">{{ $t('userSpace.picker.title') }}</p>

@@ -1,3 +1,4 @@
+import { activeHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * Text-to-clipboard that also works in the hosted app.
  *
@@ -54,6 +55,8 @@ export function awaitWithinActivationWindow(work: Promise<unknown>): Promise<voi
 }
 
 function copyViaTextarea(text: string): boolean {
+  // In the window the reader works in (an extra window has its own document and focus).
+  const document = activeHostWindow().document
   // Off-screen rather than hidden: `display: none` / `visibility: hidden` elements
   // cannot hold a selection, so the copy would come up empty.
   const textarea = document.createElement('textarea')

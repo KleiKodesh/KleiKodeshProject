@@ -276,7 +276,7 @@ onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div
       v-if="open"
       ref="panelRef"

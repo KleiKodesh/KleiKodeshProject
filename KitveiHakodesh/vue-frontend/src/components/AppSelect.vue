@@ -132,7 +132,7 @@ function onKeydown(e: KeyboardEvent) {
     <IconChevronDown20Regular class="app-select-chevron" aria-hidden="true" />
     <!-- Inside the button so the component has ONE root (parent classes + scoped styles
          apply); teleported, so in the DOM the list is in <body> and its clicks never reach the button. -->
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div v-if="isOpen" ref="listRef" class="app-select-list" :style="listStyle" role="listbox">
         <div
           v-for="(o, i) in options"

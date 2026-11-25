@@ -81,7 +81,7 @@ async function saveAndClose() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="excluded-backdrop" @click.self="emit('close')">
       <div class="excluded-dialog" role="dialog" :aria-label="$t('settings.excluded.title')">
         <p class="excluded-title">{{ $t('settings.excluded.title') }}</p>

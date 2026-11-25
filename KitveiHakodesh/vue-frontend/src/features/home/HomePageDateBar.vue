@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useNow, useWindowSize, computedAsync } from '@vueuse/core'
@@ -249,6 +250,8 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   isLearningOpen.value = false
   learningButtonRef.value?.focus()
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -272,7 +275,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
         </button>
       </div>
-      <Teleport to="body">
+      <Teleport :to="hostWindow.document.body">
         <div v-if="isZmanPopupOpen" class="zman-popup-anchor" :style="zmanPopupStyle">
           <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="zmanCityName" />
         </div>
@@ -289,7 +292,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
         {{ dateInfo.hebrewDate }}
       </button>
     </div>
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div
         v-if="isCalendarOpen"
         ref="calendarPopupRef"
@@ -311,7 +314,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           {{ $t('home.dateBar.dailyLearning') }}
         </button>
       </div>
-      <Teleport to="body">
+      <Teleport :to="hostWindow.document.body">
         <div
           v-if="isLearningOpen"
           ref="learningMenuRef"

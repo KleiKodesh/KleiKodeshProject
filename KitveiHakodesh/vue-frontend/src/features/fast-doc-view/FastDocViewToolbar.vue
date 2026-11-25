@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import {
   IconZoomIn20Regular,
   IconChevronLeft20Regular,
@@ -90,6 +91,8 @@ function shownNotesPlace() {
 function onToggleToc(event: MouseEvent) {
   emit('toggleToc', event.currentTarget as HTMLElement)
 }
+// The window this is drawn in: its menus and dialogs open there (hostWindow.ts).
+const hostWindow = useHostWindow()
 </script>
 
 <template>
@@ -101,7 +104,7 @@ function onToggleToc(event: MouseEvent) {
     :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]"
     :title="$t('bookView.toolbar.dragHint')"
   >
-    <Teleport to="body">
+    <Teleport :to="hostWindow.document.body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
     <button
