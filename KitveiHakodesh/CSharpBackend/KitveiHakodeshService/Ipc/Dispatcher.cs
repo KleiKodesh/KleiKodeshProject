@@ -292,12 +292,12 @@ public sealed class Dispatcher(
                 case "dailyLearningMark":
                 {
                     var a = MsgPack.De<DailyLearningLogArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Mark(a.Date, a.Cycle, a.Place)));
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Mark(a.Date, a.Cycle, a.Place, a.Review)));
                 }
                 case "dailyLearningUnmark":
                 {
                     var a = MsgPack.De<DailyLearningLogArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Unmark(a.Date, a.Cycle)));
+                    return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.Unmark(a.Date, a.Cycle, a.Review)));
                 }
                 case "dailyLearningMoveTo":
                     return RpcResponse.Ok(MsgPack.Ser(DailyLearningLog.MoveTo(MsgPack.De<StringArg>(req.Args).Value ?? "")));

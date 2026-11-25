@@ -668,6 +668,8 @@ public sealed class DailyLearningLogArgs
     public string Date { get; set; } = "";
     public string Cycle { get; set; } = "";
     public string Place { get; set; } = "";
+    /// <summary>0 = the portion itself; 1..4 = that review of it (counted on the portion's own day).</summary>
+    public int Review { get; set; }
 }
 
 /// <summary>Args of <c>findBooksByName</c>: groups of names, each tried in order.</summary>

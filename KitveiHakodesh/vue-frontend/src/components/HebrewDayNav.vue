@@ -1,9 +1,12 @@
 <script setup lang="ts">
 // Previous day / Hebrew date picker / next day / today: the day row of the calendar widgets.
+// The default slot adds a widget's own buttons at the row's end, after a separator.
+import { useSlots } from 'vue'
 import { IconChevronLeft20Regular, IconChevronRight20Regular, IconHome20Regular } from '@iconify-prerendered/vue-fluent'
 import HebrewDatePicker from './HebrewDatePicker.vue'
 
 const day = defineModel<Date>({ required: true })
+const slots = useSlots()
 function shiftDay(by: number) {
   const d = new Date(day.value)
   d.setDate(d.getDate() + by)
@@ -17,6 +20,10 @@ function shiftDay(by: number) {
     <HebrewDatePicker v-model="day" />
     <button class="hdn-btn" type="button" :title="$t('hebrewCalendar.nav.next')" @click="shiftDay(1)"><IconChevronLeft20Regular /></button>
     <button class="hdn-btn" type="button" :title="$t('hebrewCalendar.nav.today')" @click="day = new Date()"><IconHome20Regular /></button>
+    <template v-if="slots.default">
+      <span class="hdn-sep" />
+      <slot />
+    </template>
   </div>
 </template>
 
@@ -29,4 +36,5 @@ function shiftDay(by: number) {
   color: var(--text-secondary); cursor: pointer;
 }
 .hdn-btn:hover { color: var(--text-primary); border-color: var(--border-color); }
+.hdn-sep { width: 1px; height: 18px; margin: 0 4px; background: var(--border-color); }
 </style>

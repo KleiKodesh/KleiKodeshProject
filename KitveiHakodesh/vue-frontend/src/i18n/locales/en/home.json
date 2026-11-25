@@ -18,7 +18,13 @@
     "pickFolder": "Choose a folder for the learning file",
     "locked": "The learning file is open in another program (Excel or LibreOffice). Close it and try again",
     "exists": "That folder already has a learning file",
-    "failed": "The learning file could not be saved"
+    "failed": "The learning file could not be saved",
+    "review1": "Review 1 (yesterday)",
+    "review2": "Review 2 (a week ago)",
+    "review3": "Review 3 (a month ago)",
+    "review4": "Review 4 (four months ago)",
+    "showReviews": "Show reviews (Chavruta Shas method: again after a day, a week, a month and three months)",
+    "hideReviews": "Hide reviews"
   },
   "dateBar": {
     "pin": "Pin: show this bar at the bottom of every page, not just the home page",

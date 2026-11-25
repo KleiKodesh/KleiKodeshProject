@@ -5,12 +5,14 @@ using MessagePack;
 
 namespace KitveiHakodesh.Core.DailyLearning;
 
-/// <summary>A cycle learned on a day, and how many times.</summary>
+/// <summary>A cycle's portion of a day: how many times it was learned, and each review's own count.</summary>
 [MessagePackObject(keyAsPropertyName: true)]
 public sealed class DailyLearningMark
 {
     public string Cycle { get; set; } = "";
     public int Times { get; set; }
+    /// <summary>Reviews 1..4 (index 0..3).</summary>
+    public List<int> Reviews { get; set; } = [];
 }
 
 /// <summary>Reply of every learning-log op: the day's marks, the file, or why it failed.</summary>
@@ -26,8 +28,11 @@ public sealed class DailyLearningLogResult
 
 /// <summary>
 /// The daily-learning log: a CSV in a folder the user picks, kept so the user can EDIT it in Excel.
-/// It mirrors the widget, one row per learned cycle of a day: <c>Hebrew date, cycle, place, times</c>.
-/// The date is Hebrew text (Excel never reformats it); the day is computed from it here.
+/// It mirrors the widget, one row per learned cycle of a day:
+/// <c>Hebrew date, cycle, place, times, review 1, review 2, review 3, review 4</c>. A review's count
+/// sits on the row of the portion it repeats (reviews come 1, 8, 37 and 127 days later; the widget
+/// works that out). Columns after these are the user's (notes). The date is Hebrew text (Excel
+/// never reformats it); the day is computed from it here.
 ///
 /// What Excel or LibreOffice may do to the file is all accepted: re-sorting rows, saving as plain
 /// "CSV" (Windows-1255) instead of UTF-8, ';' or tabs between columns, quoted cells, extra columns,
@@ -41,7 +46,9 @@ public sealed class DailyLearningLogResult
 public static class DailyLearningLog
 {
     public const string FileName = "לימוד יומי.csv";
-    private const string Header = "תאריך,לימוד,מקום,פעמים";
+    private const string Header = "תאריך,לימוד,מקום,פעמים,חזרה ראשונה - לאחר יום,חזרה שנייה - לאחר שבוע,חזרה שלישית - לאחר חודש,חזרה רביעית - לאחר שלושה חודשים";
+    /// <summary>The count columns: times (0) and reviews 1..4.</summary>
+    public const int ReviewCount = 4;
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
     private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
     private static readonly object Gate = new();
@@ -74,10 +81,13 @@ public static class DailyLearningLog
                     rows = RowsOfDay(stream, day).ToList();
                 }
                 else rows = ReadAll(path).Records.Where(r => r.Day == day).ToList();
-                // A row copied twice in Excel counts twice; a times cell set to 0 is not learned.
+                // A row copied twice in Excel counts twice; a count set to 0 is not learned.
                 foreach (var group in rows.GroupBy(r => r.Cycle))
-                    if (group.Sum(r => r.Times) is int times and > 0)
-                        result.Marks.Add(new DailyLearningMark { Cycle = group.Key, Times = times });
+                {
+                    var mark = new DailyLearningMark { Cycle = group.Key, Times = group.Sum(r => r.Counts[0]) };
+                    for (int k = 1; k <= ReviewCount; k++) mark.Reviews.Add(group.Sum(r => r.Counts[k]));
+                    if (mark.Times > 0 || mark.Reviews.Any(n => n > 0)) result.Marks.Add(mark);
+                }
             }
         }
         catch (IOException ex) { result.Error = IsLocked(ex) ? "locked" : ex.Message; }
@@ -85,27 +95,33 @@ public static class DailyLearningLog
         return result;
     }
 
-    /// <summary>One more time learned (adds the row at 1) and returns the day.</summary>
-    public static DailyLearningLogResult Mark(string date, string cycle, string place) =>
+    /// <summary>One more time learned - the portion itself (<paramref name="review"/> 0) or one of its
+    /// reviews (1..4), on the portion's own day - and returns that day.</summary>
+    public static DailyLearningLogResult Mark(string date, string cycle, string place, int review = 0) =>
+        review is < 0 or > ReviewCount ? new DailyLearningLogResult { Error = "bad review" } :
         Rewrite(date, (rows, day) =>
         {
             int at = rows.FindIndex(r => r.Day == day && r.Cycle == cycle);
-            if (at >= 0) { rows[at] = rows[at].WithTimes(rows[at].Times + 1); return; }
+            if (at >= 0) { rows[at] = rows[at].WithCount(review, rows[at].Counts[review] + 1); return; }
             // New row by date: after the last row of that day or earlier; existing rows never move.
             int after = rows.FindLastIndex(r => r.Day != Row.Unreadable && r.Day <= day);
             int before = rows.FindIndex(r => r.Day != Row.Unreadable && r.Day > day);
             int insertAt = after >= 0 ? after + 1 : before >= 0 ? before : rows.Count;
-            rows.Insert(insertAt, new Row(day, HebrewDates.Format(day), cycle, place, 1, Raw: null));
+            var counts = new int[ReviewCount + 1];
+            counts[review] = 1;
+            rows.Insert(insertAt, new Row(day, HebrewDates.Format(day), cycle, place, counts, Raw: null));
         });
 
-    /// <summary>One time fewer (the row goes at 0) and returns the day.</summary>
-    public static DailyLearningLogResult Unmark(string date, string cycle) =>
+    /// <summary>One time fewer of the portion or a review; a row with nothing left goes. Returns the day.</summary>
+    public static DailyLearningLogResult Unmark(string date, string cycle, int review = 0) =>
+        review is < 0 or > ReviewCount ? new DailyLearningLogResult { Error = "bad review" } :
         Rewrite(date, (rows, day) =>
         {
-            int at = rows.FindIndex(r => r.Day == day && r.Cycle == cycle && r.Times > 0);
+            int at = rows.FindIndex(r => r.Day == day && r.Cycle == cycle && r.Counts[review] > 0);
             if (at < 0) return;
-            // Down to 0: the row goes, unless the user wrote something of their own on it (kept at 0).
-            if (rows[at].Times > 1 || rows[at].HasOwnCells) rows[at] = rows[at].WithTimes(rows[at].Times - 1);
+            var row = rows[at].WithCount(review, rows[at].Counts[review] - 1);
+            // All counts at 0: the row goes, unless the user wrote something of their own on it.
+            if (row.Counts.Any(n => n > 0) || row.HasOwnCells) rows[at] = row;
             else rows.RemoveAt(at);
         });
 
@@ -291,25 +307,48 @@ public static class DailyLearningLog
 
     /// <param name="Day">The civil day as yyyymmdd, computed from the Hebrew date.</param>
     /// <param name="Raw">The line as read; written back untouched while the row is unchanged.</param>
+    /// <param name="Counts">Times (index 0) and reviews 1..4.</param>
     /// <param name="Fields">The line's columns as read (null for a new row): a changed count rewrites
-    /// only its own cell, so notes and extra columns the user added stay.</param>
-    private sealed record Row(int Day, string HebrewDate, string Cycle, string Place, int Times, string? Raw, List<string>? Fields = null)
+    /// only its own cells, so notes and extra columns the user added stay.</param>
+    private sealed record Row(int Day, string HebrewDate, string Cycle, string Place, int[] Counts, string? Raw, List<string>? Fields = null)
     {
         /// <summary><see cref="Day"/> of a line the app can't read (kept as written).</summary>
         public const int Unreadable = -1;
+        /// <summary>Columns before the counts: date, cycle, place.</summary>
+        private const int FirstCount = 3;
+        private const int CountColumns = ReviewCount + 1;
 
-        public static Row UnreadableLine(string line) => new(Unreadable, "", "", "", 0, line);
+        public static Row UnreadableLine(string line) => new(Unreadable, "", "", "", new int[CountColumns], line);
 
-        public Row WithTimes(int times) => this with { Times = times, Raw = null };
+        public Row WithCount(int index, int value)
+        {
+            var counts = (int[])Counts.Clone();
+            counts[index] = Math.Max(value, 0);
+            return this with { Counts = counts, Raw = null };
+        }
 
-        /// <summary>The user wrote in a column past the four (a note): the row is theirs to delete.</summary>
-        public bool HasOwnCells => Fields is { Count: > 4 } f && f.Skip(4).Any(c => c.Trim().Length > 0);
+        /// <summary>The user wrote something of their own on the row - past the count columns, or
+        /// words in a review cell: the row is theirs to delete.</summary>
+        public bool HasOwnCells => Fields is { } f && f.Select((c, i) =>
+            i >= FirstCount + CountColumns ? c.Trim().Length > 0 : i > FirstCount && IsWords(c)).Any(own => own);
 
+        /// <summary>A cell with text that is not a count.</summary>
+        private static bool IsWords(string cell) =>
+            cell.Trim().Length > 0 && !int.TryParse(cell.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+
+        /// <summary>Times always as a number; a review cell stays empty until that review is marked,
+        /// and words the user wrote in an unmarked review cell stay.</summary>
         public string Format(char separator)
         {
-            var cells = Fields is null ? [HebrewDate, Cycle, Place, ""] : new List<string>(Fields);
-            while (cells.Count < 4) cells.Add("");
-            cells[3] = Times.ToString(CultureInfo.InvariantCulture);
+            var cells = Fields is null ? [HebrewDate, Cycle, Place] : new List<string>(Fields);
+            while (cells.Count < FirstCount + CountColumns) cells.Add("");
+            for (int k = 0; k < CountColumns; k++)
+            {
+                if (k > 0 && Counts[k] == 0 && IsWords(cells[FirstCount + k])) continue;
+                cells[FirstCount + k] = k == 0 || Counts[k] > 0 ? Counts[k].ToString(CultureInfo.InvariantCulture) : "";
+            }
+            // Trailing empty review cells are left off a new row, so it reads like a short line in Excel.
+            if (Fields is null) while (cells.Count > FirstCount + 1 && cells[^1].Length == 0) cells.RemoveAt(cells.Count - 1);
             return string.Join(separator, cells.Select(c => Field(c, separator)));
         }
 
@@ -322,9 +361,15 @@ public static class DailyLearningLog
             line = line.TrimEnd('\r');
             var f = Split(line, separator);
             if (f.Count < 2 || HebrewDates.Parse(f[0]) is not int day) return null;
-            // An empty or worded count means learned once; a number is the count (0 = not learned).
-            int times = f.Count > 3 && int.TryParse(f[3].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Max(n, 0) : 1;
-            return new Row(day, f[0].Trim(), f[1].Trim(), f.Count > 2 ? f[2].Trim() : "", times, line, f);
+            // Times: empty or words = learned once, a number = the count (0 = not learned).
+            // A review: a number = its count; empty or words = not reviewed.
+            var counts = new int[CountColumns];
+            for (int k = 0; k < CountColumns; k++)
+            {
+                string cell = f.Count > FirstCount + k ? f[FirstCount + k].Trim() : "";
+                counts[k] = int.TryParse(cell, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? Math.Max(n, 0) : k == 0 ? 1 : 0;
+            }
+            return new Row(day, f[0].Trim(), f[1].Trim(), f.Count > 2 ? f[2].Trim() : "", counts, line, f);
         }
 
         private static List<string> Split(string line, char separator)
