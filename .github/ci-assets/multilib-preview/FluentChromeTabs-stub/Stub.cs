@@ -50,6 +50,15 @@ namespace FluentChromeTabs
         public int Group { get; private set; }
     }
 
+    public enum FluentTabDragPhase { Started, Moved, Returned, Cancelled, Dropped }
+
+    public class FluentTabDragOutsideEventArgs : EventArgs
+    {
+        public FluentTabDragPhase Phase { get; set; }
+        public FluentTab Tab { get; set; }
+        public Point ScreenPoint { get; set; }
+    }
+
     public class FluentChromeTabsForm : Form
     {
         public bool AllowTabDetach { get; set; }
@@ -90,6 +99,7 @@ namespace FluentChromeTabs
 #pragma warning disable CS0067
         public event EventHandler<FluentTabEventArgs> SelectedTabChanged;
         public event EventHandler<FluentTabEventArgs> TabPressed;
+        public event EventHandler<FluentTabDragOutsideEventArgs> TabDragOutside;
         public event EventHandler<FluentTabClosingEventArgs> TabClosing;
         public event EventHandler<NewTabRequestedEventArgs> NewTabRequested;
         public event EventHandler SplitRatioChanged;
@@ -103,6 +113,7 @@ namespace FluentChromeTabs
             return tab;
         }
 
+        public int DropIndexAtScreenPoint(Point screenPoint) { return -1; }
         public bool CloseTab(FluentTab tab) => _tabs.Remove(tab);
         public void ShowTabListMenu(int group, int quickSwitchStep) { }
         public void SetSplitDividerPixels(int leftPx, int widthPx) { }
