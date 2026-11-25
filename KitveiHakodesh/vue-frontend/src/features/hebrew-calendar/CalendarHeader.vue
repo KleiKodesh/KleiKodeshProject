@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { HDate } from '@hebcal/core'
 import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
@@ -10,7 +9,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
-import { HEB_MONTHS, GREG_MONTHS } from './useMonthlyView'
+import { HEB_MONTHS, GREG_MONTHS, hebYearGem } from './useMonthlyView'
 
 const props = defineProps<{
   viewMode: 'weekly' | 'monthly'
@@ -46,14 +45,6 @@ function labelYear(label: string) {
 const THIS_YEAR = new Date().getFullYear()
 const GREG_YEARS = Array.from({ length: 200 }, (_, i) => THIS_YEAR - 100 + i)
 const HEB_YEARS = Array.from({ length: 200 }, (_, i) => THIS_YEAR + 3760 - 100 + i)
-
-function hebYearGem(y: number): string {
-  try {
-    return new HDate(1, 7, y).renderGematriya().split(' ').pop() ?? String(y)
-  } catch {
-    return String(y)
-  }
-}
 
 // ── Dropdowns ───────────────────────────────────────────────────────────────
 // One "which dropdown is open" flag instead of per-dropdown object-path refs.

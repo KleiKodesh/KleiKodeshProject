@@ -1,3 +1,4 @@
+import { allHostWindows, onDetachedWindowOpened } from '@/composables/detachedWindow/hostWindow'
 import themesData from './themes.json'
 import type { ThemePreset, Theme, ThemeColors } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj, mixHex } from './themeColorUtils'
@@ -193,8 +194,9 @@ export function syncPdfViewerTheme(): void {
   const preset = document.documentElement.getAttribute('data-theme-preset')
   const theme = preset ? getTheme(preset as ThemePreset) : null
 
-  document
-    .querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')
+  // The PDF viewers of every window (an extra app window draws its own).
+  allHostWindows()
+    .flatMap((host) => [...host.document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')])
     .forEach((iframe, i) => {
       try {
         const win = iframe.contentWindow as any
@@ -244,7 +246,7 @@ export function initPdfThemeObserver(): void {
   if ((window as any).__pdfThemeObserverSetup) return
   ;(window as any).__pdfThemeObserverSetup = true
 
-  new MutationObserver((mutations) => {
+  const observer = new MutationObserver((mutations) => {
     for (const { addedNodes } of mutations) {
       for (const node of addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue
@@ -262,5 +264,8 @@ export function initPdfThemeObserver(): void {
         }
       }
     }
-  }).observe(document.body, { childList: true, subtree: true })
+  })
+  // Every window's PDF viewers: the main one now, an extra window as it opens.
+  observer.observe(document.body, { childList: true, subtree: true })
+  onDetachedWindowOpened((host) => observer.observe(host.document.body, { childList: true, subtree: true }))
 }
