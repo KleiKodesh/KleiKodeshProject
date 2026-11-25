@@ -18,7 +18,7 @@ defineProps<{
     <div class="zp-grid">
       <template v-for="r in rows" :key="r.key">
         <span class="zp-label" :class="{ next: r.isNext, passed: r.passed }">{{ r.label }}</span>
-        <span class="zp-value" :class="{ next: r.isNext, passed: r.passed }" :title="r.missing ? $t('hebrewCalendar.zmanimNotReached') : undefined">{{ r.time }}<RoundingMark :sign="r.sign" /></span>
+        <span class="zp-value" :class="{ next: r.isNext, passed: r.passed }" :title="r.missing ? $t('hebrewCalendar.zmanimNotReached') : undefined"><RoundingMark :sign="r.sign">{{ r.time }}</RoundingMark></span>
       </template>
     </div>
     <ZmanimDisclaimer />

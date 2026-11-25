@@ -164,10 +164,10 @@
   },
   "zmanimNotReached": "The sun does not reach this angle tonight",
   "rounded": {
-    "earlier": "Rounded earlier",
-    "later": "Rounded later",
-    "legendEarlier": "rounded earlier (the real time is a little after)",
-    "legendLater": "rounded later (the real time is a little before)"
+    "earlier": "Rounded down",
+    "later": "Rounded up",
+    "legendEarlier": "Rounded down",
+    "legendLater": "Rounded up"
   },
   "otherOpinions": "Other opinions",
   "specialZmanim": {

@@ -274,7 +274,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           :title="$t('home.dateBar.nextZmanTitle', { countdown: nextZmanCountdown })"
           @click="toggleZmanPopup"
         >
-          <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}<RoundingMark :sign="nextZman.sign" />
+          <span class="bar-lbl">{{ nextZman.label }}:</span> <RoundingMark :sign="nextZman.sign">{{ nextZmanTime }}</RoundingMark>
         </button>
       </div>
       <Teleport :to="hostWindow.document.body">
