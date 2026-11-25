@@ -17,7 +17,8 @@ const MIN_VISIBLE_PX = 24
  */
 export function placeCaretAtViewportStart(viewport: HTMLElement | null | undefined): boolean {
   if (!viewport || hasActiveTextSelection()) return true
-  const selection = window.getSelection()
+  const doc = viewport.ownerDocument
+  const selection = doc.getSelection()
   if (!selection) return true
   const top = viewport.getBoundingClientRect().top
   // First rendered line with a readable part inside the viewport (a sliver of a line
@@ -33,12 +34,12 @@ export function placeCaretAtViewportStart(viewport: HTMLElement | null | undefin
   const lineRect = line.getBoundingClientRect()
   let at: { node: Node; offset: number } | null = null
   if (lineRect.top < top) {
-    const hit = document.caretRangeFromPoint?.(lineRect.left + lineRect.width / 2, top + 2)
+    const hit = doc.caretRangeFromPoint?.(lineRect.left + lineRect.width / 2, top + 2)
     if (hit && line.contains(hit.startContainer)) at = { node: hit.startContainer, offset: hit.startOffset }
   }
   at ??= domPositionFromStrippedOffset(line, 0)
   if (!at) return false
-  const range = document.createRange()
+  const range = doc.createRange()
   range.setStart(at.node, at.offset)
   range.collapse(true)
   selection.removeAllRanges()
@@ -52,6 +53,7 @@ export function placeCaretAtViewportStart(viewport: HTMLElement | null | undefin
  */
 export function mayTakeFocus(element: HTMLElement | null | undefined): boolean {
   if (!element) return false
-  const active = document.activeElement
-  return !active || active === document.body || element.contains(active)
+  const doc = element.ownerDocument
+  const active = doc.activeElement
+  return !active || active === doc.body || element.contains(active)
 }

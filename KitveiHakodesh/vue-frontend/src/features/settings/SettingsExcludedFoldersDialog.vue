@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
@@ -6,6 +7,8 @@ import { getExcludedFolders, setExcludedFolders, pickFolder } from '@/webview-ho
 import MessageBanner from '@/components/MessageBanner.vue'
 
 import { useI18n } from 'vue-i18n'
+
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -30,7 +33,7 @@ onMounted(async () => {
   isLoading.value = false
 })
 
-useEventListener('keydown', (event: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (event.code === 'Escape') {
     event.preventDefault()
     emit('close')

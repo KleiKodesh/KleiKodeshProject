@@ -30,9 +30,24 @@ export function useHostWindow(): HostWindow {
 /** The detached windows open now; app-wide UI (the toast) shows in the one in use. */
 const openDetachedWindows = new Set<HostWindow>()
 
+/** Called with each detached window as it opens (app-wide code that also listens there). */
+const detachedWindowOpenedCallbacks = new Set<(detached: HostWindow) => void>()
+
 export function registerDetachedWindow(detached: HostWindow): () => void {
   openDetachedWindows.add(detached)
+  for (const callback of detachedWindowOpenedCallbacks) callback(detached)
   return () => openDetachedWindows.delete(detached)
+}
+
+/** Runs `callback` for every detached window opened from now on; returns the unsubscribe. */
+export function onDetachedWindowOpened(callback: (detached: HostWindow) => void): () => void {
+  detachedWindowOpenedCallbacks.add(callback)
+  return () => { detachedWindowOpenedCallbacks.delete(callback) }
+}
+
+/** The app's own window and every detached window open now. */
+export function allHostWindows(): HostWindow[] {
+  return [window, ...[...openDetachedWindows].filter((detached) => !detached.closed)]
 }
 
 /** The window the reader is working in: a detached one that has focus, else the app's own. */

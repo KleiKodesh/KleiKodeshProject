@@ -103,7 +103,7 @@ function focusSearchInput() {
     input.focus({ preventScroll: true })
     input.setSelectionRange(caretPosition, caretPosition)
   }
-  if (document.hasFocus()) focusAtEndOfQuery()
+  if (hostWindow.document.hasFocus()) focusAtEndOfQuery()
   else useEventListener(hostWindow, 'focus', focusAtEndOfQuery, { once: true })
 }
 
@@ -144,8 +144,8 @@ async function navigateToSection(sectionId: string) {
   navPanelOpen.value = false
   await nextTick()
   const el =
-    document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`) ??
-    document.getElementById(sectionId)
+    hostWindow.document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`) ??
+    hostWindow.document.getElementById(sectionId)
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 </script>

@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { onScopeDispose, ref, shallowRef } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { getLinesPaged } from '@/webview-host/seforimApi'
@@ -94,6 +95,7 @@ function wordEndAt(text: string, start: number): number {
 }
 
 export function useBookViewReadAloud() {
+  const hostWindow = useHostWindow()
   const isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
   const isReading = ref(false)
   const isPaused = ref(false)
@@ -207,7 +209,7 @@ export function useBookViewReadAloud() {
       await waitForVoices()
       refreshVoices()
       const voice = chosenVoice()
-      const selected = readSelection ? window.getSelection()?.toString().trim() ?? '' : ''
+      const selected = readSelection ? hostWindow.getSelection()?.toString().trim() ?? '' : ''
       if (selected) {
         await speakText(withDivineNamesSpoken(readAloudTextOfPlain(selected, activeSkip())), -1, voice, gen)
         return

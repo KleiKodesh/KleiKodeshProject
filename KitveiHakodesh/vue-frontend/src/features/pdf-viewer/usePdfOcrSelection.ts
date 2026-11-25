@@ -1,5 +1,6 @@
 import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
 import { ref, onUnmounted } from 'vue'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import type { Worker } from 'tesseract.js'
 import { PDF_OCR_INJECTED_SCRIPT } from './pdfOcrInjectedScript'
 
@@ -74,8 +75,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   onUnmounted(() => {
     disposed = true
     for (const worker of Object.values(workers)) worker?.terminate()
-    window.removeEventListener('message', onMessage)
-    window.removeEventListener('keydown', onKeydown, true)
+    bindParentWindow(null)
     detachIframeKeydown()
   })
 
@@ -100,6 +100,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
 
   let keydownWin: Window | null = null
   function attachIframeKeydown() {
+    bindParentWindow(iframeParentWindow())
     const win = getIframe()?.contentWindow ?? null
     if (win === keydownWin) return
     detachIframeKeydown()
@@ -111,13 +112,29 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     keydownWin = null
   }
 
-  window.addEventListener('keydown', onKeydown, true)
+  // The window that holds the PDF iframe (the app's own or an extra window): the iframe
+  // posts its messages to it, and it gets the keys when focus is outside the iframe.
+  // The component's window until the iframe exists, then the iframe's parent.
+  const componentWindow: Window = useHostWindow()
+  let parentWin: Window | null = null
+  function bindParentWindow(win: Window | null) {
+    if (win === parentWin) return
+    parentWin?.removeEventListener('message', onMessage)
+    parentWin?.removeEventListener('keydown', onKeydown, true)
+    win?.addEventListener('message', onMessage)
+    win?.addEventListener('keydown', onKeydown, true)
+    parentWin = win
+  }
+  function iframeParentWindow(): Window {
+    return getIframe()?.ownerDocument.defaultView ?? componentWindow
+  }
 
   // ── Inject script into iframe ──────────────────────────────────────────────
 
   function ensureInjected() {
     const iframe = getIframe()
     if (!iframe?.contentWindow) return false
+    bindParentWindow(iframeParentWindow())
     const win = iframe.contentWindow as any
     if (!win.__kitveiHakodeshOcrTool) {
       try {
@@ -192,7 +209,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     }
   }
 
-  window.addEventListener('message', onMessage)
+  bindParentWindow(iframeParentWindow())
 
   // ── Toggle ─────────────────────────────────────────────────────────────────
 

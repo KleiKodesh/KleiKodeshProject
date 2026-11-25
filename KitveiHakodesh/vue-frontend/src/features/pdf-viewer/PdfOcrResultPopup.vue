@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, computed, watch } from 'vue'
 import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular } from '@iconify-prerendered/vue-fluent'
 import type { OcrSelectionResult, OcrScript } from './pdfViewerTypes'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{
   result: OcrSelectionResult
@@ -51,7 +54,7 @@ async function copyText() {
   if (!success && textRef.value) {
     textRef.value.focus()
     textRef.value.select()
-    success = document.execCommand('copy')
+    success = hostWindow.document.execCommand('copy')
   }
 
   if (success) {

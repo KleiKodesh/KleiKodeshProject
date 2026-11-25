@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, type Ref } from 'vue'
 import { t } from '@/i18n'
 import { showToast } from '@/composables/useToast'
@@ -85,6 +86,7 @@ export function useHomeSearchBar(options: {
    */
   onDropdownKeydown: (event: KeyboardEvent) => boolean
 }) {
+  const hostWindow = useHostWindow()
   const { query, searchBarRef, hasAnyResults, isLoadingAny, clearResults } = options
 
   const placeholder = useAnimatedPlaceholder(query)
@@ -100,8 +102,8 @@ export function useHomeSearchBar(options: {
     const rect = searchBarRef.value.getBoundingClientRect()
     anchorTop.value = rect.bottom + 6
     anchorLeft.value = rect.left
-    anchorRight.value = window.innerWidth - rect.right
-    maxHeight.value = Math.max(120, window.innerHeight - rect.bottom - 12)
+    anchorRight.value = hostWindow.innerWidth - rect.right
+    maxHeight.value = Math.max(120, hostWindow.innerHeight - rect.bottom - 12)
   }
 
   function hasMinimumQuery() {

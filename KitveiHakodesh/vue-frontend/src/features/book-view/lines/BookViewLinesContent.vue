@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useTextHitCursor } from '@/composables/useTextHitCursor'
 import { computed, ref, watch, nextTick, onMounted, inject } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -55,6 +56,8 @@ import BookViewPublisherBanner from '../BookViewPublisherBanner.vue'
 import { exportToWord, pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
+
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -616,7 +619,7 @@ async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean =
     try { await prepareForLines(rows.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
   if (isCancelled()) {
-    window.getSelection()?.removeAllRanges()
+    hostWindow.getSelection()?.removeAllRanges()
     return {}
   }
   let failedHtml: string | undefined
@@ -634,7 +637,7 @@ async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean =
         .catch(() => { failedHtml = html })
     }
   })
-  window.getSelection()?.removeAllRanges()
+  hostWindow.getSelection()?.removeAllRanges()
   await pasting
   if (!copied) showToast(t('bookView.exportReady'))
   return isCancelled() ? {} : { failedHtml }

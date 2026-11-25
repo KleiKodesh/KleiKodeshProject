@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, shallowRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEventListener } from '@vueuse/core'
 import { IconArrowRight20Regular, IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { withoutHiddenCategories, type CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+
+const hostWindow = useHostWindow()
 
 // Walks the catalog's folders - the same shelves the catalog page browses - and hands back
 // the one the user picks. Folders only: a user-space root is a folder, never a book.
@@ -27,7 +30,7 @@ function back() {
   trail.value = trail.value.slice(0, -1)
 }
 
-useEventListener('keydown', (e: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     e.preventDefault()
     emit('cancel')

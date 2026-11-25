@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref } from 'vue'
 import { IconEraser20Regular } from '@iconify-prerendered/vue-fluent'
 import { HIGHLIGHT_COLORS_LIST } from './bookViewAnnotationColors'
 import AlertDialog from '@/components/AlertDialog.vue'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{
   onHighlight: (colorArgb: number) => void
@@ -14,7 +17,7 @@ const emit = defineEmits<{ close: [] }>()
 const showNoSelectionAlert = ref(false)
 
 function hasSelection(): boolean {
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   return !!sel && !sel.isCollapsed && (sel.toString().trim().length > 0)
 }
 

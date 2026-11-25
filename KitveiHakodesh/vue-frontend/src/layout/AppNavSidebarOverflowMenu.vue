@@ -114,7 +114,7 @@ function place() {
   if (!anchorEl || !panel) return
 
   const anchorRect = anchorEl.getBoundingClientRect()
-  const viewportHeight = window.innerHeight
+  const viewportHeight = hostWindow.innerHeight
 
   // The cap comes off before measuring so the height read is the one the panel WANTS, not
   // the one a previous, shorter open left it clamped to. Written straight to the element -

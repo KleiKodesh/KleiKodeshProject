@@ -158,8 +158,8 @@ function place() {
   panel.style.maxWidth = ''
   const width = panel.offsetWidth
 
-  const vw = window.innerWidth
-  const vh = window.innerHeight
+  const vw = hostWindow.innerWidth
+  const vh = hostWindow.innerHeight
 
   // ── Horizontal: right edges aligned, then clamped ──
   //

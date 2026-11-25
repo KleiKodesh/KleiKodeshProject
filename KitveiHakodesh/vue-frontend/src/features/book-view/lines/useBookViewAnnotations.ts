@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * Manages all user annotation state for the book view: highlights, notes,
  * the note bubble overlay, and the selection-to-line-offset conversion logic.
@@ -61,6 +62,7 @@ export function useBookViewAnnotations(
    */
   annotationOffsetLengthOf: (content: string) => number,
 ) {
+  const hostWindow = useHostWindow()
   // ── Highlights ──────────────────────────────────────────────────────────────
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } = useBookViewHighlights(bookId)
@@ -88,7 +90,7 @@ export function useBookViewAnnotations(
   // ── Selection → line offsets ────────────────────────────────────────────────
 
   function extractSelectionOnLine(): MultiLineSelection | null {
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
     const range = selection.getRangeAt(0)
     if (!scrollerEl.value) return null
@@ -214,7 +216,7 @@ export function useBookViewAnnotations(
     const selection = extractSelectionOnLine()
     if (!selection || selection.lines.length === 0) return
     const firstLine = selection.lines[0]!
-    const rawQuote = window.getSelection()?.toString() ?? ''
+    const rawQuote = hostWindow.getSelection()?.toString() ?? ''
     const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
     void createNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote).then(
       (note) => {

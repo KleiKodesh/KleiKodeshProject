@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 /**
  * AddressBar — the editable search field hosted inside AppTitleBar (an
@@ -48,6 +49,8 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { asWebAddress, displayHost, loadWebsites, matchWebsites, websiteForUrl, websiteName, type Website } from '@/features/websites/websitesList'
 import { addressBarPath, locationPath, fileFromAddress, parseBookAddress, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
+
+const hostWindow = useHostWindow()
 
 const { t } = useI18n()
 
@@ -269,7 +272,7 @@ function computeAnchor() {
   fieldTop.value = rect.top
   fieldHeight.value = rect.bottom - rect.top
   fieldLeft.value = rect.left
-  fieldRight.value = window.innerWidth - rect.right
+  fieldRight.value = hostWindow.innerWidth - rect.right
   const anchor = rect
   isPanelMerged.value = true
   // Merged: flush against the field's bottom edge, no gap and no overlap — the
@@ -285,10 +288,10 @@ function computeAnchor() {
     ? Math.floor(rect.bottom)
     : Math.ceil(rect.bottom) + UNMERGED_PANEL_GAP
   anchorLeft.value = anchor.left
-  anchorRight.value = window.innerWidth - anchor.right
+  anchorRight.value = hostWindow.innerWidth - anchor.right
   maxHeight.value = Math.min(
     MAX_DROPDOWN_HEIGHT,
-    Math.max(120, window.innerHeight - anchorTop.value - 12),
+    Math.max(120, hostWindow.innerHeight - anchorTop.value - 12),
   )
 }
 

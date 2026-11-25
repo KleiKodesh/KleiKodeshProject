@@ -423,7 +423,7 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (!isZoomIn && !isZoomOut && !isReset) return
   // as the book view's: only for the active tab
   if (paneNavigation.activeTab.id !== tabId) return
-  const focused = document.activeElement
+  const focused = hostWindow.document.activeElement
   event.preventDefault()
   if (scrollerElement.value?.contains(focused) || notesScrollerElement.value?.contains(focused)) return
   zoomBoth(isZoomIn ? zoomIn : isZoomOut ? zoomOut : () => ZOOM_CONFIG.DEFAULT)
@@ -439,7 +439,7 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
 useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
   if (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight') return
-  if (!pageElement.value?.contains(document.activeElement) || (document.activeElement as HTMLElement | null)?.closest('input, textarea')) return
+  if (!pageElement.value?.contains(hostWindow.document.activeElement) || (hostWindow.document.activeElement as HTMLElement | null)?.closest('input, textarea')) return
   if (outline.value.length === 0) return
   event.preventDefault()
   navigateToAdjacentHeading((event.code === 'ArrowLeft') === isRightToLeft.value ? 'next' : 'previous')

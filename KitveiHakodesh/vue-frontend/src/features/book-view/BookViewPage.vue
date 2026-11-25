@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch, nextTick, inject, onBeforeUnmount, shallowReactive } from 'vue'
 import { useResizeObserver, watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -34,6 +35,8 @@ import { useBookViewReadAloud } from './useBookViewReadAloud'
 import { useBookViewReadAloudHighlight } from './useBookViewReadAloudHighlight'
 import { provideBookWordLinkTargets } from './lines/bookWordLinkTargets'
 
+const hostWindow = useHostWindow()
+
 const { t } = useI18n()
 
 // One word-link targets query per book for the whole view (toolbar dropdown + lines).
@@ -64,7 +67,7 @@ const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 
 // Track the shell's own width instead of the viewport width so that in split
 // view responds to its own size, not the full window size.
-const shellWidth = ref(window.innerWidth)
+const shellWidth = ref(hostWindow.innerWidth)
 useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
 const isWideScreen = computed(() => shellWidth.value >= 650)
 /** Share of the split row the book text keeps when both side columns are open. */

@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * Search panel state and navigation for the book view.
  *
@@ -63,6 +64,7 @@ export function useBookViewSearchPanel(
   /** A panel with a find bar of its own (it is in its own window): this bar leaves its search alone. */
   hasOwnFindBar: (slot: CommentarySlot) => boolean = () => false,
 ) {
+  const hostWindow = useHostWindow()
   const searchVisible = ref(false)
   const searchMode = ref<SearchMode>('content')
 
@@ -119,7 +121,7 @@ export function useBookViewSearchPanel(
 
   // Element the current selection (or caret) is anchored in, if any.
   function selectionAnchorElement(): Element | null {
-    const node = window.getSelection()?.anchorNode
+    const node = hostWindow.getSelection()?.anchorNode
     if (!node) return null
     return node instanceof Element ? node : node.parentElement
   }
@@ -140,7 +142,7 @@ export function useBookViewSearchPanel(
   // to single spaces — except `-`, `"`, and `״` between word characters
   // (hyphenated words, acronyms like רמב"ם), which are kept.
   function selectionPrefill(): string {
-    const sel = window.getSelection()
+    const sel = hostWindow.getSelection()
     if (!sel || sel.isCollapsed) return ''
     if (!selectionAnchorElement()?.closest('.lines-content, .commentary-view')) return ''
     return removeDiacriticsForSearch(sel.toString())

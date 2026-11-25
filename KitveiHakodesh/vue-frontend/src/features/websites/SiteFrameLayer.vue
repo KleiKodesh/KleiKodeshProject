@@ -73,14 +73,14 @@ function onFrameFocus(frame: SiteFrame) {
 }
 const onFrameBlur = () => setTimeout(refreshSiteFrameFocus)
 useEventListener(hostWindow, 'blur', () => setTimeout(() => {
-  const frame = frameOf(document.activeElement)
+  const frame = frameOf(hostWindow.document.activeElement)
   if (frame) onFrameFocus(frame)
 }))
 useEventListener(hostWindow, 'focus', () => setTimeout(refreshSiteFrameFocus))
 
 // F5 / Ctrl+R while a site has focus (taken from the site by the host): reload the site, not the app.
 useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
-  const frame = frameOf(document.activeElement)
+  const frame = frameOf(hostWindow.document.activeElement)
   if (!frame) return
   if (e.code === 'F5' || (e.ctrlKey && !e.altKey && e.code === 'KeyR')) {
     e.preventDefault()
@@ -92,7 +92,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 // The reader typed in a site (siteFrameActivity script): protected from automatic unloading.
 useEventListener(hostWindow, 'message', (e: MessageEvent) => {
   if (e.data?.type !== 'kitveiSiteInput') return
-  for (const el of document.querySelectorAll<HTMLIFrameElement>('iframe.site-frame')) {
+  for (const el of hostWindow.document.querySelectorAll<HTMLIFrameElement>('iframe.site-frame')) {
     if (el.contentWindow === e.source) {
       const frame = siteFrames.get(el.dataset.tabId ?? '')
       if (frame) frame.typed = true

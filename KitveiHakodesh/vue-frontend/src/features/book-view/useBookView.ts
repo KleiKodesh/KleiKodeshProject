@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * Central composable for the book view page.
  * Owns all data loading, state, event handlers, and watchers.
@@ -97,6 +98,7 @@ export function useBookView(
   /** Whichever TOC tree is rendered (docked or overlay), or null while closed. */
   tocTreeRef: () => TocTreeInstance | null = () => null,
 ) {
+  const hostWindow = useHostWindow()
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
@@ -333,7 +335,7 @@ export function useBookView(
   function selectLineAtCaret(): boolean {
     if (!anyCommentaryVisible.value) return false
     const scrollerElement = linesContentRef()?.scrollerElement()
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!scrollerElement || !selection?.isCollapsed || !selection.focusNode) return false
     const node = selection.focusNode
     const element = node instanceof Element ? node : node.parentElement

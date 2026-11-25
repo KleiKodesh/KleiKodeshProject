@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -22,6 +23,8 @@ import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
 import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 import FullTextSearchLayout from './FullTextSearchLayout.vue'
+
+const hostWindow = useHostWindow()
 
 const paneNavigation = usePaneNavigation()
 // For the page's own keyboard shortcuts: which pane this is, and whether it is the
@@ -362,11 +365,11 @@ useEventListener(
   (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
     if (!isSearchActive.value) return
-    if (focusedElementOwnsTheseKeys(document.activeElement)) return
+    if (focusedElementOwnsTheseKeys(hostWindow.document.activeElement)) return
     // Space activates a focused button just as Enter does.
-    if ((event.code === 'Enter' || event.code === 'Space') && focusedElementOwnsEnter(document.activeElement)) return
+    if ((event.code === 'Enter' || event.code === 'Space') && focusedElementOwnsEnter(hostWindow.document.activeElement)) return
     // A dialog sits above the whole page: its own Enter must not open a result too.
-    if (document.querySelector('.confirm-backdrop, .alert-backdrop')) return
+    if (hostWindow.document.querySelector('.confirm-backdrop, .alert-backdrop')) return
     if (!onResultsKeydown(event)) return
     event.preventDefault()
     event.stopPropagation()

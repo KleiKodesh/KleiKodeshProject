@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
+
+const hostWindow = useHostWindow()
 
 const currentTime = ref('')
 const isFullscreen = ref(false)
 
 function checkFullscreen() {
-  isFullscreen.value = window.innerHeight >= screen.height
+  isFullscreen.value = hostWindow.innerHeight >= hostWindow.screen.height
 }
 
 function updateTime() {
@@ -18,7 +21,7 @@ function updateTime() {
 
 let intervalId: ReturnType<typeof setInterval>
 
-useEventListener(window, 'resize', checkFullscreen)
+useEventListener(hostWindow, 'resize', checkFullscreen)
 
 onMounted(() => {
   checkFullscreen()

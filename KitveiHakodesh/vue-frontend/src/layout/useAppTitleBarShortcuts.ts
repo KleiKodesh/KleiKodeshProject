@@ -236,7 +236,7 @@ export function useAppTitleBarShortcuts(options: {
         return true
       case 'KeyF':
         // Let a focused search input keep its own Ctrl+F.
-        if (document.activeElement?.closest('[data-ctrlf-enabled]')) return false
+        if (hostWindow.document.activeElement?.closest('[data-ctrlf-enabled]')) return false
         if (isBookViewActive.value) bookViewStore.openSearch()
         else if (isFastDocViewActive.value) sendFastDocViewCommand('openSearch')
         return true

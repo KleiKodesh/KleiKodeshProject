@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
@@ -7,6 +8,8 @@ import { useThemeStore } from '@/theme/themeStore'
 import { BACKGROUND_TINT_DEFAULT } from '@/theme/themes'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+
+const hostWindow = useHostWindow()
 
 const themeStore = useThemeStore()
 const { themePreset, backgroundTint } = storeToRefs(themeStore)
@@ -63,7 +66,7 @@ async function toggle() {
   if (!boxRef.value || !dropdownRef.value) return
   const rect = boxRef.value.getBoundingClientRect()
   const dropH = dropdownRef.value.offsetHeight
-  const spaceBelow = window.innerHeight - rect.bottom - 8
+  const spaceBelow = hostWindow.innerHeight - rect.bottom - 8
   const spaceAbove = rect.top - 8
   const goUp = spaceAbove > spaceBelow && spaceAbove > dropH
   dropdownStyle.value = {
@@ -74,7 +77,7 @@ async function toggle() {
     maxHeight: Math.min(320, goUp ? spaceAbove : spaceBelow) + 'px',
     overflowY: 'auto',
     ...(goUp
-      ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
+      ? { bottom: hostWindow.innerHeight - rect.top + 4 + 'px', top: 'auto' }
       : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
   }
 }

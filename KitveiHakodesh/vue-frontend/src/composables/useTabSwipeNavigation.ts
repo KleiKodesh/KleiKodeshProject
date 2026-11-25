@@ -141,7 +141,7 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
 
     // Normalize line/page wheel modes to pixels so the threshold is unit-independent.
     const unit =
-      event.deltaMode === 1 ? WHEEL_LINE_HEIGHT_PX : event.deltaMode === 2 ? window.innerHeight : 1
+      event.deltaMode === 1 ? WHEEL_LINE_HEIGHT_PX : event.deltaMode === 2 ? ((event.target as Node | null)?.ownerDocument?.defaultView ?? window).innerHeight : 1
     const deltaX = event.deltaX * unit
     const deltaY = event.deltaY * unit
 

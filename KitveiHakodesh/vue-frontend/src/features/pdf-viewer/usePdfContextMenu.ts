@@ -326,10 +326,11 @@ export function usePdfContextMenu(
     }
     // Last resort: download the PNG if neither clipboard path is available.
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
+    const doc = getIframe()?.ownerDocument ?? document
+    const a = doc.createElement('a')
     a.href = url
     a.download = `page-${pageNumber}.png`
-    document.body.append(a)
+    doc.body.append(a)
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)

@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 ﻿/**
  * Manages scroll position for the book view lines scroller (a WindowedScroller).
  *
@@ -98,6 +99,7 @@ export function useBookViewLinesScroll(
     isUserScroll: boolean,
   ) => void,
 ) {
+  const hostWindow = useHostWindow()
   const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId } = storeRefs
 
   // ── Scroll capture ──────────────────────────────────────────────────────────
@@ -179,7 +181,7 @@ export function useBookViewLinesScroll(
     const element = scroller()?.scrollerElement
     // Never from an input the reader is typing in (an open search bar); otherwise the
     // keys drive the reader at once.
-    const active = document.activeElement as HTMLElement | null
+    const active = hostWindow.document.activeElement as HTMLElement | null
     const isTypingElsewhere = !!active && !element?.contains(active) &&
       (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
     const takeFocus = !!element && !isTypingElsewhere

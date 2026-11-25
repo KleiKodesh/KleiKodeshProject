@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { detectAvailableFonts, BUNDLED_FONTS } from '@/webview-host/fontsApi'
 import HintIcon from '@/components/HintIcon.vue'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{
   label: string
@@ -51,7 +54,7 @@ function toggle() {
   // fitter owns (and clears) the inline max-height.
   if (boxRef.value) {
     const rect = boxRef.value.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceBelow = hostWindow.innerHeight - rect.bottom - 8
     const spaceAbove = rect.top - 8
     const goUp = spaceAbove > spaceBelow
     const maxH = Math.min(200, goUp ? spaceAbove : spaceBelow)
@@ -62,7 +65,7 @@ function toggle() {
       zIndex: '10000',
       '--font-dropdown-max-height': maxH + 'px',
       ...(goUp
-        ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
+        ? { bottom: hostWindow.innerHeight - rect.top + 4 + 'px', top: 'auto' }
         : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
     }
   }

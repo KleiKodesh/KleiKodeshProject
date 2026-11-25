@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * The lines context menu's "add note" row. A component rather than a plain text item
  * only because a note needs a selection, and with none it shows the "select text first"
@@ -6,6 +7,8 @@
  */
 import { ref } from 'vue'
 import AlertDialog from '@/components/AlertDialog.vue'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{
   onAddNote: () => void
@@ -16,7 +19,7 @@ const emit = defineEmits<{ close: [] }>()
 const showNoSelectionAlert = ref(false)
 
 function hasSelection(): boolean {
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   return !!sel && !sel.isCollapsed && (sel.toString().trim().length > 0)
 }
 

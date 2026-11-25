@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * "Add from HebrewBooks" window of the book view's scanned-editions dropdown: the same
  * catalog search the HebrewBooks page runs (searchHbCatalog), shown with that page's own row
@@ -10,6 +11,8 @@ import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import HebrewBooksListItem from '@/features/hebrewbooks/HebrewBooksListItem.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{ initialTerm: string }>()
 const emit = defineEmits<{ pick: [book: HebrewBook]; close: [] }>()
@@ -40,7 +43,7 @@ function onInput() {
   runSearch(term.value)
 }
 
-useEventListener('keydown', (e: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')

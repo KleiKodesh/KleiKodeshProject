@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -14,9 +15,10 @@ import { useBookViewStore } from '@/stores/bookViewStore'
  * hook renders the pages exactly as if Ctrl+P had been pressed inside it.
  */
 export function usePdfPrintShortcut(getIframe: () => HTMLIFrameElement | null) {
+  const hostWindow = useHostWindow()
   const bookViewStore = useBookViewStore()
 
-  useEventListener('keydown', (event: KeyboardEvent) => {
+  useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
     // Alt is excluded because Ctrl+Alt+P is PDF.js's presentation-mode shortcut.
     if (!event.ctrlKey || event.altKey || event.code !== 'KeyP') return
     event.preventDefault()

@@ -67,7 +67,7 @@ async function open() {
   const probe = list.getBoundingClientRect()
   const scale = probe.width / list.offsetWidth || 1
   const height = probe.height
-  const roomBelow = window.innerHeight - trigger.bottom - GAP - MARGIN
+  const roomBelow = hostWindow.innerHeight - trigger.bottom - GAP - MARGIN
   const roomAbove = trigger.top - GAP - MARGIN
   const openUp = height > roomBelow && roomAbove > roomBelow
   const top = openUp ? Math.max(MARGIN, trigger.top - GAP - height) : trigger.bottom + GAP

@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref, type Ref } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 
@@ -22,7 +23,8 @@ export function useSidePanelLayout(options: {
   resizeArea: Ref<HTMLElement | null>
   fraction?: Ref<number | null>
 }) {
-  const pageWidth = ref(window.innerWidth)
+  const hostWindow = useHostWindow()
+  const pageWidth = ref(hostWindow.innerWidth)
   useResizeObserver(options.pageElement, ([entry]) => {
     pageWidth.value = entry!.contentRect.width
   })

@@ -40,7 +40,7 @@ interface ErrorReportOptions {
 
 /** The selected text as PLAIN text, or '' when nothing in this pane is selected. */
 function readSelectedText(scrollerEl: HTMLElement | null): string {
-  const selection = window.getSelection()
+  const selection = (scrollerEl?.ownerDocument ?? document).getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return ''
   // A selection somewhere else on the page (another pane, a sidebar) is not this
   // book's text and must not be reported as if it were.

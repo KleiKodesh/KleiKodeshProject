@@ -145,7 +145,7 @@ function onCardKeydown(event: KeyboardEvent, index: number) {
 function focusSearchInput() {
   const input = searchBarInputRef.value
   if (!input) return
-  if (document.hasFocus()) input.focus()
+  if (hostWindow.document.hasFocus()) input.focus()
   else useEventListener(hostWindow, 'focus', () => input.focus(), { once: true })
 }
 

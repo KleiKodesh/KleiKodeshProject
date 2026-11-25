@@ -1,5 +1,6 @@
 import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
+import { onDetachedWindowOpened } from '@/composables/detachedWindow/hostWindow'
 import { useDocumentVisibility, useEventListener, useIntervalFn, useWindowSize } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -59,20 +60,31 @@ export function useKeepScreenOn() {
   // window. A frame we can reach (the PDF viewer) gets the same listeners when it loads -
   // they die with its document, so there is nothing to remove. A frame we cannot reach
   // reports its scrolling and keys by message (the host's injected frame script).
-  useEventListener(document, 'load', (e: Event) => {
+  function onFrameLoad(e: Event) {
     if (!(e.target instanceof HTMLIFrameElement)) return
     let frameDocument: Document | null = null
     try { frameDocument = e.target.contentDocument } catch { /* cross-origin */ }
     if (!frameDocument) return
     for (const type of ACTIVITY_EVENTS)
       frameDocument.addEventListener(type, markActive, { capture: true, passive: true })
-  }, { capture: true })
-  useEventListener(window, 'message', (e: MessageEvent) => {
+  }
+  useEventListener(document, 'load', onFrameLoad, { capture: true })
+  function onFrameMessage(e: MessageEvent) {
     // A Torah website's frame cannot keep the screen awake by posting messages.
     if (isFromWebsiteFrame(e.source)) return
     const type = e.data?.type
     if (type === 'htmlViewScroll' || type === 'iframeKeydown') markActive()
-  })
+  }
+  useEventListener(window, 'message', onFrameMessage)
+
+  // Reading in an extra app window (or a pop-out) is activity too. Its listeners die
+  // with that window, so there is nothing to remove.
+  onScopeDispose(onDetachedWindowOpened((detached) => {
+    for (const type of ACTIVITY_EVENTS)
+      detached.addEventListener(type, markActive, { capture: true, passive: true })
+    detached.document.addEventListener('load', onFrameLoad, { capture: true })
+    detached.addEventListener('message', onFrameMessage)
+  }))
 
   const wanted = computed(() => {
     if (isIdle.value) return false

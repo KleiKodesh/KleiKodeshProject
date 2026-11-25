@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useEventListener } from '@vueuse/core'
+
+const hostWindow = useHostWindow()
 
 defineProps<{
   title: string
@@ -16,7 +19,7 @@ const emit = defineEmits<{
   extra: []
 }>()
 
-useEventListener('keydown', (e: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     e.preventDefault()
     emit('confirm')

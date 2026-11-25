@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, nextTick } from 'vue'
 import {
   IconAdd20Regular,
@@ -9,6 +10,8 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import type { Workspace } from '@/stores/workspaceStore'
+
+const hostWindow = useHostWindow()
 
 /**
  * The whole of workspace management, as a menu panel rather than a page.
@@ -114,7 +117,7 @@ function moveTo(index: number) {
   // Back onto a row: take the caret out of the box before scrolling, so the field does
   // not keep receiving keys meant for the walk. The panel is this menu's parent and is
   // what the host focused on open, so it is where the focus belongs between stops.
-  if (document.activeElement === newNameInput.value) {
+  if (hostWindow.document.activeElement === newNameInput.value) {
     menuRef.value?.parentElement?.focus({ preventScroll: true })
   }
   void nextTick(() => {

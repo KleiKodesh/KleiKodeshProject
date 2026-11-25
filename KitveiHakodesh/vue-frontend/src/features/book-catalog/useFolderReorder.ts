@@ -30,8 +30,8 @@ export function useFolderReorder(canMove: () => ((node: CategoryNode) => boolean
     return { 'data-reorder-id': String(node.id) }
   }
 
-  function nodeAt(x: number, y: number): CategoryNode | null {
-    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-reorder-id]')
+  function nodeAt(doc: Document, x: number, y: number): CategoryNode | null {
+    const el = doc.elementFromPoint(x, y)?.closest<HTMLElement>('[data-reorder-id]')
     return el ? targets.get(el.dataset.reorderId!) ?? null : null
   }
 
@@ -50,7 +50,7 @@ export function useFolderReorder(canMove: () => ((node: CategoryNode) => boolean
       pointermove: (e: PointerEvent) => {
         if (!dragging.value) return
         ghost?.moveTo(e.clientX, e.clientY)
-        const at = nodeAt(e.clientX, e.clientY)
+        const at = nodeAt((e.currentTarget as HTMLElement).ownerDocument, e.clientX, e.clientY)
         over.value = at && at !== dragging.value ? at : null
       },
       pointerup: () => {

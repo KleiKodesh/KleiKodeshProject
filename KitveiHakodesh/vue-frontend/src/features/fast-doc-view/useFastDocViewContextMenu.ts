@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
@@ -16,10 +17,11 @@ export function useFastDocViewContextMenu(options: {
   selectAllInContainer: () => void
   paneNavigation: PaneNavigation
 }) {
+  const hostWindow = useHostWindow()
 
   function onCopy(): boolean {
     try {
-      return document.execCommand('copy')
+      return hostWindow.document.execCommand('copy')
     } catch {
       return false // clipboard unavailable
     }
@@ -32,7 +34,7 @@ export function useFastDocViewContextMenu(options: {
 
   /** The selection's Hebrew words as a library search, in this tab (the book view's own query rule). */
   function onSearchInRepository(): void {
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
     const holder = document.createElement('div')
     holder.appendChild(selection.getRangeAt(0).cloneContents())

@@ -56,7 +56,7 @@ export function useBookViewKeyboardShortcuts(
     if (event.code === 'Enter' && !ctrl && !event.shiftKey && !event.altKey) {
       if (isTypingField(event.target)) return
       const linesRoot = linesContentRef()?.$el
-      if (!linesRoot || !linesRoot.contains(document.activeElement)) return
+      if (!linesRoot || !linesRoot.contains(hostWindow.document.activeElement)) return
       if (selectLineAtCaret()) event.preventDefault()
       return
     }
@@ -76,12 +76,12 @@ export function useBookViewKeyboardShortcuts(
       // caret by paragraph and must keep doing so. With it off the key has no default
       // action. There is no API to ask which; so let the browser act, then look - a
       // caret that moved means caret browsing handled the key.
-      const before = window.getSelection()
+      const before = hostWindow.getSelection()
       const node = before?.focusNode ?? null
       const offset = before?.focusOffset ?? 0
       const delta = event.code === 'ArrowDown' ? 1 : -1
       setTimeout(() => {
-        const after = window.getSelection()
+        const after = hostWindow.getSelection()
         if ((after?.focusNode ?? null) !== node || (after?.focusOffset ?? 0) !== offset) return
         stepOrScrollLine(delta)
       }, 0)
@@ -102,7 +102,7 @@ export function useBookViewKeyboardShortcuts(
 
     if (!isZoomIn && !isZoomOut && !isReset && !isNextSection && !isPreviousSection) return
 
-    const focused = document.activeElement
+    const focused = hostWindow.document.activeElement
     const linesRoot = linesContentRef()?.$el
     // The commentary check is structural (the slot attribute on each panel's
     // root) rather than $el-based: a stray comment beside a template root turns

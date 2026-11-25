@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * A bookmark's exact point in the book view lines: a line plus a position in its text,
  * not just the line - a line can run for pages.
@@ -97,8 +98,9 @@ export function useBookViewLinesBookmarkPoint(
   scrollToLine: (lineIndex: number, options: { force?: boolean }) => Promise<boolean>,
   lineIndexForId: (lineId: number, fallbackLineIndex?: number) => Promise<number | undefined>,
 ) {
+  const hostWindow = useHostWindow()
   function readSelectionPoint(scrollerElement: HTMLElement): BookViewLinesBookmarkPoint | null {
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
     const range = selection.getRangeAt(0)
     const row = rowOf(range.startContainer, scrollerElement)
@@ -182,7 +184,7 @@ export function useBookViewLinesBookmarkPoint(
     // Part of the landing (the scroller's nudge), so not taken for the reader moving.
     if (shift > 0) scroller()?.nudge(shift)
     if (end) {
-      const selection = window.getSelection()
+      const selection = hostWindow.getSelection()
       selection?.removeAllRanges()
       selection?.addRange(range)
     }

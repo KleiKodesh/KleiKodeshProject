@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, nextTick, type Ref } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 
@@ -25,12 +26,13 @@ export function useToolbarOverflowSubmenu(
   rowEl: Ref<HTMLElement | null>,
   panelEl: Ref<HTMLElement | null>,
 ) {
+  const hostWindow = useHostWindow()
   const style = ref<Record<string, string> | undefined>(undefined)
 
   // Height capped at what the placement allows, so the max-height it sets does not read
   // as a resize and re-place forever.
   const sizeKey = (panel: HTMLElement) =>
-    `${panel.offsetWidth}x${Math.min(panel.offsetHeight, window.innerHeight - 2 * SUBMENU_MARGIN)}`
+    `${panel.offsetWidth}x${Math.min(panel.offsetHeight, hostWindow.innerHeight - 2 * SUBMENU_MARGIN)}`
 
   /** The panel size the current placement was computed for - see the resize observer below. */
   let placedSize = ''
@@ -42,8 +44,8 @@ export function useToolbarOverflowSubmenu(
     const panel = panelEl.value
     if (!row || !panel) return
     const m = SUBMENU_MARGIN
-    const vw = window.innerWidth
-    const vh = window.innerHeight
+    const vw = hostWindow.innerWidth
+    const vh = hostWindow.innerHeight
     const rowRect = row.getBoundingClientRect()
     const menuRect = (row.closest('.toolbar-overflow-menu') ?? row).getBoundingClientRect()
     const width = panel.offsetWidth

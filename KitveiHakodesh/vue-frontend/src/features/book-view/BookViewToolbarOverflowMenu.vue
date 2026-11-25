@@ -78,8 +78,8 @@ function place() {
 
   const anchorRect = anchorEl.getBoundingClientRect()
   const barRect = props.keepClearOf?.getBoundingClientRect() ?? anchorRect
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
+  const viewportWidth = hostWindow.innerWidth
+  const viewportHeight = hostWindow.innerHeight
 
   // The cap comes off before measuring so the height read is the one the panel WANTS, not
   // the one a previous, shorter open left it clamped to, then goes back on. Written straight

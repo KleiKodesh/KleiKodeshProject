@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { sourceBookOf } from './noteIds'
 import { ref, shallowRef, computed, watch, onBeforeUnmount, onScopeDispose } from 'vue'
@@ -28,6 +29,8 @@ import { ensureSnippets, snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf, requestReferences, tocPathOf } from './fullTextSearchReferences'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 import { teamimFontStyle } from '@/utils/teamimFont'
+
+const hostWindow = useHostWindow()
 
 const props = defineProps<{
   /** Grown IN PLACE while a search streams (its identity only changes on a rebuild):
@@ -269,7 +272,7 @@ watch(
  * GlobalContextMenu or the browser to handle.
  */
 function buildSelectedResultsCopyHtml(): string | null {
-  const selection = window.getSelection()
+  const selection = hostWindow.getSelection()
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
   const range = selection.getRangeAt(0)
   if (!scrollEl.value?.contains(range.commonAncestorContainer)) return null

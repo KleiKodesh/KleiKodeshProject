@@ -214,7 +214,7 @@ function extractSelection(
     return { joined: parts.join(''), firstLineIndex }
   }
 
-  const sel = window.getSelection()
+  const sel = (scrollerEl?.ownerDocument ?? document).getSelection()
   if (!sel || sel.rangeCount === 0) return null
   const range = sel.getRangeAt(0)
   const fragment = range.cloneContents()
@@ -256,7 +256,7 @@ function extractSelectionWithUnmountedLines(
   // A single-row selection is entirely inside one rendered line: nothing to stitch.
   if (firstRowIndex >= lastRowIndex) return null
 
-  const selection = window.getSelection()
+  const selection = scrollerEl.ownerDocument.getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
   const range = selection.getRangeAt(0)
 
@@ -416,7 +416,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       firstLineIndex = result.firstLineIndex
     } else {
       // Normal selection: use the live browser range.
-      const sel = window.getSelection()
+      const sel = (scrollerEl.value?.ownerDocument ?? document).getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
       const renderLine = modelLineRenderer()
@@ -554,7 +554,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
   /** The current selection's rendered markup, for resolving the citations inside it. */
   function selectionHtml(): string {
-    const sel = window.getSelection()
+    const sel = (scrollerEl.value?.ownerDocument ?? document).getSelection()
     if (!sel || sel.rangeCount === 0) return ''
     const holder = document.createElement('div')
     holder.appendChild(sel.getRangeAt(0).cloneContents())
