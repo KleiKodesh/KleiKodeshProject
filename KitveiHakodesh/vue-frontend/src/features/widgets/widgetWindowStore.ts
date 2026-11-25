@@ -9,7 +9,7 @@ import { lsGet, lsSet } from '@/utils/persistence'
  * One window per widget; opening an open one brings it to the front. Where each window
  * sits and how big it is the host remembers, by the window's name.
  */
-export type BuiltinWidgetId = 'dict' | 'calendar' | 'ruler' | 'worldClock' | 'zmanim' | 'learning' | 'keepScreenOn' | 'about' | 'calendarApp'
+export type BuiltinWidgetId = 'dict' | 'calendar' | 'ruler' | 'worldClock' | 'zmanim' | 'learning' | 'keepScreenOn' | 'about'
 /** A widget the user added: a local HTML page or an Otzaria add-in. */
 export type CustomWidgetId = `custom:${string}`
 export type WidgetId = BuiltinWidgetId | CustomWidgetId
@@ -35,12 +35,12 @@ export interface WidgetWindowState {
  */
 export const WIDGET_WINDOW_SIZE = { width: 440, height: 560 }
 /**
- * The extended calendar: today's zmanim and daily learning beside it. Off for now (they
- * are widgets of their own); flip to turn it on. The calendar window then opens wide
- * enough for both and never reopens too narrow for them.
+ * The extended calendar: the picked day's zmanim and daily learning beside the month (the
+ * calendar widget, also what the installer's calendar shortcut opens: --calendar). Its window
+ * opens large enough for all three and never reopens too narrow for them.
  */
-export const CALENDAR_EXTENDED = false
-const CALENDAR_EXTENDED_SIZE = { width: 820, height: 600, minWidth: 820 }
+export const CALENDAR_EXTENDED = true
+const CALENDAR_EXTENDED_SIZE = { width: 1040, height: 760, minWidth: 820 }
 /** A user-added widget is a whole web page (an Otzaria add-in): it starts larger, at the installer window's size. */
 const CUSTOM_SIZE = { width: 640, height: 460 }
 
@@ -93,7 +93,7 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 
 /** The size a widget's window first opens at; after that the host keeps the user's. */
 export function widgetWindowSize(id: WidgetId): { width: number; height: number; minWidth?: number } {
-  if ((id === 'calendar' && CALENDAR_EXTENDED) || id === 'calendarApp') return CALENDAR_EXTENDED_SIZE
+  if (id === 'calendar' && CALENDAR_EXTENDED) return CALENDAR_EXTENDED_SIZE
   return id.startsWith('custom:') ? CUSTOM_SIZE : WIDGET_WINDOW_SIZE
 }
 

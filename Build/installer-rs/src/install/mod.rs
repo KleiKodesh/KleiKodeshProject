@@ -140,7 +140,7 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     }
 
     reporter.step(Text::new("מעתיק קבצים", "Copying files"));
-    let selection = Selection { core, kitvei, tutor: wanted.contains(&Product::TypingTutor), calendar: wanted.contains(&Product::CalendarApp) };
+    let selection = Selection { core, kitvei, tutor: wanted.contains(&Product::TypingTutor) };
     copy_files(layout, payload, selection, reporter)?;
     reporter.progress(0.75);
 
@@ -251,9 +251,6 @@ fn check_prerequisites(layout: &Layout, wanted: &HashSet<Product>, reporter: &dy
     if wanted.contains(&Product::TypingTutor) && edge_app::edge_exe().is_none() {
         return Err(Failure::new(Text::new("ההקלדה העיוורת דורשת את Microsoft Edge.", "Touch Typing needs Microsoft Edge."), "edge missing"));
     }
-    if wanted.contains(&Product::CalendarApp) && edge_app::edge_exe().is_none() {
-        return Err(Failure::new(Text::new("לוח השנה דורש את Microsoft Edge.", "The calendar needs Microsoft Edge."), "edge missing"));
-    }
     Ok(())
 }
 
@@ -283,11 +280,10 @@ fn copy_files(layout: &Layout, payload: Option<&Payload>, selection: Selection, 
     let missing_core = selection.core
         && (!layout.file(crate::layout::VSTO_MANIFEST).exists() || (selection.kitvei && !layout.service_exe().exists()));
     let missing_tutor = selection.tutor && !tutor::is_installed(layout);
-    let missing_calendar = selection.calendar && !calendar::is_installed(layout);
     let Some(payload) = payload else {
         // The setup copy kept in the install folder carries no files: fine for changing
         // registrations, not for adding files that are not there.
-        if missing_core || missing_tutor || missing_calendar {
+        if missing_core || missing_tutor {
             return Err(Failure::new(
                 Text::new("כדי להוסיף רכיב זה הריצו את קובץ ההתקנה המלא של כלי קודש.", "To add this part, run the full Klei Kodesh setup file."),
                 "no payload",

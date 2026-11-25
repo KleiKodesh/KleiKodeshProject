@@ -2,7 +2,6 @@
 import PageCard from '@/components/PageCard.vue'
 import { ref, watch, onMounted, computed } from 'vue'
 import { HDate } from '@hebcal/core'
-import { uiLanguage } from '@/i18n'
 import { lsGet, lsSet } from '@/utils/persistence'
 
 const KEYS = {
@@ -30,12 +29,6 @@ const viewMode = ref<ViewMode>('weekly')
 const selectedDate = ref(new Date())
 /** undefined = days are not pickable (the in-app calendar widget). */
 const pickedDate = computed(() => (props.extended ? selectedDate.value : undefined))
-const selectedLabel = computed(() => {
-  const d = selectedDate.value
-  const hd = new HDate(d)
-  const heb = uiLanguage === 'en' ? hd.render('en') : hd.renderGematriya(true)
-  return `${heb} · ${d.toLocaleDateString(uiLanguage === 'en' ? 'en-US' : 'he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`
-})
 watch(viewMode, (v) => lsSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
 const { activeCity, init: initZmanim } = useZmanim()
@@ -117,7 +110,6 @@ onMounted(() => {
     </PageCard>
     <!-- Extended calendar: the picked day's zmanim and daily learning beside it (below it in a narrow window). -->
     <aside v-if="props.extended" class="calendar-side">
-      <div class="calendar-side-date">{{ selectedLabel }}</div>
       <section class="calendar-side-zmanim">
         <ZmanimWidget :date="selectedDate" />
       </section>
@@ -156,14 +148,6 @@ onMounted(() => {
 .calendar-side-zmanim,
 .calendar-side-learning { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .calendar-side-learning { border-top: 1px solid var(--border-color); }
-.calendar-side-date {
-  flex: none;
-  padding: 10px 12px 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
-}
 /* Narrow window: zmanim and learning go under the calendar. */
 @media (max-width: 640px) {
   .page--extended { flex-direction: column; overflow-y: auto; }

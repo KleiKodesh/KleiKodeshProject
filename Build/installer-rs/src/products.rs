@@ -10,8 +10,8 @@ pub enum Product {
     KitveiApp,
     /// The Hebrew typing tutor: a single offline page opened as an Edge app window.
     TypingTutor,
-    /// The calendar (zmanim, daily learning) as its own small app: one offline page in an Edge
-    /// app window, no service. Offered among Kitvei Hakodesh's options, not in the main list.
+    /// The calendar (zmanim, daily learning) in a window of its own: a shortcut that opens
+    /// Kitvei Hakodesh's calendar widget. Offered among Kitvei Hakodesh's options, not in the main list.
     CalendarApp,
 }
 
@@ -67,8 +67,8 @@ impl Product {
                 "Learn Hebrew touch typing. Opens in its own window and works offline.",
             ),
             Product::CalendarApp => Text::new(
-                "לוח שנה עם זמני היום ולימוד יומי, כתוכנה קטנה בחלון משלה. לחיצה על לימוד פותחת אותו בכתבי הקודש.",
-                "The calendar with zmanim and daily learning as a small app in its own window. A click on a learning opens it in Kitvei Hakodesh.",
+                "קיצור דרך ללוח השנה של כתבי הקודש, עם זמני היום ולימוד יומי, בחלון משלו.",
+                "A shortcut to Kitvei Hakodesh's calendar, with zmanim and daily learning, in a window of its own.",
             ),
         }
     }

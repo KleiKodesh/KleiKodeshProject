@@ -170,17 +170,18 @@ export function initTabMirror(): void {
         // The reader closed a window this page draws (its X): its tabs close with it.
         if (typeof msg.windowKey === 'string') tabStore.closeWindow(msg.windowKey)
         break
-      case 'reopenMainWindow':
-        // The main window shown again after it was hidden (AppViewer.ReopenMainWindow).
-        tabStore.reopenMainWindow()
+      case 'openWindowForWaitingTabs':
+        // No app window on screen (the calendar alone) and the app was launched: a window for
+        // the waiting tabs (AppViewer.OpenWindowForWaitingTabs).
+        tabStore.openWindowForWaitingTabs()
         break
       case 'openNewAppWindow':
         tabStore.openNewWindow()
         break
       case 'openCalendarAppWindow':
-        // The installer's calendar shortcut (--calendar): the calendar as a widget window
+        // The installer's calendar shortcut (--calendar): the calendar widget
         // (opened, or brought to the front when it is open).
-        useWidgetWindowStore().open('calendarApp')
+        useWidgetWindowStore().open('calendar')
         break
       case 'openWidgetAsTab':
         // A widget window dropped on this window's tab strip (AppViewer.OpenWidgetAsTab).

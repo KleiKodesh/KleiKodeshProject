@@ -486,7 +486,9 @@ fn launch_product(layout: &Layout, id: &str) {
             let _ = launch::open(&layout.file(KITVEI_EXE), &[]);
         }
         Some(Product::TypingTutor) => launch_edge_app(&install::tutor::page(layout)),
-        Some(Product::CalendarApp) => launch_edge_app(&install::calendar::page(layout)),
+        Some(Product::CalendarApp) => {
+            let _ = launch::open(&layout.file(KITVEI_EXE), &["--calendar"]);
+        }
         None => {}
     }
 }

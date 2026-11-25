@@ -1,5 +1,4 @@
-// Build pieces shared by vite.config.ts (the app) and vite.calendar.config.ts (the
-// standalone calendar), so both compile the same source the same way.
+// Build pieces of vite.config.ts (the app), kept in their own file to keep that config readable.
 import fs from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import type { PluginOption } from 'vite'
@@ -12,7 +11,7 @@ export const ZMANIM_ASSETS_DIR = fileURLToPath(new URL('../kleikodesh-zmanim.js/
 // Every file in the library's assets/ folder ships, so new data files need no change here.
 export const zmanimAssetFiles = (): string[] => fs.readdirSync(ZMANIM_ASSETS_DIR, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)
 
-/** Vue, precompiled i18n and the one-file output: shared with vite.calendar.config.ts. */
+/** Vue, precompiled i18n and the one-file output. */
 export function vueSingleFilePlugins(): PluginOption[] {
   return [
     vue(),
@@ -22,7 +21,7 @@ export function vueSingleFilePlugins(): PluginOption[] {
   ]
 }
 
-/** Import aliases: shared with vite.calendar.config.ts. */
+/** Import aliases. */
 export const appResolve = {
   alias: {
     '@': fileURLToPath(new URL('./src', import.meta.url)),

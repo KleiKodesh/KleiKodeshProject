@@ -74,16 +74,6 @@ export const HIDDEN_WIDGET_ITEMS: WidgetItem[] = [
     description: t('settings.about.appName'),
     page: defineAsyncComponent(() => import('@/features/about/AboutPage.vue')),
   },
-  {
-    // The calendar as a widget window of its own (the installer's calendar shortcut, --calendar):
-    // the full calendar with the picked day's zmanim and daily learning beside it.
-    id: 'calendarApp', route: '/', shortcut: '',
-    icon: documentIcon('calendar').icon24, color: documentIcon('calendar').color || undefined,
-    text: t('layout.nav.calendar.label'),
-    description: t('layout.nav.calendar.description'),
-    page: defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue')),
-    props: { extended: true },
-  },
 ]
 
 const CustomHtmlWidget = defineAsyncComponent(() => import('./CustomHtmlWidget.vue'))
