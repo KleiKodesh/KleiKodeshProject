@@ -40,10 +40,12 @@ export function specialDayRows(place: Place, date: Date): SpecialZmanRow[] {
     const instants = specialZmanInstants(place, civil, kind)
     for (const key of SPECIAL_KINDS[kind]) {
       const ns = instants[key]
-      if (ns == null) { rows.push({ key, value: null }); continue }
+      if (ns == null) { if (kind !== 'kiddushLevana') rows.push({ key, value: null }); continue }
       const ms = epochMs(ns)
       const time = formatTime(ms, SPECIAL_ROUNDING[key], place.tzid)
       const sameDay = new Intl.DateTimeFormat('en-CA', { timeZone: place.tzid }).format(ms) === dayKey
+      // Kiddush levana: each start/end line only on the day it falls.
+      if (kind === 'kiddushLevana' && !sameDay) continue
       rows.push({ key, value: sameDay ? time : `${dm.format(ms)} ${time}` })
     }
   }
