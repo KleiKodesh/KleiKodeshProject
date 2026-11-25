@@ -1091,7 +1091,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   content: '';
   display: block;
   position: absolute;
-  bottom: 0.45em;
+  bottom: 0.7em;
   inset-inline-start: -0.45em;
   pointer-events: auto;
   width: 0.85em;
