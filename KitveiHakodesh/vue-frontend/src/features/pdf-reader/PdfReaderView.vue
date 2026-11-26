@@ -18,6 +18,7 @@ import PdfPrintChoiceDialog from './PdfPrintChoiceDialog.vue'
 import AlertDialog from '@/components/AlertDialog.vue'
 import PdfOrganizerWindow from '@/features/pdf-organizer/PdfOrganizerWindow.vue'
 import PdfEditToolbar from './PdfEditToolbar.vue'
+import { usePdfHighlightDelete } from './usePdfHighlightDelete'
 import PdfEditDialogs from './PdfEditDialogs.vue'
 import { usePdfEditing } from './usePdfEditing'
 import { usePdfNotes } from './usePdfNotes'
@@ -143,7 +144,16 @@ useEventListener(quickHighlightWindow, 'pointerdown', (e: PointerEvent) => {
 useEventListener(quickHighlightWindow, 'keydown', (e: KeyboardEvent) => {
   if (inQuickHighlightMode && e.key === 'Escape') endQuickHighlightMode()
 })
+// "Delete highlight" of a highlight saved in the file enters highlight mode for a moment
+// (usePdfHighlightDelete): no bar, no quick mode for that.
+let silentEditMode = false
+const highlightDelete = usePdfHighlightDelete(pdf, (on) => { silentEditMode = on })
+function deleteHighlightsAt(rects: DOMRect[]): (() => void) | null {
+  const targets = highlightDelete.find(rects)
+  return highlightDelete.isEmpty(targets) ? null : () => void highlightDelete.remove(targets)
+}
 watch(editing.mode, (mode) => {
+  if (silentEditMode) return
   if (mode !== AnnotationEditorType.HIGHLIGHT) inQuickHighlightMode = false
   if (quickHighlight) {
     if (mode === AnnotationEditorType.HIGHLIGHT) {
@@ -516,6 +526,7 @@ const contextMenu = usePdfReaderContextMenu(container, contextMenuRef, {
   searchInCatalog: (q) => useHostSearchStore().openCatalogSearch(q),
   noteAtSelection: notes.noteAtSelection,
   highlightSelection: highlightFromMenu,
+  deleteHighlightsAt,
 })
 // Add a bookmark at the current place (toolbar button, Ctrl+Shift+D): shows the bookmarks list.
 function addBookmark() {

@@ -1,5 +1,5 @@
 import { IconComment20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular, IconHighlight20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular, IconHighlight20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
 import { shallowRef, onScopeDispose, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -28,6 +28,8 @@ export function usePdfReaderContextMenu(
     searchInCatalog: (query: string) => void
     /** Highlights the selected text (PDF.js's highlight, default colour). */
     highlightSelection: () => void
+    /** "Delete highlight" for the highlights under these window rects (the click point and the selection); null = none there. */
+    deleteHighlightsAt: (rects: DOMRect[]) => (() => void) | null
     /** "Add note" for the selection as it is now: a note at its end (usePdfNotes), no highlight; null = none. */
     noteAtSelection: () => (() => void) | null
   },
@@ -79,7 +81,7 @@ export function usePdfReaderContextMenu(
 
   // The book view's order: the copy actions, then add note. Selection bar: copy, copy into
   // Word, copy as image, add note, highlight; the two searches stay in the menu only.
-  function buildItems(text: string): ContextMenuItem[] {
+  function buildItems(text: string, deleteHighlights: (() => void) | null = null): ContextMenuItem[] {
     const hasText = !!text.trim()
     const list: ContextMenuItem[] = []
     if (hasText) {
@@ -93,12 +95,22 @@ export function usePdfReaderContextMenu(
     const addNote = hasText ? options.noteAtSelection() : null
     if (addNote) list.push({ label: t('pdfReader.notes.add'), icon: IconComment20Regular, action: addNote })
     if (hasText) list.push({ label: t('pdfReader.edit.highlight'), icon: IconHighlight20Regular, action: options.highlightSelection })
+    if (deleteHighlights) list.push({ label: t('pdfReader.menu.deleteHighlight'), icon: IconDelete20Regular, hideInToolbar: true, action: deleteHighlights })
     return list
+  }
+
+  /** The selection's line boxes in this window, when there is one. */
+  function selectionRects(): DOMRect[] {
+    const sel = hostWindow.getSelection()
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return []
+    return [...sel.getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0)
   }
 
   function openAt(x: number, y: number) {
     capturedText = selectedText()
-    items.value = buildItems(capturedText)
+    // Read before the menu opens: the click point (a zero-size box) and the selection.
+    const deleteHighlights = options.deleteHighlightsAt([new DOMRect(x, y, 0, 0), ...selectionRects()])
+    items.value = buildItems(capturedText, deleteHighlights)
     void menuRef.value?.showAtPosition(x, y)
   }
 
@@ -116,7 +128,8 @@ export function usePdfReaderContextMenu(
   /** Builds the items for the selection as it is now (the selection toolbar, before it shows). */
   function prepareForSelection() {
     capturedText = selectedText()
-    items.value = buildItems(capturedText)
+    // Its "more" opens this same list: offer "Delete highlight" for highlights the selection touches.
+    items.value = buildItems(capturedText, options.deleteHighlightsAt(selectionRects()))
   }
 
   return { items, selectedText, copyIntoWord, searchSelection, prepareForSelection }
