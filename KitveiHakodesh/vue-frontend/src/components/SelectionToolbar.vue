@@ -56,6 +56,11 @@ function buttonIcon(item: SelectionToolbarButton) {
 function press(item: SelectionToolbarButton, index: number): void {
   if (item.type === 'component') {
     toolbar.restoreSelection()
+    if (item.toolbar.action) {
+      item.toolbar.action()
+      toolbar.hide()
+      return
+    }
     openPanelIndex.value = openPanelIndex.value === index ? null : index
     return
   }

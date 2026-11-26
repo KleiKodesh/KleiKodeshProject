@@ -6,6 +6,8 @@ import { t } from '@/i18n'
 import { showToast } from '@/composables/useToast'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { buildLineLink } from '@/utils/appDeepLink'
+import { updateBookBookmarks } from '@/stores/bookBookmarks'
+import { SNIPPET_LENGTH, bookmarkFromPoint, rowOf, selectionPointInRow, snippetOf, type BookViewLinesBookmarkPoint } from '../lines/bookmarkPoint'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
@@ -556,6 +558,50 @@ function copyCommentaryLineLink(): void {
   })
 }
 
+// "Create bookmark": a bookmark in the COMMENTARY's own book (not the base book this pane is
+// attached to), at the selection where it starts, else at the start of the pressed line. It
+// shows in that book's bookmarks list when the book is opened.
+function commentaryBookmarkAt(rowIndex: number, point: Omit<BookViewLinesBookmarkPoint, 'lineIndex'> | null) {
+  let item = flatItems.value[rowIndex]
+  // A header pressed: its group's first line.
+  if (item?.type === 'header') { rowIndex++; item = flatItems.value[rowIndex]; point = null }
+  if (item?.type !== 'line') return null
+  const header = headerAt(rowIndex)
+  if (!header || header.bookId <= 0) return null
+  if (!point) {
+    const rowText = scrollerEl.value?.querySelector(`[data-index="${rowIndex}"]`)?.textContent ?? ''
+    point = { letterOffset: 0, snippet: snippetOf(rowText.slice(0, SNIPPET_LENGTH * 2)) }
+  }
+  const bookmark = bookmarkFromPoint({ id: item.line.lineId, lineIndex: item.line.lineIndex }, point, tocPathOf(header))
+  return bookmark ? { bookId: header.bookId, bookTitle: header.bookTitle, bookmark } : null
+}
+
+function createCommentaryBookmark(): void {
+  const scrollerElement = scrollerEl.value
+  const selection = hostWindow.getSelection()
+  let target: ReturnType<typeof commentaryBookmarkAt> = null
+  if (scrollerElement && selection && selection.rangeCount > 0 && !selection.isCollapsed && scrollerElement.contains(selection.anchorNode)) {
+    const fromSelection = selectionPointInRow(selection.getRangeAt(0), scrollerElement)
+    if (fromSelection) {
+      const { lineIndex: rowIndex, ...point } = fromSelection.point
+      target = commentaryBookmarkAt(rowIndex, point)
+    }
+  }
+  if (!target && scrollerElement && pressedLinkNode) {
+    const row = rowOf(pressedLinkNode, scrollerElement)
+    if (row) target = commentaryBookmarkAt(Number(row.dataset['index']), null)
+  }
+  if (!target) {
+    showToast(t('bookView.link.noLine'), { variant: 'error' })
+    return
+  }
+  const { bookId, bookTitle, bookmark } = target
+  updateBookBookmarks(bookId, (stored) => [...stored, bookmark]).then(
+    () => showToast(t('bookView.bookmarks.added', { title: bookTitle })),
+    () => showToast(t('bookView.bookmarks.addFailed'), { variant: 'error' }),
+  )
+}
+
 const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCopy: onCommentaryCopy, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
@@ -613,6 +659,7 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
   },
   () => openCommentaryErrorReport(),
   copyCommentaryLineLink,
+  createCommentaryBookmark,
 )
 // A commentary line belongs to the commentary book its group came from, never to the
 // base book this pane is attached to — so the report's identity is looked up from the
@@ -804,7 +851,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
       selection can tell the two panels apart; both carry .commentary-view.
     -->
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" />
+    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" :max-buttons="8" />
     <BookViewErrorReportDialog
       v-if="commentaryErrorReportTarget"
       :selected-text="commentaryErrorReportTarget.selectedText"
@@ -1131,8 +1178,13 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   content: '';
   display: block;
   position: absolute;
-  bottom: 0.7em;
-  inset-inline-start: -0.45em;
+  bottom: 0.8em;
+  /* The marker is a zero-width point between two letters (right after the note's last one).
+     The bubble's tail tip is at x=6.2 of the icon's 20 units (0.31 of its 0.85em width =
+     0.263em from its left edge), so this puts the tip exactly on that point. Physical left:
+     the icon is not mirrored in RTL. */
+  /* Nudged right of the calculated -0.263em to sit on the gap by eye (2026-11-26). */
+  left: -0.2em;
   pointer-events: auto;
   width: 0.85em;
   height: 0.85em;

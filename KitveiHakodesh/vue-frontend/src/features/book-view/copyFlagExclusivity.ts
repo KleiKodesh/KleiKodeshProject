@@ -29,14 +29,10 @@
  *      top, notes at the bottom — no collision), so that pair is deliberately
  *      ALLOWED. Do not "symmetrise" this by also blocking start-source.
  *
- *   3. sourceWithQuotation REQUIRES a source position, and ⊗ withNotes.
- *      Quotation is a self-contained one-line format; the source position is not
- *      an incompatible option here but the very thing that chooses its layout
- *      (parenthesised מקור at start vs. end). So whenever quotation is ON, exactly
- *      one of start/end is ON too — turning quotation on defaults to 'start' when
- *      no position is set, and while it is on the two positions behave as a strict
- *      radio (you can switch between them but never turn both off). Endnotes still
- *      make no sense on a single inline quote, so quotation ⊗ withNotes remains.
+ *   3. sourceWithQuotation ⊗ withNotes.
+ *      Quotation is a self-contained one-line format. The source is optional: the
+ *      position (if any) only chooses where the parenthesised מקור goes; with none set
+ *      the copy is just "ציטוט". Endnotes make no sense on a single inline quote.
  *
  * copyJoinLines and the copy-cleaning flags are fully independent (no rules) and are
  * intentionally NOT modelled here.
@@ -55,8 +51,6 @@ export type CopyExclusivityToggle =
   | 'withNotes'
   | 'sourceWithQuotation'
 
-/** The position quotation falls back to when it is turned on with no position set. */
-const DEFAULT_QUOTATION_POSITION = 'start' as const
 
 /**
  * Given the current flags and the toggle the user just flipped, return the new
@@ -80,9 +74,7 @@ export function applyCopyExclusivity(
         next.copySourcePosition = 'start'
         // Note: start-source + withNotes is ALLOWED (see rule 2) — do not clear notes.
       } else {
-        // Rule 3: while quotation is on a position is required, so unchecking the
-        // active position flips to the other rather than clearing it.
-        next.copySourcePosition = next.copyAsSourceWithQuotation ? 'end' : null
+        next.copySourcePosition = null
       }
       break
 
@@ -92,8 +84,7 @@ export function applyCopyExclusivity(
         // Rule 2: end-source ⊗ notes (both append at the end).
         next.copyWithNotes = false
       } else {
-        // Rule 3: flip to the other position while quotation is on (never both off).
-        next.copySourcePosition = next.copyAsSourceWithQuotation ? 'start' : null
+        next.copySourcePosition = null
       }
       break
 
@@ -110,8 +101,7 @@ export function applyCopyExclusivity(
     case 'sourceWithQuotation':
       next.copyAsSourceWithQuotation = value
       if (value) {
-        // Rule 3: quotation requires a position (default start) and excludes notes.
-        if (next.copySourcePosition == null) next.copySourcePosition = DEFAULT_QUOTATION_POSITION
+        // Rule 3: quotation excludes notes. The source position stays the user's choice.
         next.copyWithNotes = false
       }
       // Turning quotation OFF frees the source position to be independent again;
@@ -127,7 +117,6 @@ export function applyCopyExclusivity(
  * different rules, which the settings loader reads back verbatim with no validation.
  * Deterministic repair:
  *   - quotation on with notes → drop notes (rule 3),
- *   - quotation on with no position → default to 'start' (rule 3),
  *   - otherwise end-source with notes → drop notes (rule 2).
  * Pure — returns a corrected copy.
  */
@@ -135,9 +124,8 @@ export function normalizeCopyFlags(flags: CopyExclusivityFlags): CopyExclusivity
   const next: CopyExclusivityFlags = { ...flags }
 
   if (next.copyAsSourceWithQuotation) {
-    // Rule 3: quotation excludes notes and requires a position.
+    // Rule 3: quotation excludes notes.
     next.copyWithNotes = false
-    if (next.copySourcePosition == null) next.copySourcePosition = DEFAULT_QUOTATION_POSITION
   } else if (next.copySourcePosition === 'end' && next.copyWithNotes) {
     // Rule 2: end-source ⊗ notes — keep the source position, drop notes.
     next.copyWithNotes = false

@@ -17,46 +17,12 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
  */
 import type { WindowedScrollerApi } from 'vue-windowed-scroller'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
+import {
+  LETTER, SNIPPET_LENGTH, countLetters, rowOf, selectionPointInRow, snippetOf, textBefore,
+  type BookViewLinesBookmarkPoint,
+} from './bookmarkPoint'
 
-export interface BookViewLinesBookmarkPoint {
-  lineIndex: number
-  /** Letters and digits in the line's text before the point. */
-  letterOffset: number
-  /** Set when the point came from a selection: how many letters and digits it covers. */
-  selectionLetterCount?: number
-  /** The text bookmarked - the selection, or the words from the point on - short enough to show. */
-  snippet?: string
-}
-
-/** How much of the bookmarked text is kept to show under the bookmark's name. */
-const SNIPPET_LENGTH = 50
-
-const LETTER = /[\p{L}\p{N}]/u
-const LETTERS = /[\p{L}\p{N}]/gu
-
-function countLetters(text: string): number {
-  return text.match(LETTERS)?.length ?? 0
-}
-
-function snippetOf(text: string): string | undefined {
-  const collapsed = text.replace(/\s+/g, ' ').trim()
-  if (!collapsed) return undefined
-  return collapsed.length > SNIPPET_LENGTH ? `${collapsed.slice(0, SNIPPET_LENGTH).trimEnd()}…` : collapsed
-}
-
-function rowOf(node: Node, scrollerElement: HTMLElement): HTMLElement | null {
-  const element = node instanceof Element ? node : node.parentElement
-  const row = element?.closest<HTMLElement>('[data-index]') ?? null
-  return row && scrollerElement.contains(row) ? row : null
-}
-
-/** The row's text from its start up to (node, offset). */
-function textBefore(row: HTMLElement, node: Node, offset: number): string {
-  const range = document.createRange()
-  range.setStart(row, 0)
-  range.setEnd(node, offset)
-  return range.toString()
-}
+export type { BookViewLinesBookmarkPoint }
 
 /**
  * The DOM position of a letter count. 'start' = just before the next letter (where a
@@ -102,21 +68,7 @@ export function useBookViewLinesBookmarkPoint(
   function readSelectionPoint(scrollerElement: HTMLElement): BookViewLinesBookmarkPoint | null {
     const selection = hostWindow.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
-    const range = selection.getRangeAt(0)
-    const row = rowOf(range.startContainer, scrollerElement)
-    if (!row) return null
-    const before = textBefore(row, range.startContainer, range.startOffset)
-    // A selection running past its line is cut at the line's end - the bookmark is one line's.
-    const endsInRow = rowOf(range.endContainer, scrollerElement) === row
-    const selectedText = endsInRow ? range.toString() : (row.textContent ?? '').slice(before.length)
-    const snippet = snippetOf(selectedText)
-    if (!snippet) return null
-    return {
-      lineIndex: Number(row.dataset.index),
-      letterOffset: countLetters(before),
-      selectionLetterCount: countLetters(selectedText),
-      snippet,
-    }
+    return selectionPointInRow(selection.getRangeAt(0), scrollerElement)?.point ?? null
   }
 
   function readTopOfViewPoint(scrollerElement: HTMLElement): BookViewLinesBookmarkPoint | null {

@@ -1,5 +1,6 @@
-import { IconLink20Regular, IconSlideTextCursor20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconDocumentHeader20Regular, IconDocumentFooter20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { SourceAtStartIcon, SourceAtEndIcon } from '@/components/textGlyphIcon'
+import { IconLink20Regular, IconSlideTextCursor20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconHighlight20Regular, IconComment20Regular, IconBookmarkAdd20Regular } from '@iconify-prerendered/vue-fluent'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { nextTick, watch } from 'vue'
@@ -118,6 +119,8 @@ export function useCommentaryCopy(
   onReportError?: () => void,
   /** Copies a link to the commentary passage pressed or selected (as the book view's line link). */
   onCopyLineLink?: () => void,
+  /** Bookmarks the commentary passage pressed or selected, in the commentary's own book. */
+  onCreateBookmark?: () => void,
 ) {
   const hostWindow = useHostWindow()
   const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
@@ -559,7 +562,7 @@ export function useCommentaryCopy(
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
     // Produces a single inline line. The source position decides the layout:
     //   start → (מקור) "ציטוט"      end → "ציטוט" (מקור)
-    // (quotation always has a position — enforced by copyFlagExclusivity). Always
+    // (no position → just "ציטוט"). Always
     // collects the full line content into one inline paragraph regardless of the
     // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
@@ -595,7 +598,8 @@ export function useCommentaryCopy(
       // buildCommentarySourceHtml, which also links it.
       const src = source
       const quote = escapeHtml(htmlToText(inlineText))
-      const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
+      // No source position → just the quoted text.
+      const body = position === 'end' ? `"${quote}" (${src})` : position === 'start' ? `(${src}) "${quote}"` : `"${quote}"`
       // <span>, not <div>: quotation mode is a single inline run by design, so it
       // must not contribute a paragraph mark of its own on paste into Word.
       return `<span dir="rtl">${body}</span>`
@@ -706,6 +710,7 @@ export function useCommentaryCopy(
   const annotationRow: ContextMenuItem = {
     type: 'component',
     component: BookViewAnnotationMenuRow,
+    toolbar: { icon: IconHighlight20Regular, label: t('bookView.annotation.highlight') },
     props: {
       onHighlight: applyHighlightFromSelection,
       onClearHighlight: clearHighlightFromSelection,
@@ -717,6 +722,7 @@ export function useCommentaryCopy(
   const addNoteRow: ContextMenuItem = {
     type: 'component',
     component: BookViewAddNoteMenuRow,
+    toolbar: { icon: IconComment20Regular, label: t('bookView.annotation.addNote'), action: addNoteFromSelection },
     props: { onAddNote: addNoteFromSelection },
   }
 
@@ -726,6 +732,8 @@ export function useCommentaryCopy(
     { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
     { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
     ...(onCopyLineLink ? [{ label: t('bookView.copy.link'), icon: IconLink20Regular, action: onCopyLineLink }] : []),
+    // No Ctrl+Shift+D label: that key bookmarks the base book, not the commentary.
+    ...(onCreateBookmark ? [{ label: t('bookView.bookmarks.add'), icon: IconBookmarkAdd20Regular, action: onCreateBookmark }] : []),
     addNoteRow,
     { type: 'separator' },
     {
@@ -744,13 +752,13 @@ export function useCommentaryCopy(
         // copyFlagExclusivity.ts; do not add ad-hoc clears here.
         {
           type: 'checkbox',
-          label: t('bookView.copy.sourceStart'), icon: IconDocumentHeader20Regular,
+          label: t('bookView.copy.sourceStart'), icon: SourceAtStartIcon,
           get checked() { return settingsStore.copySourcePosition === 'start' },
           onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
         },
         {
           type: 'checkbox',
-          label: t('bookView.copy.sourceEnd'), icon: IconDocumentFooter20Regular,
+          label: t('bookView.copy.sourceEnd'), icon: SourceAtEndIcon,
           get checked() { return settingsStore.copySourcePosition === 'end' },
           onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
         },
@@ -770,7 +778,7 @@ export function useCommentaryCopy(
       ],
     },
     { type: 'separator' },
-    { label: t('bookView.report.title'), icon: IconFlag20Regular, action: onReportError ?? (() => {}) },
+    { label: t('bookView.report.title'), icon: IconFlag20Regular, hideInToolbar: true, action: onReportError ?? (() => {}) },
     { type: 'separator' },
     annotationRow,
   ]

@@ -672,7 +672,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
 <template>
   <div dir="rtl" class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" :max-buttons="6" />
+    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" :max-buttons="7" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
       :selected-text="errorReportTarget.selectedText"
@@ -935,8 +935,13 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   content: '';
   display: block;
   position: absolute;
-  bottom: 0.7em;
-  inset-inline-start: -0.45em;
+  bottom: 0.8em;
+  /* The marker is a zero-width point between two letters (right after the note's last one).
+     The bubble's tail tip is at x=6.2 of the icon's 20 units (0.31 of its 0.85em width =
+     0.263em from its left edge), so this puts the tip exactly on that point. Physical left:
+     the icon is not mirrored in RTL. */
+  /* Nudged right of the calculated -0.263em to sit on the gap by eye (2026-11-26). */
+  left: -0.2em;
   pointer-events: auto;
   width: 0.85em;
   height: 0.85em;

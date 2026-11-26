@@ -59,7 +59,7 @@
     "joinLines": "Copy as one block (no line breaks)",
     "link": "Copy link to this section",
     "options": "Copy options",
-    "quote": "Copy source with quotation",
+    "quote": "Add quotation marks",
     "searchTabTitle": "Search: {query}",
     "sourceEnd": "Copy with source at end",
     "sourceStart": "Copy with source at start",
@@ -110,6 +110,8 @@
   },
   "bookmarks": {
     "add": "Create bookmark",
+    "addFailed": "Couldn't add the bookmark",
+    "added": "Bookmark added to {title}",
     "delete": "Delete bookmark",
     "empty": "No bookmarks in this book",
     "rename": "Rename bookmark",

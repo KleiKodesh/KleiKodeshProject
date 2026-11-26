@@ -24,6 +24,7 @@ import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubme
 import { loadBookBookmarks, loadedBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
+import { bookmarkFromPoint } from './lines/bookmarkPoint'
 
 const props = defineProps<{
   bookId: number | undefined
@@ -111,17 +112,7 @@ function bookmarkForPoint(point: BookViewLinesBookmarkPoint | null): BookBookmar
   const line = props.lines.at(point?.lineIndex ?? props.currentScrollLineIndex)
   // A negative id is a placeholder for a line whose real id is not known yet.
   if (line == null || line.id <= 0) return null
-  const tocPath = props.labelForLine?.(line.lineIndex).trim() || undefined
-  return {
-    id: Date.now(),
-    lineId: line.id,
-    lineIndex: line.lineIndex,
-    letterOffset: point?.letterOffset,
-    selectionLetterCount: point?.selectionLetterCount,
-    label: tocPath ?? `${line.lineIndex + 1}`,
-    tocPath,
-    snippet: point?.snippet,
-  }
+  return bookmarkFromPoint({ id: line.id, lineIndex: line.lineIndex }, point, props.labelForLine?.(line.lineIndex))
 }
 
 function deleteBookmark(bookmark: BookBookmark) {

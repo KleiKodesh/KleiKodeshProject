@@ -1,4 +1,5 @@
-import { IconTextClearFormatting20Regular, IconMusicNote220Regular, IconTextPeriodAsterisk20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconTextClearFormatting20Regular } from '@iconify-prerendered/vue-fluent'
+import { PunctuationMarksIcon, CantillationMarksIcon } from '@/components/textGlyphIcon'
 import type { ContextMenuCheckboxItem } from '@/components/ContextMenu.vue'
 import { t } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -19,13 +20,13 @@ export function copyCleanMenuItems(): ContextMenuCheckboxItem[] {
     },
     {
       type: 'checkbox',
-      label: t('bookView.copy.stripTeamim'), icon: IconMusicNote220Regular,
+      label: t('bookView.copy.stripTeamim'), icon: CantillationMarksIcon,
       get checked() { return settingsStore.copyStripTeamim },
       onChange: (value: boolean) => { settingsStore.copyStripTeamim = value },
     },
     {
       type: 'checkbox',
-      label: t('bookView.copy.stripModernPunctuation'), icon: IconTextPeriodAsterisk20Regular,
+      label: t('bookView.copy.stripModernPunctuation'), icon: PunctuationMarksIcon,
       get checked() { return settingsStore.copyStripModernPunctuation },
       onChange: (value: boolean) => { settingsStore.copyStripModernPunctuation = value },
     },

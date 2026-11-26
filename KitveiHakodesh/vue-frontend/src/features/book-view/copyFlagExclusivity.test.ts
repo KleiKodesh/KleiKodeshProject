@@ -44,10 +44,10 @@ describe('applyCopyExclusivity', () => {
     expect(fromStart.copyWithNotes).toBe(true)
   })
 
-  it('enabling quotation with no position defaults to start and clears notes', () => {
+  it('enabling quotation adds no source and clears notes', () => {
     const r = applyCopyExclusivity({ ...NONE, copyWithNotes: true }, 'sourceWithQuotation', true)
     expect(r.copyAsSourceWithQuotation).toBe(true)
-    expect(r.copySourcePosition).toBe('start')
+    expect(r.copySourcePosition).toBe(null)
     expect(r.copyWithNotes).toBe(false)
   })
 
@@ -57,14 +57,12 @@ describe('applyCopyExclusivity', () => {
     expect(r.copySourcePosition).toBe('end')
   })
 
-  it('quotation requires a position — start/end act as a radio while it is on', () => {
+  it('quotation keeps the source optional — positions switch and can be turned off', () => {
     const on = { copySourcePosition: 'start' as const, copyWithNotes: false, copyAsSourceWithQuotation: true }
-    // switching between positions works
     expect(applyCopyExclusivity(on, 'sourceEnd', true).copySourcePosition).toBe('end')
-    // unchecking the active position flips to the other, never both off
-    expect(applyCopyExclusivity(on, 'sourceStart', false).copySourcePosition).toBe('end')
+    expect(applyCopyExclusivity(on, 'sourceStart', false).copySourcePosition).toBe(null)
     const onEnd = { ...on, copySourcePosition: 'end' as const }
-    expect(applyCopyExclusivity(onEnd, 'sourceEnd', false).copySourcePosition).toBe('start')
+    expect(applyCopyExclusivity(onEnd, 'sourceEnd', false).copySourcePosition).toBe(null)
   })
 
   it('enabling start or end while quotation is on does NOT clear quotation', () => {
@@ -112,10 +110,10 @@ describe('normalizeCopyFlags', () => {
     })
   })
 
-  it('quotation with no position defaults to start', () => {
-    const bad = { copySourcePosition: null, copyWithNotes: false, copyAsSourceWithQuotation: true }
-    expect(normalizeCopyFlags(bad)).toEqual({
-      copySourcePosition: 'start',
+  it('quotation with no position stays without a source', () => {
+    const ok = { copySourcePosition: null, copyWithNotes: false, copyAsSourceWithQuotation: true }
+    expect(normalizeCopyFlags(ok)).toEqual({
+      copySourcePosition: null,
       copyWithNotes: false,
       copyAsSourceWithQuotation: true,
     })

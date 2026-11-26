@@ -1,4 +1,5 @@
-import { IconHighlight20Regular, IconComment20Regular, IconSlideTextCursor20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconDocumentHeader20Regular, IconDocumentFooter20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
+import { SourceAtStartIcon, SourceAtEndIcon } from '@/components/textGlyphIcon'
+import { IconHighlight20Regular, IconComment20Regular, IconSlideTextCursor20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
 import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLink20Regular, IconBookmarkAdd20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
 import { watch } from 'vue'
@@ -524,7 +525,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
     // Produces a single inline line. The source position decides the layout:
     //   start → (מקור) "ציטוט"      end → "ציטוט" (מקור)
-    // (quotation always has a position — enforced by copyFlagExclusivity). Always
+    // (no position → just "ציטוט"). Always
     // collects the full line content into one inline paragraph regardless of the
     // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
@@ -543,9 +544,11 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). The source is escaped inside
       // buildSourceHtml, which also links it to the line it names.
-      const src = buildSourceHtml(firstLineIndex, true)
       const quote = escapeHtml(htmlToText(inlineText))
-      const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
+      // No source position → just the quoted text.
+      const body = position === 'end' ? `"${quote}" (${buildSourceHtml(firstLineIndex, true)})`
+        : position === 'start' ? `(${buildSourceHtml(firstLineIndex, true)}) "${quote}"`
+        : `"${quote}"`
       // <span>, not <div>: quotation mode is a single inline run by design, so it
       // must not contribute a paragraph mark of its own on paste into Word.
       return `<span dir="rtl">${body}</span>`
@@ -670,7 +673,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   const addNoteRow: ContextMenuItem = {
     type: 'component',
     component: BookViewAddNoteMenuRow,
-    toolbar: { icon: IconComment20Regular, label: t('bookView.annotation.addNote') },
+    toolbar: { icon: IconComment20Regular, label: t('bookView.annotation.addNote'), action: options.onAddNote ?? (() => {}) },
     props: { onAddNote: options.onAddNote ?? (() => {}) },
   }
 
@@ -681,9 +684,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
       { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: t('bookView.copy.link'), icon: IconLink20Regular, action: options.onCopyLineLink ?? (() => {}) },
-      { label: t('bookView.bookmarks.add'), icon: IconBookmarkAdd20Regular, hideInToolbar: true, action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      { label: t('bookView.bookmarks.add'), icon: IconBookmarkAdd20Regular, action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
       addNoteRow,
-      { label: t('bookView.report.title'), icon: IconFlag20Regular, action: options.onReportError ?? (() => {}) },
+      { label: t('bookView.report.title'), icon: IconFlag20Regular, hideInToolbar: true, action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       {
         type: 'submenu',
@@ -701,13 +704,13 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
           // copyFlagExclusivity.ts; do not add ad-hoc clears here.
           {
             type: 'checkbox',
-            label: t('bookView.copy.sourceStart'), icon: IconDocumentHeader20Regular,
+            label: t('bookView.copy.sourceStart'), icon: SourceAtStartIcon,
             get checked() { return settingsStore.copySourcePosition === 'start' },
             onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
           },
           {
             type: 'checkbox',
-            label: t('bookView.copy.sourceEnd'), icon: IconDocumentFooter20Regular,
+            label: t('bookView.copy.sourceEnd'), icon: SourceAtEndIcon,
             get checked() { return settingsStore.copySourcePosition === 'end' },
             onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
           },
