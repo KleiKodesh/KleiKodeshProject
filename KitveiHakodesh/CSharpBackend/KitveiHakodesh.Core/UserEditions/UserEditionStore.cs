@@ -141,7 +141,7 @@ namespace KitveiHakodesh.Core.UserEditions
             AddedAt = r.GetInt64(6),
         };
 
-        private const string SchemaSql = @"
+        internal const string SchemaSql = @"
             CREATE TABLE IF NOT EXISTS user_editions (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 bookId   INTEGER NOT NULL,

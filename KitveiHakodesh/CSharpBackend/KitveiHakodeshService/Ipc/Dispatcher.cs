@@ -1408,8 +1408,8 @@ public sealed class Dispatcher(
     private SeforimDbLibrarySwitcher.SwitchOutcome SwitchLibrary(string path) =>
         SeforimDbLibrarySwitcher.SwitchTo(
             path,
-            onCarriedOver: (source, destination) =>
-                logger.LogInformation("Copied user settings {Source} -> {Destination}", source, destination),
+            onCarriedOver: result =>
+                logger.LogInformation("Merged user settings {Source} -> {Destination}: {Counts}", result.Source, result.Destination, result.ToString()),
             onCarryOverFailed: ex =>
                 logger.LogWarning(ex, "Could not carry user settings over to the new library"));
 

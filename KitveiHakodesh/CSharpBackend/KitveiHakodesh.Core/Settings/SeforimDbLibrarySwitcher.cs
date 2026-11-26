@@ -27,11 +27,11 @@ public static class SeforimDbLibrarySwitcher
     /// Validates <paramref name="path"/>, carries annotations over from the current library and
     /// saves the choice. <paramref name="onCarryOverFailed"/> receives an annotation-copy failure,
     /// which never blocks the switch (the user keeps the old file in place);
-    /// <paramref name="onCarriedOver"/> reports a copy that was made.
+    /// <paramref name="onCarriedOver"/> reports the merge counts per table.
     /// </summary>
     public static SwitchOutcome SwitchTo(
         string path,
-        Action<string, string>? onCarriedOver = null,
+        Action<UserAnnotationDbCarryOver.Result>? onCarriedOver = null,
         Action<Exception>? onCarryOverFailed = null)
     {
         if (string.IsNullOrWhiteSpace(path)) return SwitchOutcome.EmptyPath;
@@ -39,8 +39,8 @@ public static class SeforimDbLibrarySwitcher
 
         try
         {
-            var copied = UserAnnotationDbCarryOver.CopyIfDestinationMissing(SeforimDbPathResolver.Resolve().Path, path);
-            if (copied is { } c) onCarriedOver?.Invoke(c.Source, c.Destination);
+            var merged = UserAnnotationDbCarryOver.MergeInto(SeforimDbPathResolver.Resolve().Path, path);
+            if (merged is not null) onCarriedOver?.Invoke(merged);
         }
         catch (Exception ex)
         {

@@ -130,7 +130,7 @@ namespace KitveiHakodesh.Core.UserAnnotations
         /// Highlights, notes and bookmarks. Highlights and notes anchor to a line and a character range within it, so a
         /// single line can carry several of either.
         /// </summary>
-        private const string SchemaSql = @"
+        internal const string SchemaSql = @"
             CREATE TABLE IF NOT EXISTS user_highlights (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 bookId      INTEGER NOT NULL,

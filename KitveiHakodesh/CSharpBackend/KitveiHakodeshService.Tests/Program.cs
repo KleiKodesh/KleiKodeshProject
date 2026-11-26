@@ -63,6 +63,7 @@ for (int i = 0; i < args.Length; i++)
         case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
         case "--userspace-bench": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Bench(args[++i], args[++i], args.Skip(i + 1).ToArray());
         case "--files-golden": return KitveiHakodeshService.Tests.FilesGoldenRig.Run(args[++i], args[++i], args[++i]);
+        case "--userdb-carryover-selftest": return KitveiHakodeshService.Tests.UserDbCarryOverCheck.Run() == 0 ? 0 : 1;
         case "--notesbook-selftest": return KitveiHakodeshService.Tests.NotesBookCheck.Run() == 0 ? 0 : 1;
         case "--library-selftest": return KitveiHakodeshService.Tests.SeforimLibraryDownloadCheck.SelfTest() == 0 ? 0 : 1;
         case "--library-feed-live": return KitveiHakodeshService.Tests.SeforimLibraryDownloadCheck.FeedLive();
