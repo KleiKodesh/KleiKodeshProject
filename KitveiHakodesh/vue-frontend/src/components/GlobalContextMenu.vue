@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { IconCopy20Regular, IconDocumentArrowRight20Regular } from '@iconify-prerendered/vue-fluent'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 /**
  * App-wide fallback right-click menu. Mounted once at the app root, it offers
@@ -17,6 +18,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
+import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -62,8 +64,8 @@ function onPasteIntoWord(): void {
 }
 
 const items = computed<ContextMenuItem[]>(() => [
-  { label: t('components.copy'), action: onCopy, shortcut: 'Ctrl+C' },
-  { label: t('components.copyIntoWord'), action: onPasteIntoWord },
+  { label: t('components.copy'), icon: IconCopy20Regular, action: onCopy, shortcut: 'Ctrl+C' },
+  { label: t('components.copyIntoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord },
   { type: 'separator' },
   ...copyCleanMenuItems(),
 ])
@@ -107,4 +109,5 @@ onBeforeUnmount(() => hostWindow.document.removeEventListener('contextmenu', onC
 
 <template>
   <ContextMenu ref="menuRef" :items="items" />
+  <SelectionToolbar fallback :items="items" :menu="menuRef" />
 </template>

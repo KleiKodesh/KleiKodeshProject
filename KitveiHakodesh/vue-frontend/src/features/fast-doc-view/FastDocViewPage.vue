@@ -36,6 +36,7 @@ import { useFastDocViewSearch } from './useFastDocViewSearch'
 import { highlightFastDocViewSearchMatches } from './fastDocViewSearchHighlight'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import ContextMenu from '@/components/ContextMenu.vue'
+import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useFastDocViewContextMenu } from './useFastDocViewContextMenu'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
@@ -915,6 +916,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
               @click="onContentClick"
             >
               <ContextMenu ref="contextMenuRef" :items="contextMenu.items" />
+              <SelectionToolbar :container="scrollerElement" :items="contextMenu.items" :menu="contextMenuRef" />
               <WordLinkTooltip
                 v-if="noteTooltip"
                 :key="`note-${noteTooltip.id}`"

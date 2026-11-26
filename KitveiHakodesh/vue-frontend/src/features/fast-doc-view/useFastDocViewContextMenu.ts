@@ -1,3 +1,4 @@
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -45,9 +46,9 @@ export function useFastDocViewContextMenu(options: {
 
   const items: ContextMenuItem[] = [
     { label: t('bookView.selectAll'), action: options.selectAllInContainer, shortcut: 'Ctrl+A' },
-    { label: t('bookView.copy.copy'), action: onCopy, shortcut: 'Ctrl+C' },
-    { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
-    { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+    { label: t('bookView.copy.copy'), icon: IconCopy20Regular, action: onCopy, shortcut: 'Ctrl+C' },
+    { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+    { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
     { type: 'separator' },
     {
       type: 'submenu',

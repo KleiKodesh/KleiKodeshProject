@@ -16,6 +16,7 @@ import { lineIsWhollyBold } from './lineIsWhollyBold'
 import { altTocBreakSources, isAltTocLabelVisible, type AltTocLineLabels } from '../toc/altTocTextLabels'
 import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
+import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
@@ -671,6 +672,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
 <template>
   <div dir="rtl" class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
       :selected-text="errorReportTarget.selectedText"

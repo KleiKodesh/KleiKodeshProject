@@ -43,6 +43,7 @@ import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { t } from '@/i18n'
 import { showToast } from '@/composables/useToast'
 import ContextMenu from '@/components/ContextMenu.vue'
+import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useHostSearchStore } from '@/stores/hostSearchStore'
 import { AnnotationEditorType } from './usePdfEditing'
@@ -670,6 +671,13 @@ function showSideMode(mode: PdfSideMode) {
       @update:script="pdfOcrStore.setScript"
     />
     <ContextMenu ref="contextMenuRef" :items="contextMenu.items.value" />
+    <SelectionToolbar
+      :container="container"
+      :items="contextMenu.items.value"
+      :menu="contextMenuRef"
+      :is-blocked="() => ocr.isActive.value || editing.mode.value !== AnnotationEditorType.NONE"
+      :prepare="contextMenu.prepareForSelection"
+    />
     <PdfPasswordDialog
       v-if="pdf.passwordRequest.value"
       :incorrect="pdf.passwordRequest.value.incorrect"

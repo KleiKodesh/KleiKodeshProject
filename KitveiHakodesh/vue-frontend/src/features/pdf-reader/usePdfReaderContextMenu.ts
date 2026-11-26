@@ -1,5 +1,6 @@
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
-import { ref, onScopeDispose, type Ref } from 'vue'
+import { shallowRef, onScopeDispose, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type ContextMenu from '@/components/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -29,7 +30,7 @@ export function usePdfReaderContextMenu(
   },
 ) {
   const hostWindow = useHostWindow()
-  const items = ref<ContextMenuItem[]>([])
+  const items = shallowRef<ContextMenuItem[]>([])
   // The selection's text when the menu opened; the menu's own copy falls back to it.
   let capturedText = ''
   let menuCopyInProgress = false
@@ -78,12 +79,12 @@ export function usePdfReaderContextMenu(
     const hasText = !!text.trim()
     const list: ContextMenuItem[] = []
     if (hasText) {
-      list.push({ label: t('pdfReader.menu.copy'), action: () => void copySelection(), shortcut: 'Ctrl+C' })
-      list.push({ label: t('pdfReader.menu.copyIntoWord'), action: () => copyIntoWord(text), shortcut: 'Ctrl+V' })
-      list.push({ label: t('pdfReader.menu.searchInLibrary'), action: () => searchSelection(text), shortcut: 'Ctrl+Shift+C' })
-      list.push({ label: t('pdfReader.menu.searchInCatalog'), action: () => searchSelection(text, true) })
+      list.push({ label: t('pdfReader.menu.copy'), icon: IconCopy20Regular, action: () => void copySelection(), shortcut: 'Ctrl+C' })
+      list.push({ label: t('pdfReader.menu.copyIntoWord'), icon: IconDocumentArrowRight20Regular, action: () => copyIntoWord(text), shortcut: 'Ctrl+V' })
+      list.push({ label: t('pdfReader.menu.searchInLibrary'), icon: IconSearch20Regular, action: () => searchSelection(text), shortcut: 'Ctrl+Shift+C' })
+      list.push({ label: t('pdfReader.menu.searchInCatalog'), icon: IconLibrary20Regular, action: () => searchSelection(text, true) })
     }
-    list.push({ label: t('pdfReader.menu.copyPageAsImage'), action: options.copyPageAsImage })
+    list.push({ label: t('pdfReader.menu.copyPageAsImage'), icon: IconImageCopy20Regular, action: options.copyPageAsImage })
     // Read where the selection ends now: clicking the menu may clear it.
     const addNote = hasText ? options.noteAtSelection() : null
     if (addNote) list.push({ label: t('pdfReader.notes.add'), action: addNote })
@@ -107,5 +108,11 @@ export function usePdfReaderContextMenu(
     if (!options.isBlocked()) openAt(e.clientX, e.clientY)
   })
 
-  return { items, selectedText, copyIntoWord, searchSelection }
+  /** Builds the items for the selection as it is now (the selection toolbar, before it shows). */
+  function prepareForSelection() {
+    capturedText = selectedText()
+    items.value = buildItems(capturedText)
+  }
+
+  return { items, selectedText, copyIntoWord, searchSelection, prepareForSelection }
 }

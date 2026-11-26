@@ -1,3 +1,4 @@
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLink20Regular, IconBookmarkAdd20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
 import { watch } from 'vue'
 import type { Ref } from 'vue'
@@ -673,11 +674,11 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   return {
     items: [
       { label: t('bookView.selectAll'), action: selectAllInContainer, shortcut: 'Ctrl+A' },
-      { label: t('bookView.copy.copy'), action: onCopy, shortcut: 'Ctrl+C' },
-      { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
-      { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
-      { label: t('bookView.copy.link'), action: options.onCopyLineLink ?? (() => {}) },
-      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      { label: t('bookView.copy.copy'), icon: IconCopy20Regular, action: onCopy, shortcut: 'Ctrl+C' },
+      { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+      { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+      { label: t('bookView.copy.link'), icon: IconLink20Regular, action: options.onCopyLineLink ?? (() => {}) },
+      { label: t('bookView.bookmarks.add'), icon: IconBookmarkAdd20Regular, action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
       addNoteRow,
       { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },

@@ -15,6 +15,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
+import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import type { CommentaryGroup, CommentaryLine } from './useCommentary'
 import { commentaryGroupKey } from './useCommentary'
@@ -765,6 +766,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
       selection can tell the two panels apart; both carry .commentary-view.
     -->
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" />
     <BookViewErrorReportDialog
       v-if="commentaryErrorReportTarget"
       :selected-text="commentaryErrorReportTarget.selectedText"
