@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using KitveiHakodesh.Core.Common;
 using Microsoft.Data.Sqlite;
 
@@ -27,10 +25,11 @@ namespace KitveiHakodesh.Core.SeforimDb
     ///   book_tree_order(bookId PRIMARY KEY, treeOrder)   - the numbers
     ///   book_tree_order_state(signature)                 - what library content they were built from
     ///
-    /// One companion file PER LIBRARY (a different library has other books and orders). Rebuilt
-    /// whenever the library's content changes: an Otzaria or Zayit update, a patch or a whole new
-    /// download of our own library. The library's file-changed stamp tells us to look again; the
-    /// signature (totals over the rows the walk reads) tells us whether the numbers are still right.
+    /// ONE companion file, for the library that is open. Rebuilt whenever the library changes: a
+    /// switch to another library, an Otzaria or Zayit update, a patch or a whole new download of
+    /// our own library. The library's file-changed stamp tells us to look again; the signature (the
+    /// library's path and totals over the rows the walk reads) tells us whether the numbers are
+    /// still right.
     ///
     /// NO FALLBACK: when the companion cannot be written (the app folder is read-only) there is no
     /// treeOrder - the readers answer nothing, nothing computes the order in memory instead.
@@ -51,15 +50,12 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
-        /// The companion database file of THIS library: inside the app folder, one file per library
-        /// path (a library switch must not read another library's orders).
+        /// The companion database file: ONE file, inside the app folder. It describes the library
+        /// that is open now; switching library makes the signature differ (it names the library), so
+        /// the tables are dropped and rebuilt for the new one - the file never mixes two libraries.
         /// </summary>
-        private string CompanionDatabasePath()
-        {
-            string library = Path.GetFullPath(_databasePath!).ToLowerInvariant();
-            string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(library)))[..16].ToLowerInvariant();
-            return AppFileLocator.ResolveWritablePath(Path.Combine("seforim-companion", "library-" + key + ".db"));
-        }
+        private static string CompanionDatabasePath() =>
+            AppFileLocator.ResolveWritablePath("seforim-companion.db");
 
         /// <summary>
         /// Makes sure the stored tree order exists and matches the library, building it when it
@@ -110,7 +106,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         private void BuildBookTreeOrderIfStale()
         {
             var state = ReadBookTreeOrderState();
-            string signature = LibraryOrderSignature(state);
+            string signature = LibraryOrderSignature(state, Path.GetFullPath(_databasePath!));
             if (state.TablesExist && string.Equals(state.StoredSignature, signature, StringComparison.Ordinal)) return;
 
             string companionPath = CompanionDatabasePath();
@@ -119,13 +115,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
-        /// The library's totals over exactly what the walk reads - which categories exist, under
-        /// which parent, in which sibling order; which books, in which category, in which order,
-        /// which are base texts - written as one string. Weighted by id (in the SQL), so swapping
-        /// two rows' positions changes it.
+        /// Which library this is (its path) and its totals over exactly what the walk reads - which
+        /// categories exist, under which parent, in which sibling order; which books, in which
+        /// category, in which order, which are base texts - written as one string. Weighted by id
+        /// (in the SQL), so swapping two rows' positions changes it. A different library path is a
+        /// different signature: a library switch rebuilds the companion.
         /// </summary>
-        private static string LibraryOrderSignature(BookTreeOrderState state) =>
-            "v1;c:" + string.Join(",", Array.ConvertAll(state.CategoryTotals, n => n.ToString(CultureInfo.InvariantCulture)))
+        private static string LibraryOrderSignature(BookTreeOrderState state, string libraryPath) =>
+            "v2;lib:" + libraryPath.ToLowerInvariant()
+            + ";c:" + string.Join(",", Array.ConvertAll(state.CategoryTotals, n => n.ToString(CultureInfo.InvariantCulture)))
             + ";b:" + string.Join(",", Array.ConvertAll(state.BookTotals, n => n.ToString(CultureInfo.InvariantCulture)));
     }
 }
