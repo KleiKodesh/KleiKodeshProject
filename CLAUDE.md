@@ -62,7 +62,11 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
 # Workflow - commit, pull, push
 
 - Normal work: commit your own files (`git commit -o <paths>`), `git pull`, `git push`.
-- A session on dedicated work (e.g. zmanim, FastDocView) works on its own branch in its own
-  folder (`../KleiKodeshProject-work/<name>`), keeps work in progress in its scratchpad, pushes that branch, and merges into master when a
-  piece is done. It never leaves uncommitted edits in the main folder: they block every other
-  session's pull.
+- Work on master in the main folder by default, and commit each finished piece promptly:
+  uncommitted edits left lying in the main folder block every other session's pull.
+- A separate branch / folder (`../KleiKodeshProject-work/<name>`) only when the user asks, or
+  for long multi-day work that would keep files half-done in the main folder - not as a
+  routine step (user, 2026-11-26: no branch/merge ceremony for normal jobs).
+- Tests are proportional and fast: one targeted check of what a change touched; full suites,
+  sample sweeps and speed numbers only for core changes or when the user asks (long runs in
+  GitHub Actions). QA review of the staged diff before each commit stays.

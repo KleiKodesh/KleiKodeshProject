@@ -252,6 +252,8 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FastDocViewScanArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Scan(a.DocumentId, a.Blocks)));
                 }
+                case "fastDocViewProperties":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Properties(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewClose":
                     fastDocViewDocuments.Close(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId);
                     return RpcResponse.Ok(MsgPack.Ser(new PongResult()));

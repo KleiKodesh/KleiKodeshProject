@@ -219,6 +219,43 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             };
         });
 
+    /// <summary>The document's own properties (title, author, dates, saved statistics - read from its small property part only,
+    /// when the details dialog asks) plus the file's size and file-system dates.</summary>
+    public FastDocViewProperties Properties(string documentId) =>
+        Use(documentId, document =>
+        {
+            WordDocumentProperties p = document.ReadProperties();
+            var result = new FastDocViewProperties
+            {
+                Title = p.Title, Subject = p.Subject, Keywords = p.Keywords, Category = p.Category, Comments = p.Comments,
+                ContentStatus = p.ContentStatus, Author = p.Author, LastModifiedBy = p.LastModifiedBy, Company = p.Company,
+                Manager = p.Manager, Revision = p.Revision, Application = p.Application, Template = p.Template,
+                Created = DateText(p.Created), Modified = DateText(p.Modified), LastPrinted = DateText(p.LastPrinted),
+                Pages = p.Pages, Words = p.Words, Characters = p.Characters, CharactersWithSpaces = p.CharactersWithSpaces,
+                Lines = p.Lines, Paragraphs = p.Paragraphs, TotalEditingMinutes = p.TotalEditingMinutes,
+            };
+            try
+            {
+                var file = new FileInfo(document.FilePath);
+                if (file.Exists)
+                {
+                    result.FileSize = file.Length;
+                    result.FileCreated = DateText(file.CreationTimeUtc);
+                    result.FileModified = DateText(file.LastWriteTimeUtc);
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return result;
+        });
+
+    private static string? DateText(DateTime? date) => date switch
+    {
+        null => null,
+        { Kind: DateTimeKind.Utc } utc => utc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture),
+        { } wallTime => wallTime.ToString("yyyy-MM-dd'T'HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+    };
+
     public void Close(string documentId) => _documents.Close(documentId);
 
     /// <summary>Stops the open the page started with <paramref name="openId"/>, if it is still running. False when none is.</summary>

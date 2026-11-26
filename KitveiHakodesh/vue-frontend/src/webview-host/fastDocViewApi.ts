@@ -26,6 +26,40 @@ export interface FastDocViewSummary {
   sections?: FastDocViewSection[]
 }
 
+/**
+ * What `fastDocViewProperties` returns: the properties the file stores about itself (as Word's File > Info shows
+ * them) plus its size and file-system dates. Absent values are left out. Dates are ISO texts: ending in "Z" for a
+ * known moment, without a zone for a wall-clock time the file stores.
+ */
+export interface FastDocViewProperties {
+  title?: string | null
+  subject?: string | null
+  keywords?: string | null
+  category?: string | null
+  comments?: string | null
+  contentStatus?: string | null
+  author?: string | null
+  lastModifiedBy?: string | null
+  company?: string | null
+  manager?: string | null
+  revision?: string | null
+  application?: string | null
+  template?: string | null
+  created?: string | null
+  modified?: string | null
+  lastPrinted?: string | null
+  pages?: number | null
+  words?: number | null
+  characters?: number | null
+  charactersWithSpaces?: number | null
+  lines?: number | null
+  paragraphs?: number | null
+  totalEditingMinutes?: number | null
+  fileSize?: number | null
+  fileCreated?: string | null
+  fileModified?: string | null
+}
+
 export interface FastDocViewNote {
   kind: 'footnote' | 'endnote'
   number: number
@@ -133,6 +167,8 @@ export interface FastDocViewApi {
    */
   pictureSource(documentId: string, pictureId: string): Promise<string | null>
   close(documentId: string): Promise<void>
+  /** The document's properties, read when the details dialog opens. Optional: a host without it shows only what the summary knows. */
+  properties?(documentId: string): Promise<FastDocViewProperties | null>
 }
 
 /** What `fastDocViewPicture` returns: one picture's bytes. */
@@ -223,4 +259,6 @@ export const fastDocViewApi: FastDocViewApi = {
   close: async (documentId) => {
     await serviceCall('fastDocViewClose', { documentId })
   },
+  properties: async (documentId) =>
+    (await serviceCall<FastDocViewProperties>('fastDocViewProperties', { documentId })) ?? null,
 }

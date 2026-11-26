@@ -183,3 +183,37 @@ public sealed class FastDocViewScanResult
     /// <summary>Page text width per section known so far - a scan can find new sections.</summary>
     public List<FastDocViewSection> Sections { get; set; } = [];
 }
+
+/// <summary>What <c>fastDocViewProperties</c> returns: the document's own properties (FastDocView
+/// WordDocumentProperties - absent values null) plus the file's size and file-system dates. Dates are ISO 8601 texts:
+/// ending in "Z" when the moment is known, without a zone when the file stores only a wall-clock time.</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewProperties
+{
+    public string? Title { get; set; }
+    public string? Subject { get; set; }
+    public string? Keywords { get; set; }
+    public string? Category { get; set; }
+    public string? Comments { get; set; }
+    public string? ContentStatus { get; set; }
+    public string? Author { get; set; }
+    public string? LastModifiedBy { get; set; }
+    public string? Company { get; set; }
+    public string? Manager { get; set; }
+    public string? Revision { get; set; }
+    public string? Application { get; set; }
+    public string? Template { get; set; }
+    public string? Created { get; set; }
+    public string? Modified { get; set; }
+    public string? LastPrinted { get; set; }
+    public int? Pages { get; set; }
+    public int? Words { get; set; }
+    public int? Characters { get; set; }
+    public int? CharactersWithSpaces { get; set; }
+    public int? Lines { get; set; }
+    public int? Paragraphs { get; set; }
+    public int? TotalEditingMinutes { get; set; }
+    public long? FileSize { get; set; }
+    public string? FileCreated { get; set; }
+    public string? FileModified { get; set; }
+}
