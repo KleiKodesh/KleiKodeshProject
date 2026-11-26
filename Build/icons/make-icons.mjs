@@ -37,7 +37,7 @@ const ICONS = [
     ],
   },
   {
-    // Redrawn from the old 500px KleiKodesh_Main.png: box as exact shapes, wrench and quill traced.
+    // Redrawn from the old 500px KleiKodesh_Main.png: box and wrench exact shapes, quill fitted curves.
     source: 'KleiKodeshVsto/Resources/KleiKodesh_Main.svg',
     targets: ['KleiKodeshVsto/KleiKodesh_Main.ico', 'Build/installer-rs/assets/kleikodesh.ico'],
   },
