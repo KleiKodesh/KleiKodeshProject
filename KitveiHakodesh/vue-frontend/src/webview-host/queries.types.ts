@@ -60,6 +60,9 @@ export interface CategoryRow {
 
 /** Per-book metadata plus the connection-kind flags the book-view toolbar switches on. */
 export interface BookInfo {
+  title?: string
+  /** The book's catalog categories, root first. */
+  categoryPath?: string[]
   totalLines: number
   hasTeamim: number
   hasTargumConnection: number
@@ -69,6 +72,10 @@ export interface BookInfo {
   hasOtherConnection: number
   /** 1 when the library marks the book a commentary: clean text then accepts plain headings. */
   isCommentary?: number
+  /** The publisher's limits; null/absent = none. */
+  protection?: BookProtection | null
+  /** The publisher's credit line shown above the text; null/absent = none. */
+  publisherBanner?: string | null
 }
 
 /**
@@ -287,6 +294,8 @@ export interface WordLinkAnchor {
   targetLineId: number
   targetLineIndex: number
   sourceBookId: number
+  /** The target book's title, joined in the query. */
+  targetBookTitle?: string | null
   connectionTypeId: number
   // Client-assigned by useWordLinkAnchors (NOT from the wire): per-book fallback
   // treatment slot and runtime-chosen enclosure glyphs. Absent → the splicer's
@@ -299,6 +308,8 @@ export interface WordLinkAnchor {
 /** One distinct (commentary book, anchor label) pair of a source book's word-link anchors. */
 export interface WordLinkTargetRow {
   targetBookId: number
+  /** The commentary book's title, joined in the query (null if the book row is missing). */
+  targetTitle?: string | null
   label: string | null
   connectionTypeId: number
   orderIndex: number

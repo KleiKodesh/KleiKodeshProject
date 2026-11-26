@@ -48,7 +48,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             SELECT totalLines, hasTeamim,
                    hasTargumConnection, hasReferenceConnection, hasSourceConnection,
                    hasCommentaryConnection, hasOtherConnection,
-                   {(hasDependenceType ? "dependenceType = 'commentary'" : "0")} AS isCommentary
+                   {(hasDependenceType ? "dependenceType = 'commentary'" : "0")} AS isCommentary,
+                   title, categoryId
             FROM book
             WHERE id = @id";
 
@@ -430,17 +431,19 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetWordLinkAnchorsForLines(int count, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-                   l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId
+                   l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId, b.title
             FROM link l
             JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+            LEFT JOIN book b ON b.id = l.targetBookId
             WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
             ORDER BY l.sourceLineId, la.charStart"
             : $@"
             SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-                   l.targetBookId, l.targetLineId, ln.lineIndex AS targetLineIndex, l.sourceBookId
+                   l.targetBookId, l.targetLineId, ln.lineIndex AS targetLineIndex, l.sourceBookId, b.title
             FROM link l
             JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
             JOIN line ln ON ln.id = l.targetLineId
+            LEFT JOIN book b ON b.id = l.targetBookId
             WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
             ORDER BY l.sourceLineId, la.charStart";
 
@@ -451,9 +454,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// (the labels reveal which glyphs the book's printed signs already use, so app-assigned
         /// wrappers never imitate them). Guard behind the link_anchor probe like the query above.</summary>
         public const string GetWordLinkAnchorTargetsForBook = @"
-            SELECT DISTINCT l.targetBookId, la.label
+            SELECT DISTINCT l.targetBookId, la.label, b.title
             FROM link l
             JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+            LEFT JOIN book b ON b.id = l.targetBookId
             WHERE l.sourceBookId = @bookId
               AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
             ORDER BY l.targetBookId";
@@ -707,6 +711,32 @@ namespace KitveiHakodesh.Core.SeforimDb
             )
             GROUP BY groupKey";
         }
+
+        /// <summary>A category's chain, root first: walks parentId up from @categoryId only.
+        /// Depth-capped so a parent loop in a broken DB cannot run away.</summary>
+        public const string GetCategoryPath = @"
+            WITH RECURSIVE chain(id, parentId, title, depth) AS (
+                SELECT id, parentId, title, 0 FROM category WHERE id = @categoryId
+                UNION ALL
+                SELECT c.id, c.parentId, c.title, chain.depth + 1
+                FROM category c JOIN chain ON c.id = chain.parentId
+                WHERE chain.depth < 64)
+            SELECT title FROM chain ORDER BY depth DESC";
+
+        /// <summary>For each given book: its title and its category chain (one row per category,
+        /// root first; one row with a NULL category for a book with none).</summary>
+        public static string GetBookSummaryPaths(int count) => $@"
+            WITH RECURSIVE chain(bookId, id, parentId, title, depth) AS (
+                SELECT b.id, c.id, c.parentId, c.title, 0
+                FROM book b LEFT JOIN category c ON c.id = b.categoryId
+                WHERE b.id IN ({InPlaceholders("p", count)})
+                UNION ALL
+                SELECT chain.bookId, c.id, c.parentId, c.title, chain.depth + 1
+                FROM category c JOIN chain ON c.id = chain.parentId
+                WHERE chain.depth < 64)
+            SELECT chain.bookId, b.title, chain.title
+            FROM chain JOIN book b ON b.id = chain.bookId
+            ORDER BY chain.bookId, chain.depth DESC";
 
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";

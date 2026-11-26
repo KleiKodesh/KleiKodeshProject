@@ -16,7 +16,6 @@ import { storeToRefs } from 'pinia'
 import { IconLink20Regular, IconLinkDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { submenuRow } from '@/composables/useToolbarMoreMenu'
 import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
@@ -31,7 +30,6 @@ const props = defineProps<{
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const wordLinkTargets = injectBookWordLinkTargets()
-const booksDataStore = useBooksDataStore()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 
@@ -148,12 +146,12 @@ async function loadOnce(attempt = 0) {
     }
     return
   }
-  const ids = [...new Set(targets.map((t) => t.targetBookId))]
-  commentaries.value = ids
-    .map((id) => ({
-      bookId: id,
-      title: booksDataStore.allBooksMap.get(id)?.title ?? `#${id}`,
-    }))
+  const titleById = new Map<number, string>()
+  for (const t of targets) {
+    if (!titleById.has(t.targetBookId)) titleById.set(t.targetBookId, t.targetTitle ?? `#${t.targetBookId}`)
+  }
+  commentaries.value = [...titleById]
+    .map(([bookId, title]) => ({ bookId, title }))
     .sort((a, b) => a.title.localeCompare(b.title, 'he'))
   loadedForBookId.value = bookId
   loaded.value = true

@@ -1,7 +1,7 @@
 import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineDecorationsForLines, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
-import type { BookVersionRow, HebrewBooksEdition, LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
+import type { BookProtection, BookVersionRow, HebrewBooksEdition, LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
 import { applyWordLinkTreatments, type WordLinkTreatmentsFor } from './useWordLinkAnchors'
 import { LinesTable } from './linesTable'
 import type { LineItem } from './linesTable'
@@ -76,6 +76,11 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   // it arrives, or on a library without the column (the bar then uses measured heights).
   const lineCharacterCounts = ref<Uint16Array | Int32Array | null>(null)
   const hasTeamim = ref(false)
+  /** The book's title, its publisher's limits and credit line, from its own metadata call. */
+  const title = ref('')
+  const categoryPath = ref<string[]>([])
+  const protection = ref<BookProtection | null>(null)
+  const publisherBanner = ref<string | null>(null)
   const isCommentary = ref(false)
 
   // Alternate versions: an OVERLAY over the same line ids (only the text changes), so
@@ -341,6 +346,10 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
     isCommentary.value = !!(book?.isCommentary)
+    title.value = book?.title ?? ''
+    categoryPath.value = book?.categoryPath ?? []
+    protection.value = book?.protection ?? null
+    publisherBanner.value = book?.publisherBanner ?? null
     // Fail OPEN on a metadata error: false would silently hide the controls.
     hasCommentaries.value = metadataFailed || !!(
       book?.hasTargumConnection ||
@@ -388,7 +397,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   return {
     lineDecorations,
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
-    hasCommentaries, hasRelatedBooks, hasTeamim, isCommentary, lineCharacterCounts,
+    hasCommentaries, hasRelatedBooks, hasTeamim, isCommentary, title, categoryPath, protection, publisherBanner, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
     hebrewBooksTalmudPdfPath,

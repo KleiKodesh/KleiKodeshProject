@@ -1,14 +1,14 @@
 /**
  * A full-text hit's REFERENCE — its book title and TOC path — resolved on demand.
  *
- * Hits carry only numbers (see FullTextSearchResult): the title comes from the catalog the
- * books store already holds, keyed by bookId; the TOC path is fetched by line id
+ * Hits carry only numbers (see FullTextSearchResult): the title is fetched by book id
+ * (stores/bookSummaries) for the rows on screen; the TOC path is fetched by line id
  * (getTocPathsForLines) for the rows the windowed scroller actually renders and kept in a
  * small LRU — the same shape as the on-demand snippets in fullTextSearchSnippets.ts. The
  * search itself never reads TOC data.
  */
 import { shallowRef } from 'vue'
-import { useBooksDataStore } from '@/stores/booksDataStore'
+import { bookTitle, requestBookTitles } from '@/stores/bookSummaries'
 import { getTocPathsForLines } from '@/webview-host/seforimApi'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import { isNoteId, sourceBookOf, sourceLineOf } from './noteIds'
@@ -16,10 +16,10 @@ import { isNoteId, sourceBookOf, sourceLineOf } from './noteIds'
 /** Title prefix of a virtual notes book (issue #13): the Hebrew word for "notes". */
 const NOTES_BOOK_PREFIX = '\u05D4\u05E2\u05E8\u05D5\u05EA '
 
-/** The hit's book title from the catalog; '' for a book the catalog does not list. A hit in a
- *  notes book reads "notes " + its source book's title. */
+/** The hit's book title, fetched with its row (requestReferences); '' until it arrives. A hit
+ *  in a notes book reads "notes " + its source book's title. */
 export function bookTitleOf(hit: FullTextSearchResult): string {
-  const title = useBooksDataStore().allBooksMap.get(sourceBookOf(hit.bookId))?.title ?? ''
+  const title = bookTitle(sourceBookOf(hit.bookId))
   return isNoteId(hit.bookId) && title ? NOTES_BOOK_PREFIX + title : title
 }
 
@@ -61,6 +61,7 @@ export function tocPathOf(hit: FullTextSearchResult): string | undefined {
  * windowed scroller is about to mount, on every range change.
  */
 export function requestReferences(hits: readonly FullTextSearchResult[]): void {
+  void requestBookTitles(hits.map((hit) => sourceBookOf(hit.bookId)))
   const lineIds: number[] = []
   for (const hit of hits) {
     const lineId = sourceLineOf(hit.lineId)

@@ -357,6 +357,12 @@ public sealed class EnclosingTocPathResult { public List<EnclosingTocPathRow> Ro
 public sealed class LineBooksResult { public List<LineBookRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookIdsArgs { public List<int> BookIds { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookSummariesResult { public List<BookSummaryRow> Rows { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIdArgs { public int LineId { get; set; } }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

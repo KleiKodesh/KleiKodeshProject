@@ -8,7 +8,7 @@ import { resolveHomeDailyLearningTarget, type HomeDailyLearningResolvedTarget } 
 import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
 import { bookResumePath } from './homeResumePath'
-import { useBooksDataStore } from '@/stores/booksDataStore'
+import { bookCategoryPath } from '@/stores/bookSummaries'
 import type { Tab } from '@/stores/tabStore'
 
 const DROPDOWN_ONLY_KEYS = new Set<HomeDailyLearningItem['key']>([
@@ -120,7 +120,6 @@ function loadTodayItems(dateKey: string): Promise<DailyLearningItemWithTarget[]>
 
 function useDailyLearningState() {
   const paneNavigation = usePaneNavigation()
-  const booksDataStore = useBooksDataStore()
   const now = useNow({ interval: 60_000 })
   // Recompute only when the civil date changes, not every minute tick.
   const todayKey = computed(() => now.value.toDateString())
@@ -208,11 +207,7 @@ function useDailyLearningState() {
       key: `daily:${item.key}`,
       // Shown exactly like a history card: no cycle label, just book + path.
       title: item.resolved.bookTitle,
-      path: bookResumePath(
-        booksDataStore.allBooksMap.get(item.resolved.bookId),
-        item.resolved.bookTitle,
-        item.location,
-      ),
+      path: bookResumePath(bookCategoryPath(item.resolved.bookId), item.resolved.bookTitle, item.location),
       icon: icon.icon24,
       color: icon.color,
       open: (openInNewTab) => open(item, openInNewTab),

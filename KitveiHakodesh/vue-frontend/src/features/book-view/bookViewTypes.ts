@@ -83,6 +83,8 @@ export interface PinnedCommentaryGroup {
   bookId: number
   sectionLabel: string      // e.g. "מפרשים"
   subSectionLabel: string   // e.g. "ראשונים", or "" if none
+  /** The group's title as shown, kept so the header can show it while the list reloads. */
+  bookTitle?: string
   /**
    * True when the READER put the panel on this book (scrolled to it, picked it
    * from the header toolbar, navigated to it); false/absent when it was derived

@@ -419,6 +419,7 @@ export async function getLineDecorationsForLines(
 /** A word-link target's hover preview, resolved by the service: see WordLinkPreviewResult. */
 export interface WordLinkPreview {
   bookId: number
+  bookTitle: string
   lineIndex: number
   /** '' = nothing to show. */
   content: string
@@ -537,6 +538,19 @@ export async function getTocPathsForLines(lineIds: number[]): Promise<Map<number
 /** triples = flat [groupKey, firstLineId, lastLineId, …]. */
 export async function getEnclosingTocPathForLineRanges(triples: number[]): Promise<{ groupKey: number; bookId: number; tocPath: string }[]> {
   return (await seforimOp<{ rows: { groupKey: number; bookId: number; tocPath: string }[] }>('getEnclosingTocPathForLineRanges', { triples })).rows
+}
+
+export interface BookSummary {
+  id: number
+  title: string
+  /** The book's catalog categories, root first. */
+  categoryPath: string[]
+}
+
+/** Title and catalog path of the given books; ids the library does not have are absent. */
+export async function getBookSummaries(bookIds: number[]): Promise<BookSummary[]> {
+  if (!bookIds.length) return []
+  return (await seforimOp<{ rows: BookSummary[] }>('getBookSummaries', { bookIds })).rows
 }
 
 export async function getBookIdsForLines(lineIds: number[]): Promise<{ lineId: number; bookId: number }[]> {

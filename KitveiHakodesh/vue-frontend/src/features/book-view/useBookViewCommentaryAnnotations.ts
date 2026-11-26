@@ -17,7 +17,6 @@ import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useLineNotes } from './lines/useLineNotes'
 import { useCopyExportData } from './lines/useCopyExportData'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 
 type GroupsForDisplay = Parameters<typeof useCommentaryHighlights>[0] extends () => infer T ? T : never
 
@@ -40,7 +39,7 @@ export function useBookViewCommentaryAnnotations(
   // Word-level link anchors for commentary lines (they are source lines of their own
   // links, e.g. a Mishnah Berurah line citing Chosen Mishpat). Schedule-driven from
   // CommentaryView's virtualizer watcher, same as notes.
-  const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad, loadWordLinkAnchorsForLines } =
+  const { getWordLinkAnchorsForLine, getWordLinkTargetBookTitle, scheduleWordLinkAnchorsLoad, loadWordLinkAnchorsForLines } =
     useWordLinkAnchors()
 
   // Inline notes (line_note) of commentary lines - schedule-driven, same as word links.
@@ -49,12 +48,11 @@ export function useBookViewCommentaryAnnotations(
   // What copy-with-notes needs beyond the rendered markup — built here because this
   // is where the commentary's lazy note/citation stores live. CommentaryView receives
   // the two entry points as props and hands them to its copy menu.
-  const booksDataStore = useBooksDataStore()
   const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCopyExportData({
     loadNotes: loadNotesForLines,
     loadWordLinkAnchors: loadWordLinkAnchorsForLines,
     getWordLinkAnchorsForLine,
-    getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+    getBookTitle: getWordLinkTargetBookTitle,
   })
 
   const { commentaryTocPaths } = useCommentaryTocPaths(

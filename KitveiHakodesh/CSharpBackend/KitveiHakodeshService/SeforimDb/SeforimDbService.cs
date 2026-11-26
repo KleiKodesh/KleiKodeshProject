@@ -230,6 +230,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<EnclosingTocPathRow> GetEnclosingTocPathForLineRanges(List<int> triples) =>
         Run(() => _queries.GetEnclosingTocPathForLineRanges(triples), new List<EnclosingTocPathRow>(), "getEnclosingTocPathForLineRanges");
 
+    public List<BookSummaryRow> GetBookSummaries(List<int> bookIds) =>
+        Run(() => _queries.GetBookSummaries(bookIds), new List<BookSummaryRow>(), "getBookSummaries");
+
     public List<LineBookRow> GetBookIdsForLines(List<int> lineIds) =>
         Run(() => _queries.GetBookIdsForLines(lineIds), new List<LineBookRow>(), "getBookIdsForLines");
 

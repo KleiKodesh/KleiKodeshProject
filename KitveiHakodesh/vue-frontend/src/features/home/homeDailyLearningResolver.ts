@@ -1,13 +1,13 @@
-import { useBooksDataStore } from '@/stores/booksDataStore'
+import { bookTitle, requestBookTitles } from '@/stores/bookSummaries'
 import {
+  findBooksByName,
   findLineByHeRefSuffix,
   findLineByPageMarker,
   getAllAltTocEntries,
   getAllTocEntries,
   getAltTocStructures,
 } from '@/webview-host/seforimApi'
-import { buildBookTitleIndex, findTocPathEntry, pickBook, type BookTitleIndex } from './homeDailyLearningBookMatch'
-import type { BookRow } from '@/webview-host/queries.types'
+import { findTocPathEntry } from './homeDailyLearningBookMatch'
 import type { HomeDailyLearningTarget } from './homeDailyLearningTypes'
 
 /** A daily-learning target resolved against the library: the book to open and, when found, the TOC entry. */
@@ -18,36 +18,21 @@ export interface HomeDailyLearningResolvedTarget {
   tocLineIndex?: number
 }
 
-// Folded-title index per loaded book list (the store swaps the array when the library changes).
-const titleIndexes = new WeakMap<readonly BookRow[], BookTitleIndex<BookRow>>()
-
-function titleIndexFor(books: readonly BookRow[]): BookTitleIndex<BookRow> {
-  let index = titleIndexes.get(books)
-  if (!index) titleIndexes.set(books, (index = buildBookTitleIndex(books)))
-  return index
-}
-
 /**
- * Resolve a daily-learning target BY NAME against the loaded catalog, then walk its TOC
- * path. Returns null only when the book is not in the library (the card is hidden); a
- * missing TOC entry still opens the book at its start. Throws when the library or the
- * service can't answer, so callers can tell "not there" from "try again".
+ * Resolve a daily-learning target BY NAME (the service's findBooksByName: the same folding
+ * and ranking as homeDailyLearningBookMatch.pickBook), then walk its TOC path. Returns null
+ * only when the book is not in the library (the card is hidden); a missing TOC entry still
+ * opens the book at its start. Throws when the library or the service can't answer, so
+ * callers can tell "not there" from "try again".
  */
 export async function resolveHomeDailyLearningTarget(
   target: HomeDailyLearningTarget,
 ): Promise<HomeDailyLearningResolvedTarget | null> {
-  const store = useBooksDataStore()
-  await store.ensureLoaded()
-  if (!store.loaded) throw new Error(store.error ?? 'Book list not loaded')
-
-  const titleIndex = titleIndexFor(store.allBooks)
-  let book: BookRow | undefined
-  for (const name of target.books) {
-    book = pickBook(titleIndex, name)
-    if (book) break
-  }
-  if (!book) return null
-  const found = { bookId: book.id, bookTitle: book.title }
+  const [bookId] = await findBooksByName([target.books])
+  if (!bookId) return null
+  await requestBookTitles([bookId])
+  const found = { bookId, bookTitle: bookTitle(bookId) }
+  const book = { id: bookId }
   if (!target.tocPath.length) return withLineAnchor(found, target)
 
   const mainEntries = await getAllTocEntries(book.id)

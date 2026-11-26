@@ -5,11 +5,9 @@ import OtzariaAddinIcon from '@/features/websites/OtzariaAddinIcon.vue'
 import { displayHost } from '@/features/websites/websitesList'
 import { storeToRefs } from 'pinia'
 import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
-import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
 import { useTabStore } from '@/stores/tabStore'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { locationKey, type NavLocation } from '@/stores/navLocation'
 import { useRecentlyOpenedStore, peekRecentlyOpenedList, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import {
@@ -46,7 +44,6 @@ export interface HomeHistoryCardActions {
 export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
   const recentlyOpenedStore = useRecentlyOpenedStore()
   const frequentFoldersStore = useFrequentFoldersStore()
-  const booksDataStore = useBooksDataStore()
   const tabStore = useTabStore()
   const pathDisplay = useLocalPathDisplayStore()
   const { showRecentlyOpened, showFrequentFolders } = storeToRefs(useSettingsStore())
@@ -85,7 +82,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     if (entry.route === '/book-view' && entry.bookId !== undefined) {
       // The entry has the identity fields locationKey reads; it is not a full location.
       const tocPath = tocPathByDocumentKey.value.get(locationKey(entry as unknown as NavLocation))
-      return bookResumePath(booksDataStore.allBooksMap.get(entry.bookId), catalogBookTitle(entry), tocPath)
+      return bookResumePath(entry.categoryPath ?? [], catalogBookTitle(entry), tocPath)
     }
     if (entry.route === '/web-view' && entry.webUrl) return displayHost(entry.webUrl)
     return pathDisplay.pathOf(entry.localFilePath, false) || entry.localFilePath || entry.localFileName || ''
@@ -146,8 +143,6 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     { immediate: true },
   )
 
-  // The category path needs the catalog; load it once a database is available.
-  watch(dbReady, (ready) => { if (ready) void booksDataStore.ensureLoaded() }, { immediate: true })
 
   onMounted(() => {
     // Not awaited by the page's focus logic — a cold first IndexedDB read is slow.

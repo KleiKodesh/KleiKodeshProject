@@ -167,6 +167,9 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class BookInfo
     {
+        public string Title { get; set; } = "";
+        /// <summary>The book's catalog categories, root first.</summary>
+        public List<string> CategoryPath { get; set; } = new();
         public int TotalLines { get; set; }
         public int HasTeamim { get; set; }
         public int HasTargumConnection { get; set; }
@@ -176,6 +179,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int HasOtherConnection { get; set; }
         /// <summary>1 when the library marks the book a commentary (book.dependenceType).</summary>
         public int IsCommentary { get; set; }
+        /// <summary>The publisher's limits (see <see cref="BookRow.Protection"/>). Null = none.</summary>
+        public BookProtection? Protection { get; set; }
+        /// <summary>The publisher's credit line (see <see cref="BookRow.PublisherBanner"/>). Null = none.</summary>
+        public string? PublisherBanner { get; set; }
     }
 
     /// <summary>A streamed line row — matches { id, lineIndex, content } in fetchRange().</summary>
@@ -291,6 +298,8 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int TargetLineId { get; set; }
         public int TargetLineIndex { get; set; }
         public int SourceBookId { get; set; }
+        /// <summary>The target book's title, joined in the query.</summary>
+        public string? TargetBookTitle { get; set; }
     }
 
     /// <summary>One inline note (footnote) of a line, from Otzaria's `line_note` table (schema 7+).
@@ -331,6 +340,8 @@ namespace KitveiHakodesh.Core.SeforimDb
     {
         public int TargetBookId { get; set; }
         public string? Label { get; set; }
+        /// <summary>The commentary book's title, joined in the query.</summary>
+        public string? TargetTitle { get; set; }
     }
 
     /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
@@ -363,6 +374,7 @@ namespace KitveiHakodesh.Core.SeforimDb
     public sealed class WordLinkPreviewResult
     {
         public int BookId { get; set; }
+        public string BookTitle { get; set; } = "";
         public int LineIndex { get; set; }
         public string Content { get; set; } = "";
         public string TocPath { get; set; } = "";
@@ -428,6 +440,15 @@ namespace KitveiHakodesh.Core.SeforimDb
 
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
+
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class BookSummaryRow
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        /// <summary>The book's catalog categories, root first.</summary>
+        public List<string> CategoryPath { get; set; } = new();
+    }
 
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LineBookRow { public int LineId { get; set; } public int BookId { get; set; } }

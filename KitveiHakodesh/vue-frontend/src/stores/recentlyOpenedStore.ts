@@ -32,6 +32,8 @@ export interface RecentlyOpenedEntry extends PopularityScored {
   title: string
   /** Present for /book-view entries. */
   bookId?: number
+  /** /book-view entries: the book's catalog categories (root first) when last opened. */
+  categoryPath?: string[]
   /** Present for /pdf-view, /html-view, /fast-doc-view entries that are local files. */
   localFilePath?: string
   /** Present for HebrewBooks /pdf-view entries (identified by HB book id). */
@@ -338,6 +340,8 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
         ? {
             ...baseEntry,
             ...(existing.pinned ? { pinned: true } : {}),
+            // Kept until the book view records this open's own (recordBookDetails).
+            ...(existing.categoryPath && existing.bookId === bookId ? { categoryPath: existing.categoryPath } : {}),
             score: scoreAfterVisit(migrateEntry(existing), now),
             scoredAt: now,
             lastVisitedAt: now,
@@ -355,6 +359,22 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
       const updated = bump(list)
       _cache = updated
       idbSaveList(updated)
+    })
+  }
+
+  /**
+   * Stores what the book view learned once the book opened: its catalog path, and its title
+   * when the entry was recorded without one. Every open refreshes it, so the entry always
+   * holds the book as it was when last read.
+   */
+  function recordBookDetails(bookId: number, title: string, categoryPath: string[]): void {
+    const key = `book:${bookId}`
+    const apply = (list: RecentlyOpenedEntry[]) =>
+      list.map((e) => (e.key === key ? { ...e, categoryPath, ...(e.title ? {} : { title }) } : e))
+    void ensureLoaded().then((list) => {
+      if (!list.some((e) => e.key === key)) return
+      _cache = apply(list)
+      idbSaveList(_cache)
     })
   }
 
@@ -390,5 +410,5 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     return sortPinnedFirst(_cache)
   }
 
-  return { getList, trackNavigation, togglePin, removeEntry }
+  return { getList, trackNavigation, recordBookDetails, togglePin, removeEntry }
 })

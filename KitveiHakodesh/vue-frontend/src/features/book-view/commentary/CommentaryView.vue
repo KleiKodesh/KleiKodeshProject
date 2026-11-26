@@ -45,7 +45,6 @@ import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
 import BookViewScrollbarTocTooltip from '../lines/BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from '../lines/useBookViewScrollbarTocTooltip'
 import { useBookViewAbbrevTooltip } from '../lines/useBookViewAbbrevTooltip'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { teamimFontStyle } from '@/utils/teamimFont'
 
@@ -777,7 +776,6 @@ watch(() => props.loading, (busy) => {
 
 // ── Word-level links (hover preview + click-through) ─────────────────────────
 
-const booksDataStore = useBooksDataStore()
 const {
   wordLinkTooltip,
   closeWordLinkTooltip,
@@ -785,7 +783,6 @@ const {
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
 } = useWordLinkTooltip(scrollerEl, {
-  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
 })
 

@@ -44,7 +44,7 @@ function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
  */
 export function buildPin(bookId: number, groups: CommentaryGroup[], chosen = true): PinnedCommentaryGroup {
   const group = groups.find((g) => g.bookId === bookId)
-  return { bookId, sectionLabel: group?.sectionLabel ?? '', subSectionLabel: group?.subSectionLabel ?? '', chosen }
+  return { bookId, sectionLabel: group?.sectionLabel ?? '', subSectionLabel: group?.subSectionLabel ?? '', bookTitle: group?.bookTitle, chosen }
 }
 
 /**
@@ -120,7 +120,8 @@ export function usePinnedCommentary(
 
   /** The reader moved this panel to a commentator (scrolled or picked). */
   function setCommentator(group: { bookId: number; sectionLabel: string; subSectionLabel: string }) {
-    pinnedCommentaryGroup.value = { ...group, chosen: true }
+    const bookTitle = groups().find((g) => g.bookId === group.bookId)?.bookTitle
+    pinnedCommentaryGroup.value = { ...group, bookTitle, chosen: true }
   }
 
   /** The reader picked this commentator (header toolbar). */

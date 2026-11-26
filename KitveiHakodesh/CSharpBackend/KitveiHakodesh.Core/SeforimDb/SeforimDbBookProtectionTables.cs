@@ -54,6 +54,31 @@ namespace KitveiHakodesh.Core.SeforimDb
             }
         }
 
+        /// <summary>The same two fields for one book (the book view's own metadata call).</summary>
+        private static void AttachBookProtection(SqliteConnection conn, int bookId, BookInfo book)
+        {
+            if (HasColumns(conn, "book_protection", "bookId", "level"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT level FROM book_protection WHERE bookId = @bookId";
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                if (cmd.ExecuteScalar() is long level && level > 0)
+                    book.Protection = BookProtection.ForLevel((int)level);
+            }
+            if (HasColumns(conn, "book_banner", "bookId", "bannerId") && HasColumns(conn, "banner", "id", "text"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SelectBookBanners + " WHERE bb.bookId = @bookId";
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                using var r = cmd.ExecuteReader();
+                if (r.Read() && !r.IsDBNull(1) && !r.IsDBNull(2))
+                {
+                    string banner = ExpandBannerTitle(r.GetString(2), r.GetString(1));
+                    if (banner.Trim().Length > 0) book.PublisherBanner = banner;
+                }
+            }
+        }
+
         private static bool HasColumns(SqliteConnection conn, string table, params string[] columns)
         {
             if (!TableExists(conn, table)) return false;

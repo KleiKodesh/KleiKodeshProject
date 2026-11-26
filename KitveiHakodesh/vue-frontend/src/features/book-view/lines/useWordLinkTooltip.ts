@@ -97,8 +97,7 @@ export interface LinkPreviewSource {
 export function useWordLinkTooltip(
   scrollerEl: Ref<HTMLElement | null>,
   opts: {
-    getBookTitle: (bookId: number) => string
-    onNavigate: (target: WordLinkTarget) => void
+    onNavigate: (target: WordLinkTarget, bookTitle: string) => void
   },
 ) {
   /** The navigation target of a link element. An inline ref names only the line, so its
@@ -154,7 +153,7 @@ export function useWordLinkTooltip(
     if (!isCurrent() || !found.content) return null
     const section = found.section
     return {
-      bookTitle: opts.getBookTitle(found.bookId),
+      bookTitle: found.bookTitle,
       // The line's full path is the more specific; the section heading stands in when the
       // line has no line_toc row of its own.
       tocPath: found.tocPath || (section ? section.tocText : ''),
@@ -178,8 +177,12 @@ export function useWordLinkTooltip(
     preview,
     activate: (el) => {
       void resolveTarget(el)
-        .then((target) => {
-          if (target) opts.onNavigate(target)
+        .then(async (target) => {
+          if (!target) return
+          // The hover already asked for this line's preview (held in recentPreviews), and
+          // it carries the book's title: the new tab's name.
+          const bookTitle = (await previewFor(target.lineId).catch(() => null))?.bookTitle ?? ''
+          opts.onNavigate(target, bookTitle)
         })
         .catch(() => {})
     },

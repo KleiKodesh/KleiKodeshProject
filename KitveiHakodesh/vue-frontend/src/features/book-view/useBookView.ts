@@ -26,6 +26,7 @@ import type { TocBridge } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
@@ -158,7 +159,7 @@ export function useBookView(
   const {
     lineDecorations,
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
-    hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, lineCharacterCounts,
+    hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, title: bookTitleFromLibrary, categoryPath: bookCategoryPath, protection: bookProtection, publisherBanner, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions, hebrewBooksTalmudPdfPath,
   } = useLines(() => bookId, {
@@ -170,6 +171,15 @@ export function useBookView(
   // Warm up the connection type ID table immediately — single tiny query that must
   // resolve before any line-tap commentary load fires its reverse queries.
   void ensureConnectionTypeNamesLoaded()
+
+  // A tab opened without a name (the caller only had the book's id) takes the book's own
+  // title once its metadata arrives - nothing else would ever fill it in.
+  watch(bookTitleFromLibrary, (title) => {
+    const tab = tabStore.tabs.find((t) => t.id === tabId)
+    if (title && tab && tab.bookId === bookId && !tab.title) tabStore.updateTabWithoutHistory(tabId, { title })
+    // The recents entry keeps the book as it was when last opened (home card path).
+    if (title && bookId != null) useRecentlyOpenedStore().recordBookDetails(bookId, title, bookCategoryPath.value)
+  })
 
   // Warm the catalog + commentary metadata in the background too. The first
   // commentary toggle otherwise pays for both (the app's biggest payloads)
@@ -587,14 +597,10 @@ export function useBookView(
   }
 
   function openBookTarget(targetBookId: number, lineIndex: number | undefined) {
-    // Resolve the title from the global books map, not the commentary groups:
-    // a word-link citation usually targets a book that is NOT commenting on the
-    // current line, and an empty title here is never rewritten — the tab and
-    // breadcrumb keep a blank title with a stray chevron beside it.
+    // The commentary list's title when the book is in it; a word-link citation usually
+    // targets a book that is not, and then the opened book view names its own tab.
     paneNavigation.openBookTarget({
-      title: booksDataStore.allBooksMap.get(targetBookId)?.title
-        ?? groups.value.find((group) => group.bookId === targetBookId)?.bookTitle
-        ?? '',
+      title: groups.value.find((group) => group.bookId === targetBookId)?.bookTitle ?? '',
       route: '/book-view',
       bookId: targetBookId,
       openTocLineIndex: lineIndex,
@@ -815,6 +821,8 @@ export function useBookView(
     // book metadata
     bookHasTeamim,
     bookIsCommentary,
+    bookProtection,
+    publisherBanner,
     // alternate versions (empty for most books — the toolbar control hides)
     versions, activeVersionId, selectVersion, versionPersistState,
     // scanned editions: catalog suggestions on HebrewBooks, and Otzaria's tractate PDF (Talmud)

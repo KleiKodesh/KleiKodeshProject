@@ -144,8 +144,13 @@ namespace KitveiHakodesh.Core.SeforimDb
                     HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
                     HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
                     IsCommentary = r.IsDBNull(7) ? 0 : r.GetInt32(7),
+                    Title = r.IsDBNull(8) ? "" : r.GetString(8),
                 };
             }
+            int? categoryId = book != null && !r.IsDBNull(9) ? r.GetInt32(9) : null;
+            r.Close();
+            if (book != null && categoryId != null) book.CategoryPath = CategoryPathOf(conn, categoryId.Value);
+            if (book != null) AttachBookProtection(conn, id, book);
             return book;
         }
 
@@ -713,6 +718,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                     TargetLineId = r.IsDBNull(5) ? 0 : r.GetInt32(5),
                     TargetLineIndex = r.IsDBNull(6) ? 0 : r.GetInt32(6),
                     SourceBookId = r.IsDBNull(7) ? 0 : r.GetInt32(7),
+                    TargetBookTitle = r.IsDBNull(8) ? null : r.GetString(8),
                 });
             }
             return result;
@@ -774,6 +780,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 {
                     TargetBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
                     Label = r.IsDBNull(1) ? null : r.GetString(1),
+                    TargetTitle = r.IsDBNull(2) ? null : r.GetString(2),
                 });
             }
             return result;
@@ -1052,6 +1059,45 @@ namespace KitveiHakodesh.Core.SeforimDb
                 });
             }
             return list;
+        }
+
+        /// <summary>Title and catalog path of the given books - only their own rows and their
+        /// category chains are read; ids the library does not have are absent.</summary>
+        public List<BookSummaryRow> GetBookSummaries(List<int> bookIds)
+        {
+            var list = new List<BookSummaryRow>();
+            if (bookIds is null || bookIds.Count == 0) return list;
+            using var conn = Open();
+            var byId = new Dictionary<int, BookSummaryRow>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetBookSummaryPaths(bookIds.Count);
+                BindList(cmd, "p", bookIds);
+                using var r = cmd.ExecuteReader();
+                // Rows come per book, root category first (depth descending).
+                while (r.Read())
+                {
+                    int id = r.GetInt32(0);
+                    if (!byId.TryGetValue(id, out var row))
+                        byId[id] = row = new BookSummaryRow { Id = id, Title = r.IsDBNull(1) ? "" : r.GetString(1) };
+                    if (!r.IsDBNull(2)) row.CategoryPath.Add(r.GetString(2));
+                }
+            }
+            foreach (int id in bookIds)
+                if (byId.TryGetValue(id, out var row)) list.Add(row);
+            return list;
+        }
+
+        /// <summary>A category's titles from the root down to it - its own chain only.</summary>
+        private static List<string> CategoryPathOf(SqliteConnection conn, int categoryId)
+        {
+            var path = new List<string>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetCategoryPath;
+            cmd.Parameters.AddWithValue("@categoryId", categoryId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) if (!r.IsDBNull(0)) path.Add(r.GetString(0));
+            return path;
         }
 
         public List<LineBookRow> GetBookIdsForLines(List<int> lineIds)

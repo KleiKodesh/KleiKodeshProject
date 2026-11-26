@@ -48,6 +48,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             var content = GetLineContents(new List<int> { lineId });
             result.Content = content.Count > 0 ? content[0].Content : "";
             if (result.Content.Length == 0) return result;
+            result.BookTitle = ReadBookTitle(result.BookId);
             var paths = GetTocPathsForLines(new List<int> { lineId });
             foreach (var line in paths.Lines)
             {
@@ -57,6 +58,15 @@ namespace KitveiHakodesh.Core.SeforimDb
             }
             result.Section = ReadWordLinkSection(result.BookId, result.LineIndex, lineId);
             return result;
+        }
+
+        private string ReadBookTitle(int bookId)
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT title FROM book WHERE id = @bookId";
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            return cmd.ExecuteScalar() as string ?? "";
         }
 
         private WordLinkPreviewSection? ReadWordLinkSection(int bookId, int lineIndex, int lineId)

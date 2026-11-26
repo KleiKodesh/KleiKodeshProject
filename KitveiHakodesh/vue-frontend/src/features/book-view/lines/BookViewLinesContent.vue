@@ -51,8 +51,8 @@ import { useWordLinkAnchors } from './useWordLinkAnchors'
 import type { LineDecorations } from './useBookViewLinesTable'
 import { createLineDecorationsBatch } from './lineDecorationsBatch'
 import { useCopyExportData } from './useCopyExportData'
-import { useBooksDataStore } from '@/stores/booksDataStore'
-import { bookProtectionOf, ensureCopyAllowed } from '../bookProtection'
+import { ensureCopyAllowed } from '../bookProtection'
+import type { BookProtection } from '@/webview-host/queries.types'
 import BookViewPublisherBanner from '../BookViewPublisherBanner.vue'
 import { exportToWord, pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
@@ -118,6 +118,10 @@ const props = defineProps<
     bookHasTeamim?: boolean
     /** The library marks this book a commentary: clean text accepts plain dibbur hamatchil headings. */
     bookIsCommentary?: boolean
+    /** The publisher's limits, from the book's metadata; null = none. */
+    bookProtection?: BookProtection | null
+    /** The publisher's credit line, from the book's metadata; null = none. */
+    publisherBanner?: string | null
     /**
      * Every line's character count by lineIndex, from the library — the scrollbar's
      * static per-row height estimate. null while loading, or for a library without
@@ -368,14 +372,13 @@ const {
   bookId,
   activeVersionId: () => props.activeVersionId ?? null,
 })
-const booksDataStore = useBooksDataStore()
 // The publisher's copy limit (book protection): a copy of more lines than it allows is
 // refused whole, with a message - every copy route (Ctrl+C, menu, into Word, drag) ends in
 // the copy event useScopedCopy guards below.
-const bookProtection = computed(() => bookProtectionOf(bookId))
+const bookProtection = computed(() => props.bookProtection ?? null)
 // The publisher's credit line, shown above the text while the book's start is in view -
 // Otzaria shows it above the first line, so it leaves once the reader moves on.
-const publisherBanner = computed(() => booksDataStore.allBooksMap.get(bookId)?.publisherBanner ?? null)
+const publisherBanner = computed(() => props.publisherBanner ?? null)
 const atBookStart = computed(() => (windowedScroller.value?.renderedRange?.start ?? 0) === 0)
 /** Lines the current copy would hold: the whole book on select-all, else the selected rows. */
 function selectedLineCount(): number {
@@ -391,7 +394,7 @@ const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCo
   loadNotes: loadNotesForLines,
   loadWordLinkAnchors: loadWordLinkAnchorsForLines,
   getWordLinkAnchorsForLine,
-  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+  getBookTitle: anchorLoader.getWordLinkTargetBookTitle,
 })
 const { items: contextMenuItems, buildFormattedHtml, wholeBookReady, onCopy, onPasteIntoWord, onSearchInRepository, buildSource } = useBookViewLineCopyMenu({
   scrollerEl,
@@ -522,10 +525,9 @@ const {
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
 } = useWordLinkTooltip(scrollerEl, {
-  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
-  onNavigate: (target) => {
+  onNavigate: (target, bookTitle) => {
     paneNavigation.openBookTarget({
-      title: booksDataStore.allBooksMap.get(target.bookId)?.title ?? '',
+      title: bookTitle,
       route: '/book-view',
       bookId: target.bookId,
       openTocLineIndex: target.lineIndex,

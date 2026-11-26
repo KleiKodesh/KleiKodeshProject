@@ -9,7 +9,6 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import { bookProtectionOf } from './bookProtection'
 import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
@@ -97,6 +96,8 @@ const {
   tabId, bookId, lines, linesRevision, lineDecorations, ensureLines, readLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   bookIsCommentary,
+  bookProtection,
+  publisherBanner,
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions, hebrewBooksTalmudPdfPath,
   filterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
@@ -379,8 +380,7 @@ function toggleCommentaryPanel(slot: CommentarySlot) {
   panels[slot].visible.value = !panels[slot].visible.value
 }
 
-// The publisher's limits for this book, from the catalog row (Core's book protection).
-const bookProtection = computed(() => bookProtectionOf(bookId))
+// The publisher's limits for this book come with its metadata (Core's book protection).
 const exportRestricted = computed(() => bookProtection.value?.allowsEditableExport === false)
 
 // Same path as the copy menu's paste-into-Word, over the whole book (select-all), so
@@ -792,6 +792,8 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :multi-select-line-ids="manualSelectionLineIds"
                     :book-has-teamim="bookHasTeamim"
                     :book-is-commentary="bookIsCommentary"
+                    :book-protection="bookProtection"
+                    :publisher-banner="publisherBanner"
                     @scrolled="onLinesScrolled"
                     @moveend="onLinesMoveEnd"
                     @line-selected="onLineSelected"

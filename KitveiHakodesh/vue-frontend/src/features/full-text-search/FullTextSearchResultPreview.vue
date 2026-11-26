@@ -9,7 +9,6 @@ import { ref, watch, nextTick } from 'vue'
 import { until } from '@vueuse/core'
 import { useHostInfiniteScroll } from '@/composables/useHostInfiniteScroll'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
 import { useLineNotesTooltip } from '@/features/book-view/lines/useLineNotes'
@@ -207,7 +206,6 @@ defineExpose({ recenter })
 // ── Word-level links (hover preview + click-through) ─────────────────────────
 
 const paneNavigation = usePaneNavigation()
-const booksDataStore = useBooksDataStore()
 const {
   wordLinkTooltip,
   closeWordLinkTooltip,
@@ -215,10 +213,9 @@ const {
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
 } = useWordLinkTooltip(boxEl, {
-  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
-  onNavigate: (target) => {
+  onNavigate: (target, bookTitle) => {
     paneNavigation.openBookTarget({
-      title: booksDataStore.allBooksMap.get(target.bookId)?.title ?? '',
+      title: bookTitle,
       route: '/book-view',
       bookId: target.bookId,
       openTocLineIndex: target.lineIndex,

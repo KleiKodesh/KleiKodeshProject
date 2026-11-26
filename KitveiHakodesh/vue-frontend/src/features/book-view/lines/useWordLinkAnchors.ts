@@ -101,6 +101,9 @@ export function useWordLinkAnchors(
   const anchorsByLine = shallowRef(new Map<number, WordLinkAnchor[]>())
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
+  // Target book titles as the anchors brought them (a handful of books per view; kept
+  // through evictions, so a copy can name a citation's book).
+  const titleByBook = new Map<number, string>()
   // In-flight query per lineId. `requested` is marked BEFORE a query resolves, so
   // "already requested" does not mean "already available" — an export that must be
   // able to await the citations needs the promise, not just the flag.
@@ -153,6 +156,7 @@ export function useWordLinkAnchors(
       await applyWordLinkTreatments(rows, treatmentsFor)
       const byLine = new Map<number, WordLinkAnchor[]>()
       for (const row of rows) {
+        if (row.targetBookTitle) titleByBook.set(row.targetBookId, row.targetBookTitle)
         let list = byLine.get(row.lineId)
         if (!list) byLine.set(row.lineId, (list = []))
         list.push(row)
@@ -221,6 +225,7 @@ export function useWordLinkAnchors(
 
   return {
     getWordLinkAnchorsForLine,
+    getWordLinkTargetBookTitle: (bookId: number) => titleByBook.get(bookId) ?? '',
     evictWordLinkAnchorsForLines: evictForLines,
     scheduleWordLinkAnchorsLoad: scheduleLoad,
     loadWordLinkAnchorsForLines: loadForLines,
