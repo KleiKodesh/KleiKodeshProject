@@ -1,4 +1,4 @@
-import { IconNoteAdd20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconComment20Regular } from '@iconify-prerendered/vue-fluent'
 import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
 import { shallowRef, onScopeDispose, type Ref } from 'vue'
@@ -88,7 +88,7 @@ export function usePdfReaderContextMenu(
     list.push({ label: t('pdfReader.menu.copyPageAsImage'), icon: IconImageCopy20Regular, action: options.copyPageAsImage })
     // Read where the selection ends now: clicking the menu may clear it.
     const addNote = hasText ? options.noteAtSelection() : null
-    if (addNote) list.push({ label: t('pdfReader.notes.add'), icon: IconNoteAdd20Regular, action: addNote })
+    if (addNote) list.push({ label: t('pdfReader.notes.add'), icon: IconComment20Regular, action: addNote })
     return list
   }
 
