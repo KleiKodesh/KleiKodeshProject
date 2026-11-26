@@ -17,6 +17,7 @@ const require = createRequire(path.join(ROOT, 'KitveiHakodesh/vue-frontend/packa
 const { chromium } = require('playwright')
 
 const SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
+const PNG_SIZE = 500
 
 // source art -> the .ico files built from it (copies of the same icon kept in step)
 const ICONS = [
@@ -40,6 +41,14 @@ const ICONS = [
     // Redrawn from the old 500px KleiKodesh_Main.png: box and wrench exact shapes, quill fitted curves.
     source: 'KleiKodeshVsto/Resources/KleiKodesh_Main.svg',
     targets: ['KleiKodeshVsto/KleiKodesh_Main.ico', 'Build/installer-rs/assets/kleikodesh.ico'],
+    // 500px PNG copies (add-in panes, about page, installer screens)
+    pngs: [
+      'KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KleiKodesh_Main.png',
+      'KitveiHakodesh/vue-frontend/public/images/KleiKodesh_Main.png',
+      'KleiKodeshVsto/KleiKodesh_Main.png',
+      'KleiKodeshVsto/Resources/KleiKodesh_Main.png',
+      'Build/installer-rs/ui/images/kleikodesh-logo.png',
+    ],
   },
   { source: 'Build/installer-rs/ui/images/calendar.svg', targets: ['Build/installer-rs/assets/calendar.ico'] },
   { source: 'Build/installer-rs/assets/tutor-icon.svg', targets: ['Build/installer-rs/assets/tutor.ico'] },
@@ -47,7 +56,7 @@ const ICONS = [
 
 // Draws the source at one size and returns straight (non-premultiplied) RGBA pixels and a PNG.
 // Big pictures are halved step by step before the last resize: one big jump skips pixels.
-async function renderAll(page, file) {
+async function renderAll(page, file, sizes = SIZES) {
   const bytes = fs.readFileSync(path.join(ROOT, file))
   const mime = file.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
   const url = `data:${mime};base64,${bytes.toString('base64')}`
@@ -80,7 +89,7 @@ async function renderAll(page, file) {
       out.push({ size, rgba, png })
     }
     return out
-  }, { url, sizes: SIZES, isSvg: mime === 'image/svg+xml' })
+  }, { url, sizes, isSvg: mime === 'image/svg+xml' })
 }
 
 // 32-bit BMP icon entry: header, bottom-up BGRA rows, then the 1-bit AND mask (all zero:
@@ -135,6 +144,13 @@ try {
     for (const target of icon.targets) {
       fs.writeFileSync(path.join(ROOT, target), ico)
       console.log(`${target}  <-  ${icon.source}  (${SIZES.join(', ')}; ${ico.length} bytes)`)
+    }
+    if (icon.pngs) {
+      const [big] = await renderAll(page, icon.source, [PNG_SIZE])
+      for (const target of icon.pngs) {
+        fs.writeFileSync(path.join(ROOT, target), Buffer.from(big.png, 'base64'))
+        console.log(`${target}  <-  ${icon.source}  (${PNG_SIZE}px PNG)`)
+      }
     }
   }
 } finally {
