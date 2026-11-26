@@ -39,7 +39,71 @@ namespace KitveiHakodesh.Core.SeforimDb
             var facts = new CommentaryBookFacts(data.Facts);
             var entries = BuildSourceEntries(data.ReverseRows, facts);
             entries.AddRange(BuildLinkedEntries(data.LinkGroups, data.TypeNames, facts));
-            return new CommentaryList { Groups = BuildCommentaryGroups(entries) };
+            var groups = BuildCommentaryGroups(entries);
+
+            // A section (several lines, or a line range) spans many lines, so a group's header names the
+            // section that encloses its lines; a single line names that line's own path.
+            bool sectionMode = lineIds is { Count: > 1 } || (lineIds is not { Count: > 0 } && bookId > 0 && toIndex > fromIndex);
+            AttachTocPaths(groups, sectionMode);
+            return new CommentaryList { Groups = groups };
+        }
+
+        /// <summary>
+        /// The chapter path of every group, so each header is complete on its first paint.
+        /// Single-line mode: the path of the group's first line. Section mode: the deepest TOC entry
+        /// that covers the group's first and last line (min/max by line id, NOT by position: lines are
+        /// ordered by line index while these are global row ids and the orders need not agree); a group
+        /// with a single real line falls back to that line's own path. Lines with an id of 0 or less
+        /// are not real (placeholders) and resolve no path.
+        /// </summary>
+        private void AttachTocPaths(List<CommentaryListGroup> groups, bool sectionMode)
+        {
+            var lineOfGroup = new Dictionary<int, int>();   // group index -> the line whose own path is wanted
+            var triples = new List<int>();                  // flat (group index, first line id, last line id)
+            for (int i = 0; i < groups.Count; i++)
+            {
+                var real = groups[i].LineIds.Where(id => id > 0).ToList();
+                if (real.Count == 0) continue;
+                if (!sectionMode)
+                {
+                    if (groups[i].LineIds[0] > 0) lineOfGroup[i] = groups[i].LineIds[0];
+                }
+                else if (real.Count == 1) lineOfGroup[i] = real[0];
+                else
+                {
+                    triples.Add(i);
+                    triples.Add(real.Min());
+                    triples.Add(real.Max());
+                }
+            }
+
+            var pathOfLine = lineOfGroup.Count > 0
+                ? TocPathOfLines(GetTocPathsForLines(lineOfGroup.Values.Distinct().ToList()))
+                : new Dictionary<int, string>();
+            var enclosingOfGroup = new Dictionary<int, string>();
+            if (triples.Count > 0)
+                foreach (var row in GetEnclosingTocPathForLineRanges(triples))
+                    enclosingOfGroup.TryAdd(row.GroupKey, row.TocPath);
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                if (lineOfGroup.TryGetValue(i, out int lineId) && pathOfLine.TryGetValue(lineId, out var linePath))
+                    groups[i].TocPath = linePath;
+                else if (enclosingOfGroup.TryGetValue(i, out var enclosing))
+                    groups[i].TocPath = enclosing;
+            }
+        }
+
+        /// <summary>line id -> its path: each line's TOC entry looked up in the paths, the first one found
+        /// per line (a line can sit under several entries).</summary>
+        private static Dictionary<int, string> TocPathOfLines(TocPathsForLinesResult result)
+        {
+            var pathOfEntry = new Dictionary<int, string>();
+            foreach (var path in result.Paths) pathOfEntry.TryAdd(path.TocEntryId, path.Path);
+            var pathOfLine = new Dictionary<int, string>();
+            foreach (var line in result.Lines)
+                if (pathOfEntry.TryGetValue(line.TocEntryId, out var path)) pathOfLine.TryAdd(line.LineId, path);
+            return pathOfLine;
         }
 
         private sealed class ListEntry

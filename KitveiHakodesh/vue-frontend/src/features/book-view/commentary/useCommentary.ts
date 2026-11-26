@@ -24,6 +24,8 @@ export interface CommentaryGroup {
   category?: string
   sectionLabel?: string
   subSectionLabel?: string
+  /** The chapter path beside the title in the group's header, resolved by Core with the list. */
+  tocPath?: string
 }
 
 /**
@@ -353,6 +355,7 @@ export function useCommentary(
         category: group.category,
         sectionLabel: group.sectionLabel,
         ...(group.subSectionLabel != null ? { subSectionLabel: group.subSectionLabel } : {}),
+        ...(group.tocPath ? { tocPath: group.tocPath } : {}),
       }))
 
       // The structure (which commentators, which lines) is all the panel needs to

@@ -422,7 +422,6 @@ export function useBookView(
     commentaryTocPaths,
   } = useBookViewCommentaryAnnotations(
     () => annotationGroups.value,
-    () => selectedSectionLineIds.value,
   )
 
   annotationFns.getHighlightsForLine = getHighlightsForLine

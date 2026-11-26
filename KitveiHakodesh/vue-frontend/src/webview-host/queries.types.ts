@@ -237,6 +237,8 @@ export interface CommentaryListGroup {
   category: string
   sectionLabel: string
   subSectionLabel: string | null
+  /** The chapter path beside the title in the group's header ('' when none); Core resolves it. */
+  tocPath: string
 }
 
 /** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */

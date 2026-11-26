@@ -482,6 +482,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Category { get; set; } = "";
         public string SectionLabel { get; set; } = "";
         public string? SubSectionLabel { get; set; }
+        /// <summary>The chapter path shown beside the book's title in the group's header: the path of
+        /// the group's first line, or - for a whole section - of the section enclosing the group's lines.
+        /// "" when the book has none.</summary>
+        public string TocPath { get; set; } = "";
     }
 
     /// <summary>The commentary panel's whole structure for the tapped line(s), in display order -

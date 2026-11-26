@@ -54,8 +54,6 @@ DB names map to canonical types as follows:
 
 **useCommentaryScroll.ts** - where a commentary panel is and where it opens: sticky header tracking, the place it reports on every scroll, `startRow` (the row each loaded list's NEW scroller is created at - what the reader asked for, the same place, the pinned commentator, or the top), and navigation on a live scroller (`scrollToGroup`, `scrollToFlatIndex`). No restore step, no goals, no mask - see its header and `../SCROLL_AND_COMMENTARY_POSITIONING.md`.
 
-**useCommentaryTocPaths.ts** - fetches and caches TOC paths for commentary groups asynchronously. Keyed by bookId — resolved after groups load, never blocks rendering.
-
 **useCommentaryCopy.ts** - mirrors the book view copy logic for multi-line commentary selections. Provides the same three copy modes (block, source at end, source at start). Selection extraction uses `[data-line-id]` attributes on `.line` elements and counts stripped (diacritic-removed) character offsets, matching the same offset model used by the highlight storage layer.
 
 **useCommentaryNavigation.ts** - next/prev section navigation for a commentary panel. One instance per panel (see `useCommentaryPanelSlot.ts`), so navigating reopens and re-pins only the panel whose header button was pressed.

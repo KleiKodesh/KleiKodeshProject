@@ -314,12 +314,6 @@ public sealed class TocSectionResult { public List<TocSectionRow> Rows { get; se
 // ── TOC paths & line→book/index helpers ────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class EnclosingTocPathArgs { public List<int> Triples { get; set; } = new(); }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class EnclosingTocPathResult { public List<EnclosingTocPathRow> Rows { get; set; } = new(); }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineBooksResult { public List<LineBookRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

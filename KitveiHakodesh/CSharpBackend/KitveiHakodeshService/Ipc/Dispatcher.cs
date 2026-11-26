@@ -1119,12 +1119,6 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(seforim.GetTocPathsForLines(a.LineIds)));
                 }
 
-                case "getEnclosingTocPathForLineRanges":
-                {
-                    var a = MsgPack.De<EnclosingTocPathArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new EnclosingTocPathResult { Rows = seforim.GetEnclosingTocPathForLineRanges(a.Triples) }));
-                }
-
                 case "getBookSummaries":
                 {
                     var a = MsgPack.De<BookIdsArgs>(req.Args);

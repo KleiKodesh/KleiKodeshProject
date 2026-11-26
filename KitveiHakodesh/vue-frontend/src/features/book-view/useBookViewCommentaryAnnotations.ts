@@ -11,9 +11,10 @@
  * These composables are also deliberately hoisted above the v-if on CommentaryView
  * so their watchers and caches survive a panel being unmounted and remounted.
  */
+import { computed } from 'vue'
+import { commentaryGroupKey } from './commentary/useCommentary'
 import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
-import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useLineNotes } from './lines/useLineNotes'
 import { createLineDecorationsBatch } from './lines/lineDecorationsBatch'
@@ -25,10 +26,9 @@ export function useBookViewCommentaryAnnotations(
   /**
    * Every group either panel currently displays. Pass the UNION of the panels'
    * groupsForDisplay: they agree on the real lines, but each injects a placeholder
-   * for its own pinned book, and commentaryTocPaths must resolve a path for both.
+   * for its own pinned book (a placeholder has no chapter path).
    */
   groupsForDisplay: () => GroupsForDisplay,
-  selectedSectionLineIds: () => number[] | null,
 ) {
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
@@ -61,13 +61,14 @@ export function useBookViewCommentaryAnnotations(
     getBookTitle: getWordLinkTargetBookTitle,
   })
 
-  const { commentaryTocPaths } = useCommentaryTocPaths(
-    groupsForDisplay,
-    () => {
-      const ids = selectedSectionLineIds()
-      return ids != null && ids.length > 1
-    },
-  )
+  // The chapter path of each group's header arrives WITH the group (Core resolves it in
+  // getCommentaryList), so a header is complete on its first paint. This only keys it by group
+  // identity (commentaryGroupKey), NOT by bookId: one book can yield several groups.
+  const commentaryTocPaths = computed(() => {
+    const paths = new Map<string, string>()
+    for (const group of groupsForDisplay()) if (group.tocPath) paths.set(commentaryGroupKey(group), group.tocPath)
+    return paths
+  })
 
   return {
     getHighlightsForLine, applyHighlight, clearHighlight,

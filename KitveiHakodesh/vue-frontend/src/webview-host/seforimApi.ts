@@ -534,11 +534,6 @@ export async function getTocPathsForLines(lineIds: number[]): Promise<Map<number
   return pathByLine
 }
 
-/** triples = flat [groupKey, firstLineId, lastLineId, …]. */
-export async function getEnclosingTocPathForLineRanges(triples: number[]): Promise<{ groupKey: number; bookId: number; tocPath: string }[]> {
-  return (await seforimOp<{ rows: { groupKey: number; bookId: number; tocPath: string }[] }>('getEnclosingTocPathForLineRanges', { triples })).rows
-}
-
 export interface BookSummary {
   id: number
   title: string
