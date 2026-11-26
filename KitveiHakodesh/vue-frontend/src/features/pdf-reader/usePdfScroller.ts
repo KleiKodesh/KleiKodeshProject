@@ -292,7 +292,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       spreadMode.value = v.spreadMode
       linkService.setDocument(doc)
       unlinkSearchIndex?.()
-      unlinkSearchIndex = linkPdfSearchIndex(doc, findController, () => generation === openGeneration && pdfDocument.value === doc)
+      unlinkSearchIndex = linkPdfSearchIndex(doc, findController, () => generation === openGeneration && pdfDocument.value === doc, range?.size)
       void scriptingManager.setDocument(doc)
       const stored = keep ? null : viewHistory.begin(doc)
       if (keep) void viewHistory.begin(doc)

@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import { searchIndexKeysFor } from './pdfSearchIndexLink'
 import { onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -43,7 +44,7 @@ export function createViewHistory(fingerprint: string) {
   // A file's search index (pdfSearchIndexLink.ts) lives as long as its view history entry.
   void history._initializedPromise.then(() => {
     const files = (history.database as { files?: { fingerprint: string }[] }).files ?? []
-    return PDFSearchIndexStore.retainOnly(files.map((f) => f.fingerprint))
+    return PDFSearchIndexStore.retainOnly(searchIndexKeysFor(files.map((f) => f.fingerprint)))
   }).catch(() => {})
   return history
 }
