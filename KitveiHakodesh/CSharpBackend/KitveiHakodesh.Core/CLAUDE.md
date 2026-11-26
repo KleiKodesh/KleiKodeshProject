@@ -121,7 +121,7 @@ Known violations to clean up (audit 2026-11-26; clean examples: `SeforimDbCommen
   and the catalog indexer's readers (the Lucene engines themselves are a separate library).
 - Public surface that is not CLI-like: raw intermediate data (`GetAllCategories/Books`, `GetReverseLineData`,
   `GetStaticFilterBooks`, `GetTocPathsForLines` returning two lists, `GetAllConnectionTypes`, flat-triple calls).
-- The tree-order tables live in the COMPANION database (ONE sidecar file, `seforim-companion.db`, in the app's
+- The tree-order tables live in the COMPANION database (ONE sidecar file, `companion.db` (named for what it is: it can hold any data derived from the library), in the app's
   folder, rebuilt for whichever library is open, attached as schema `companion`), not in seforim.db: DDL in the library file moves its schema version,
   which the search-index stamps read, and would rebuild both indexes. Any future derived data goes there too.
 
