@@ -22,9 +22,9 @@ namespace KitveiHakodesh.Core.UserAnnotations
     /// </summary>
     internal static class UserAnnotationSqlGuard
     {
-        /// <summary>The two annotation tables. Nothing else in the database is reachable
+        /// <summary>The annotation tables. Nothing else in the database is reachable
         /// through this path, and the database itself is the only file reachable at all.</summary>
-        private static readonly string[] AllowedTables = { "user_highlights", "user_notes" };
+        private static readonly string[] AllowedTables = { "user_highlights", "user_notes", "user_bookmarks" };
 
         /// <summary>Split read vs write so a read cannot mutate, and a write cannot be used as
         /// an exfiltration channel for a SELECT the frontend was never given.</summary>

@@ -127,7 +127,7 @@ namespace KitveiHakodesh.Core.UserAnnotations
         }
 
         /// <summary>
-        /// Highlights and notes. Both anchor to a line and a character range within it, so a
+        /// Highlights, notes and bookmarks. Highlights and notes anchor to a line and a character range within it, so a
         /// single line can carry several of either.
         /// </summary>
         private const string SchemaSql = @"
@@ -156,6 +156,23 @@ namespace KitveiHakodesh.Core.UserAnnotations
             );
             CREATE INDEX IF NOT EXISTS idx_user_notes_book_line
                 ON user_notes (bookId, lineId);
+
+            -- Bookmarks: owner = a library book id as text ('123') or 'pdf:<file path>'.
+            -- bookmarkId is the frontend's id (creation time), unique within its owner.
+            CREATE TABLE IF NOT EXISTS user_bookmarks (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner                TEXT    NOT NULL,
+                bookmarkId           INTEGER NOT NULL,
+                lineId               INTEGER NOT NULL,
+                lineIndex            INTEGER NOT NULL,
+                letterOffset         INTEGER,
+                selectionLetterCount INTEGER,
+                label                TEXT    NOT NULL,
+                tocPath              TEXT,
+                snippet              TEXT,
+                pdfTop               REAL,
+                UNIQUE (owner, bookmarkId)
+            );
         ";
     }
 

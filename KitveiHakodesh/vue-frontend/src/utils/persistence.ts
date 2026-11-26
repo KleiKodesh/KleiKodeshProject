@@ -158,7 +158,6 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-search-cache': null,
   'app-dict-cache': null,
   'app-frequent-folders': null,
-  'app-bookmarks': null,
   'app-user-space': null,
 }
 

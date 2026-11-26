@@ -1,5 +1,5 @@
 /**
- * All SQL strings for the user settings database (user_highlights, user_notes).
+ * All SQL strings for the user settings database (user_highlights, user_notes, user_bookmarks).
  * No inline SQL anywhere else — import from here.
  */
 
@@ -73,5 +73,23 @@ export const USER_SETTINGS_SQL = {
 
   DELETE_NOTE: `
     DELETE FROM user_notes WHERE id = ?
+  `,
+
+  // ── bookmarks (owner = book id as text, or 'pdf:<path>') ─────────────────
+
+  GET_BOOKMARKS_FOR_OWNER: `
+    SELECT bookmarkId, lineId, lineIndex, letterOffset, selectionLetterCount, label, tocPath, snippet, pdfTop
+    FROM user_bookmarks
+    WHERE owner = ?
+  `,
+
+  UPSERT_BOOKMARK: `
+    INSERT OR REPLACE INTO user_bookmarks
+      (owner, bookmarkId, lineId, lineIndex, letterOffset, selectionLetterCount, label, tocPath, snippet, pdfTop)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+
+  DELETE_BOOKMARK: `
+    DELETE FROM user_bookmarks WHERE owner = ? AND bookmarkId = ?
   `,
 } as const

@@ -1,19 +1,22 @@
 import { reactive } from 'vue'
-import { dbGet, dbSet, dbDelete } from '@/utils/persistence'
+import { queryUserSettings, executeUserSettings } from '@/webview-host/userSettingsDb'
+import { USER_SETTINGS_SQL } from '@/webview-host/userSettingsDb.sql'
 
 /**
- * The `app-bookmarks` slice of persistence — the places a reader marked in a book, like
+ * The app's bookmarks — the places a reader marked in a book, like
  * a ribbon left between pages.
  *
- * Keyed by book id alone: global, not per tab and not per workspace. One record per book
- * holds that book's whole list, so opening the bookmarks dropdown costs one read.
+ * Stored in the user annotations database (user_settings.db, table user_bookmarks) beside
+ * notes and highlights, so they follow the library. Keyed by owner alone: global, not per tab
+ * and not per workspace; one SELECT loads a book's whole list.
  *
  * Every loaded list is also held in ONE reactive map shared by all readers - the
  * toolbar's dropdown and its copy in the "more" flyout - so a
  * bookmark made or deleted in one shows up in all of them at once.
  */
 
-const BOOKMARKS_DB = 'app-bookmarks'
+// The old IndexedDB home of bookmarks; started fresh, so it is just removed.
+try { globalThis.indexedDB?.deleteDatabase('app-bookmarks') } catch { /* no IndexedDB */ }
 
 export interface BookBookmark {
   /** Unique within the book; the creation time, so it also orders bookmarks made on the same line. */
@@ -53,8 +56,47 @@ export function pdfBookmarksKey(filePath: string): string {
   return `pdf:${filePath.replace(/\\/g, '/').toLowerCase()}`
 }
 
-function bookmarksKey(bookId: BookmarksOwner): string {
-  return `bookmarks:${bookId}`
+/** The owner column: a book id as text, or the PDF key as is. */
+function ownerColumn(bookId: BookmarksOwner): string {
+  return String(bookId)
+}
+
+interface BookmarkRow {
+  bookmarkId: number
+  lineId: number
+  lineIndex: number
+  letterOffset: number | null
+  selectionLetterCount: number | null
+  label: string
+  tocPath: string | null
+  snippet: string | null
+  pdfTop: number | null
+}
+
+function fromRow(r: BookmarkRow): BookBookmark {
+  const b: BookBookmark = { id: r.bookmarkId, lineId: r.lineId, lineIndex: r.lineIndex, label: r.label }
+  if (r.letterOffset != null) b.letterOffset = r.letterOffset
+  if (r.selectionLetterCount != null) b.selectionLetterCount = r.selectionLetterCount
+  if (r.tocPath != null) b.tocPath = r.tocPath
+  if (r.snippet != null) b.snippet = r.snippet
+  if (r.pdfTop != null) b.pdfTop = r.pdfTop
+  return b
+}
+
+function sameBookmark(a: BookBookmark, b: BookBookmark): boolean {
+  return a.lineId === b.lineId && a.lineIndex === b.lineIndex && a.letterOffset === b.letterOffset
+    && a.selectionLetterCount === b.selectionLetterCount && a.label === b.label
+    && a.tocPath === b.tocPath && a.snippet === b.snippet && a.pdfTop === b.pdfTop
+}
+
+function sortBookmarks(list: BookBookmark[]): BookBookmark[] {
+  return list.sort((a, b) =>
+    a.lineIndex - b.lineIndex || (a.letterOffset ?? 0) - (b.letterOffset ?? 0) || (b.pdfTop ?? 0) - (a.pdfTop ?? 0) || a.id - b.id)
+}
+
+async function readStored(bookId: BookmarksOwner): Promise<BookBookmark[]> {
+  const rows = await queryUserSettings<BookmarkRow>(USER_SETTINGS_SQL.GET_BOOKMARKS_FOR_OWNER, [ownerColumn(bookId)])
+  return sortBookmarks(rows.map(fromRow))
 }
 
 /** Each book's list once loaded, by book id. Absent = not loaded yet. */
@@ -68,7 +110,7 @@ export function loadedBookBookmarks(bookId: BookmarksOwner): BookBookmark[] | un
 /** Loads the book's list into the shared map (once; later calls are free). */
 export async function loadBookBookmarks(bookId: BookmarksOwner): Promise<void> {
   if (loadedBookmarks.has(bookId)) return
-  const stored = (await dbGet<BookBookmark[]>(BOOKMARKS_DB, bookmarksKey(bookId))) ?? []
+  const stored = await readStored(bookId)
   // An update may have landed while this read was in flight; its list is newer.
   if (!loadedBookmarks.has(bookId)) loadedBookmarks.set(bookId, stored)
 }
@@ -79,8 +121,8 @@ const pendingUpdates = new Map<BookmarksOwner, Promise<unknown>>()
 
 /**
  * Read-modify-write of the book's list against what is STORED, never against a caller's
- * in-memory copy. The saved list, sorted into reading order, replaces the shared one; an
- * empty list removes the record.
+ * in-memory copy. Only rows that changed are written; the saved list, sorted into reading
+ * order, replaces the shared one.
  */
 export function updateBookBookmarks(
   bookId: BookmarksOwner,
@@ -88,11 +130,21 @@ export function updateBookBookmarks(
 ): Promise<BookBookmark[]> {
   const previous = pendingUpdates.get(bookId) ?? Promise.resolve()
   const next = previous.catch(() => {}).then(async () => {
-    const stored = (await dbGet<BookBookmark[]>(BOOKMARKS_DB, bookmarksKey(bookId))) ?? []
-    const sorted = change(stored).sort((a, b) =>
-      a.lineIndex - b.lineIndex || (a.letterOffset ?? 0) - (b.letterOffset ?? 0) || (b.pdfTop ?? 0) - (a.pdfTop ?? 0) || a.id - b.id)
-    if (sorted.length === 0) await dbDelete(BOOKMARKS_DB, bookmarksKey(bookId))
-    else await dbSet(BOOKMARKS_DB, bookmarksKey(bookId), sorted)
+    const stored = await readStored(bookId)
+    const before = new Map(stored.map((b) => [b.id, { ...b }]))
+    const sorted = sortBookmarks(change(stored))
+    const owner = ownerColumn(bookId)
+    const kept = new Set(sorted.map((b) => b.id))
+    for (const id of before.keys())
+      if (!kept.has(id)) await executeUserSettings(USER_SETTINGS_SQL.DELETE_BOOKMARK, [owner, id])
+    for (const b of sorted) {
+      const old = before.get(b.id)
+      if (old && sameBookmark(old, b)) continue
+      await executeUserSettings(USER_SETTINGS_SQL.UPSERT_BOOKMARK, [
+        owner, b.id, b.lineId, b.lineIndex, b.letterOffset ?? null, b.selectionLetterCount ?? null,
+        b.label, b.tocPath ?? null, b.snippet ?? null, b.pdfTop ?? null,
+      ])
+    }
     loadedBookmarks.set(bookId, sorted)
     return sorted
   })
