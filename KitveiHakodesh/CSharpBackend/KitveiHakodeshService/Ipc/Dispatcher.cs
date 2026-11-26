@@ -1125,6 +1125,18 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new BookSummariesResult { Rows = seforim.GetBookSummaries(a.BookIds) }));
                 }
 
+                case "getCategoryContents":
+                {
+                    var a = MsgPack.De<CategoryIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCategoryContents(a.CategoryId)));
+                }
+
+                case "getCategoryChain":
+                {
+                    var a = MsgPack.De<CategoryIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CategoryChainResult { Rows = seforim.GetCategoryChain(a.CategoryId ?? 0) }));
+                }
+
                 case "getCommentaryList":
                 {
                     var a = MsgPack.De<CommentaryListArgs>(req.Args);

@@ -425,7 +425,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   })
 
   return {
-    eventBus, viewer, pdfDocument, open, viewHistory, viewState, loadError, editManagers,
+    eventBus, viewer, pdfDocument, open, openedPassword: () => openedPassword, viewHistory, viewState, loadError, editManagers,
     loadFailure, retryOpen, loading, loadProgress, passwordRequest, jumpHistory, findState, findWrappedPrevious,
     pageNumber, pageCount, goToPage, jumpToPage, goToDestination, pageLabels, pageLabel, goToPageLabel, scriptAlerts,
     scale, zoomIn, zoomOut, zoomBy, setScale, fitWidth, preset, setPreset,

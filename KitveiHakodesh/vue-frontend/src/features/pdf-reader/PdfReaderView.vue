@@ -25,7 +25,7 @@ import { usePdfNotes } from './usePdfNotes'
 import PdfNotesOverlay from './PdfNotesOverlay.vue'
 import SidePanel from '@/components/SidePanel.vue'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
-import { disposeLocalFileHost, openUrlInSystemBrowser, printPdfFile, restoreLocalFile } from '@/webview-host/bridge'
+import { cancelPrintPdfFile, disposeLocalFileHost, openUrlInSystemBrowser, printPdfFile, restoreLocalFile } from '@/webview-host/bridge'
 import { useTabStore } from '@/stores/tabStore'
 import type { PdfOutlineEntry as BridgeOutlineEntry } from '@/stores/bookViewStore'
 import { usePdfSave } from './usePdfSave'
@@ -47,7 +47,7 @@ import PdfReaderOcrBar from './PdfReaderOcrBar.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { t } from '@/i18n'
-import { showToast } from '@/composables/useToast'
+import { dismissToast, showToast } from '@/composables/useToast'
 import ContextMenu from '@/components/ContextMenu.vue'
 import SelectionToolbar from '@/components/SelectionToolbar.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -474,17 +474,61 @@ const printChoiceOpen = ref(false)
 const canPrintFile = () => !!pdf.pdfDocument.value
 // Captured during setup: the window this viewer is drawn in (a detached window opens its tab there).
 const printHostWindow = useHostWindow()
+/**
+ * The fallback when there is no desktop host (a plain browser, dev): the whole file as a blob in a
+ * hidden frame, printed by the frame's own window.print() as soon as the frame has loaded.
+ * KNOWN LIMIT (measured, see the print research): the frame's onload fires long before the
+ * browser's PDF viewer is ready and the page cannot see when it is - a print started that early
+ * comes out BLANK on scanned books (20 MB scan and up) and the whole file is held in memory.
+ * The desktop app never takes this path: its host waits for the viewer itself (PdfViewerReady).
+ */
+async function printViaBlobFrame() {
+  const doc = pdf.pdfDocument.value
+  if (!doc) return showToast(t('pdfReader.printNoFile'))
+  const win = printHostWindow
+  const bytes = await doc.getData()
+  const blobUrl = win.URL.createObjectURL(new win.Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }))
+  const frame = win.document.createElement('iframe')
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden'
+  frame.src = blobUrl
+  const cleanup = () => {
+    frame.remove()
+    win.URL.revokeObjectURL(blobUrl)
+  }
+  frame.addEventListener('load', () => {
+    try {
+      frame.contentWindow?.focus()
+      frame.contentWindow?.print()
+    } catch {
+      showToast(t('pdfReader.printFailed'))
+      return cleanup()
+    }
+    // Removed once the reader is back (the print dialog blocks until then).
+    win.addEventListener('focus', cleanup, { once: true })
+  }, { once: true })
+  win.document.body.appendChild(frame)
+}
 async function printFile() {
   const doc = pdf.pdfDocument.value
   const url = props.url ?? null
   if (!doc || (!props.filePath && !url)) return showToast(t('pdfReader.printNoFile'))
-  const result = await printPdfFile(props.filePath ? { filePath: props.filePath } : { url: url! }, doc.numPages)
+  // Preparing a big file can take a while: say so, and Esc ends it.
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') void cancelPrintPdfFile() }
+  printHostWindow.addEventListener('keydown', onKey, true)
+  showToast(t('pdfReader.printPreparing'), { duration: 0 })
+  let result: Awaited<ReturnType<typeof printPdfFile>>
+  try {
+    result = await printPdfFile(props.filePath ? { filePath: props.filePath } : { url: url! }, doc.numPages, pdf.openedPassword())
+  } finally {
+    printHostWindow.removeEventListener('keydown', onKey, true)
+    dismissToast()
+  }
   if (result === 'unsupported') {
-    if (url) printHostWindow.open(url, '_blank', 'noopener')
-    else showToast(t('pdfReader.printNoFile'))
+    // No desktop host (the browser, dev): print through a hidden frame from a blob.
+    await printViaBlobFrame()
   } else if (typeof result === 'object') {
     console.error('[PdfReader] print failed', result.error)
-    showToast(t('pdfReader.printFailed'))
+    showToast(t(result.code === 'password' ? 'pdfReader.printPasswordProtected' : result.code === 'wrongpassword' ? 'pdfReader.printWrongPassword' : 'pdfReader.printFailed'))
   }
 }
 async function printDocument() {

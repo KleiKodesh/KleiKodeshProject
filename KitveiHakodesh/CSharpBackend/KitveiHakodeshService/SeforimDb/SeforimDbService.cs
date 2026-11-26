@@ -217,6 +217,12 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
         Run(() => _queries.GetTocPathsForLines(lineIds), new TocPathsForLinesResult(), "getTocPathsForLines");
 
 
+    public CategoryContents GetCategoryContents(int? categoryId) =>
+        Run(() => _queries.GetCategoryContents(categoryId), new CategoryContents(), "getCategoryContents");
+
+    public List<CategoryChainStep> GetCategoryChain(int categoryId) =>
+        Run(() => _queries.GetCategoryChain(categoryId), new List<CategoryChainStep>(), "getCategoryChain");
+
     public List<BookSummaryRow> GetBookSummaries(List<int> bookIds) =>
         Run(() => _queries.GetBookSummaries(bookIds), new List<BookSummaryRow>(), "getBookSummaries");
 

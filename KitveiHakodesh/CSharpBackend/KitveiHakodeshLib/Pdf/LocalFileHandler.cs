@@ -7,6 +7,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -461,6 +462,8 @@ namespace KitveiHakodeshLib.LocalFile
         /// page never sends its bytes. Replies { ok } | { cancelled } | { error }.</summary>
         public void HandlePrintPdfFile(JsonElement root, string id, Control owner)
         {
+            // One print preparation at a time; the page can end it (cancelPrintPdfFile).
+            if (_printCts != null) { _bridge.Reply(id, new { error = "a print is already being prepared" }); return; }
             string filePath = root.TryGetProperty("filePath", out var fp) && fp.ValueKind == JsonValueKind.String ? fp.GetString() : null;
             int pageCount = root.TryGetProperty("pageCount", out var pc) && pc.ValueKind == JsonValueKind.Number && pc.TryGetInt32(out int n) && n > 0 ? n : 1;
             // No file on disk (a downloaded document): its http(s) address, printed the same way.
@@ -473,15 +476,31 @@ namespace KitveiHakodeshLib.LocalFile
             }
             else if (Uri.TryCreate(url, UriKind.Absolute, out address) && (address.Scheme == Uri.UriSchemeHttps || address.Scheme == Uri.UriSchemeHttp)) { }
             else { _bridge.Reply(id, new { error = "nothing to print" }); return; }
+            // The password the page opened the document with (memory only: never logged or stored).
+            string password = root.TryGetProperty("password", out var pw) && pw.ValueKind == JsonValueKind.String ? pw.GetString() : null;
+            if (string.IsNullOrEmpty(password)) password = null;
+            var cts = _printCts = new CancellationTokenSource();
             owner.BeginInvoke(new Action(async () =>
             {
                 try
                 {
-                    var outcome = await PdfFilePrinter.PrintAsync(owner, _webView.CoreWebView2.Environment, address, pageCount);
+                    var outcome = await PdfFilePrinter.PrintAsync(owner, _webView.CoreWebView2.Environment, address, pageCount, cts.Token, password);
                     _bridge.Reply(id, outcome == PdfFilePrinter.Outcome.Cancelled ? (object)new { cancelled = true } : new { ok = true });
                 }
+                catch (OperationCanceledException) { _bridge.Reply(id, new { cancelled = true }); }
+                catch (PdfLoadException ex) { _bridge.Reply(id, new { error = ex.Message, code = ex.Code == PdfLoadException.PasswordRequired ? "password" : ex.Code == PdfLoadException.WrongPassword ? "wrongpassword" : ex.Code }); }
                 catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+                finally { _printCts = null; cts.Dispose(); }
             }));
+        }
+
+        private CancellationTokenSource _printCts;
+
+        /// <summary>Ends a print preparation that is still waiting for its document (the print then replies cancelled).</summary>
+        public void HandleCancelPrintPdfFile(string id)
+        {
+            try { _printCts?.Cancel(); } catch (ObjectDisposedException) { }
+            _bridge.Reply(id, new { });
         }
 
         /// <summary>True when the path is an existing .pdf file that a tab has open (exact file,

@@ -507,6 +507,33 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Authors { get; set; } = "";
     }
 
+    /// <summary>A subcategory in a folder's list: just what the list shows.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CategoryFolderRow
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        /// <summary>Books in the folder's whole subtree.</summary>
+        public int BookCount { get; set; }
+    }
+
+    /// <summary>One catalog folder, thin: its subfolders and the ids of the books filed in it
+    /// (titles and authors come per rendered row from GetBookSummaries).</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CategoryContents
+    {
+        public List<CategoryFolderRow> Folders { get; set; } = new();
+        public List<int> BookIds { get; set; } = new();
+    }
+
+    /// <summary>One step of a category's chain, root first.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CategoryChainStep
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+    }
+
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LineBookRow { public int LineId { get; set; } public int BookId { get; set; } }
 

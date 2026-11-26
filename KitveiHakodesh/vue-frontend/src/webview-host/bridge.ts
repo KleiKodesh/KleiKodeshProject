@@ -425,21 +425,31 @@ export async function savePdfAs(content: SavePdfAsContent, suggestedName: string
   }
 }
 
-export type PrintPdfResult = 'printed' | 'cancelled' | 'unsupported' | { error: string }
+export type PrintPdfResult = 'printed' | 'cancelled' | 'unsupported' | { error: string; code?: string }
 
 /**
  * PDF viewer Print: the host shows the system print dialog and prints the file from disk (or a
  * downloaded document from its http(s) address) in its own PDF engine - the page never sends
  * the bytes (C# `printPdfFile`). Dev has no host: 'unsupported'.
  */
-export async function printPdfFile(target: { filePath: string } | { url: string }, pageCount: number): Promise<PrintPdfResult> {
+export async function printPdfFile(target: { filePath: string } | { url: string }, pageCount: number, password?: string | null): Promise<PrintPdfResult> {
   if (typeof window.__webviewAction !== 'function') return 'unsupported'
   try {
-    const r = await action<{ ok?: boolean; cancelled?: boolean; error?: string }>('printPdfFile', { ...target, pageCount })
+    const r = await action<{ ok?: boolean; cancelled?: boolean; error?: string; code?: string }>('printPdfFile', { ...target, pageCount, password: password ?? undefined })
     if (r?.cancelled) return 'cancelled'
-    return r?.ok ? 'printed' : { error: r?.error || 'print failed' }
+    return r?.ok ? 'printed' : { error: r?.error || 'print failed', code: r?.code }
   } catch (e) {
     return { error: String(e) }
+  }
+}
+
+/** Ends a print that is still preparing its document (the pending printPdfFile resolves 'cancelled'). */
+export async function cancelPrintPdfFile(): Promise<void> {
+  if (typeof window.__webviewAction !== 'function') return
+  try {
+    await action('cancelPrintPdfFile', {})
+  } catch {
+    // nothing to cancel
   }
 }
 

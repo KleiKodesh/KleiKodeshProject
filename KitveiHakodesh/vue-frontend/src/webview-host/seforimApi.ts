@@ -543,6 +543,23 @@ export interface BookSummary {
   authors: string
 }
 
+/** A subfolder in a folder's list: its title and the books in its whole subtree. */
+export interface CategoryFolder { id: number; title: string; bookCount: number }
+/** One catalog folder, thin: subfolders and the ids of the books filed in it (details per rendered row via getBookSummaries). */
+export interface CategoryContents { folders: CategoryFolder[]; bookIds: number[] }
+/** One step of a category's chain. */
+export interface CategoryChainStep { id: number; title: string }
+
+/** A folder's contents; categoryId null = the top level. */
+export function getCategoryContents(categoryId: number | null): Promise<CategoryContents> {
+  return seforimOp<CategoryContents>('getCategoryContents', { categoryId })
+}
+
+/** A category's ancestors and itself, root first. */
+export async function getCategoryChain(categoryId: number): Promise<CategoryChainStep[]> {
+  return (await seforimOp<{ rows: CategoryChainStep[] }>('getCategoryChain', { categoryId })).rows
+}
+
 /** Title and catalog path of the given books; ids the library does not have are absent. */
 export async function getBookSummaries(bookIds: number[]): Promise<BookSummary[]> {
   if (!bookIds.length) return []

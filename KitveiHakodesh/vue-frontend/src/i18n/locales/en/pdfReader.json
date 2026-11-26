@@ -128,6 +128,9 @@
     "searchInCatalog": "Copy to catalog search",
     "searchInLibrary": "Copy to library search"
   },
+  "printPreparing": "Preparing the document to print. Press Esc to cancel.",
+  "printPasswordProtected": "This PDF is password protected and the app does not have its password, so it cannot be printed.",
+  "printWrongPassword": "The password is wrong, so the document cannot be printed.",
   "printFailed": "Could not print the document.",
   "print": "Print",
   "printChangesTitle": "Save changes before printing?",

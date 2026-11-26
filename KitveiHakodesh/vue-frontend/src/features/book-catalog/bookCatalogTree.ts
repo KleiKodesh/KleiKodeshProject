@@ -28,6 +28,8 @@ export interface CategoryNode extends CategoryRow {
    * across the tree and froze the UI when "expand all" mounted every node at once.
    */
   subtreeBookIds?: number[]
+  /** Browsed catalog folders: books in the folder's whole subtree (from Core; the ids are not held). */
+  bookCount?: number
 }
 
 /** Custom (user-defined) entries have negative IDs and always sort after DB entries. */

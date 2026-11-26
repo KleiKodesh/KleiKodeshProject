@@ -782,6 +782,32 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetBookTreeOrders(int count) =>
             $"SELECT bookId, treeOrder FROM companion.book_tree_order WHERE bookId IN ({InPlaceholders("p", count)})";
 
+        /// <summary>The direct subcategories of a category (parent NULL = the top level), in sibling
+        /// order, each with the number of books in its whole subtree (category_closure).</summary>
+        public static string GetCategoryChildren(bool hasOrderIndex, bool isRoot) => $@"
+            SELECT c.id, c.title,
+                   (SELECT COUNT(*) FROM category_closure cc JOIN book b ON b.categoryId = cc.descendantId
+                    WHERE cc.ancestorId = c.id) AS bookCount
+            FROM category c
+            WHERE {(isRoot ? "c.parentId IS NULL" : "c.parentId = @categoryId")}
+            ORDER BY {(hasOrderIndex ? CategorySiblingOrder + ", " : "")}c.id";
+
+        /// <summary>The ids of the books filed directly in a category, in book order.</summary>
+        public const string GetCategoryBookIds = @"
+            SELECT id FROM book WHERE categoryId = @categoryId ORDER BY orderIndex, id";
+
+        /// <summary>The ids of the books whose category row is missing, in book order.</summary>
+        public const string GetOrphanBookIds = @"
+            SELECT id FROM book WHERE categoryId IS NULL OR categoryId NOT IN (SELECT id FROM category)
+            ORDER BY orderIndex, id";
+
+        /// <summary>A category's ancestors and itself, root first, with ids (category_closure).</summary>
+        public const string GetCategoryChain = @"
+            SELECT c.id, c.title
+            FROM category_closure cc JOIN category c ON c.id = cc.ancestorId
+            WHERE cc.descendantId = @categoryId
+            ORDER BY c.level";
+
         /// <summary>A category's chain, root first, from category_closure (one indexed join;
         /// category.level orders it, root = 0).</summary>
         public const string GetCategoryPath = @"

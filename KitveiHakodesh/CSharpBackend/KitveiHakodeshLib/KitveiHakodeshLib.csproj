@@ -241,6 +241,7 @@
     <Compile Include="HostText.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\PdfFilePrinter.cs" />
+    <Compile Include="Pdf\PdfViewerReady.cs" />
     <Compile Include="Pdf\WindowsRecentDocuments.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />

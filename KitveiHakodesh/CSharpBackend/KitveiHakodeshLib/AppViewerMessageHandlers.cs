@@ -132,6 +132,7 @@ namespace KitveiHakodeshLib
                         case "writePdfFile": _localFile.HandleWritePdfFile(root, id); break;
                         case "savePdfAs": _localFile.HandleSavePdfAs(root, id, this); break;
                         case "printPdfFile": _localFile.HandlePrintPdfFile(root, id, this); break;
+                        case "cancelPrintPdfFile": _localFile.HandleCancelPrintPdfFile(id); break;
                         case "readTxtFileContent":await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;

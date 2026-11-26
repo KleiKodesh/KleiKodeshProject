@@ -4,7 +4,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.IO;
-using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -23,8 +23,9 @@ namespace KitveiHakodeshLib.Pdf
     {
         public enum Outcome { Printed, Cancelled }
 
-        /// <summary>Show the print dialog and print. Runs on the UI thread.</summary>
-        public static async Task<Outcome> PrintAsync(Control owner, CoreWebView2Environment environment, Uri address, int pageCount)
+        /// <summary>Show the print dialog and print. Runs on the UI thread. <paramref name="ct"/> ends the
+        /// wait for the document (the print dialog itself is the user's own cancel).</summary>
+        public static async Task<Outcome> PrintAsync(Control owner, CoreWebView2Environment environment, Uri address, int pageCount, CancellationToken ct = default(CancellationToken), string password = null)
         {
             using (var dlg = new PrintDialog { UseEXDialog = true, AllowSomePages = pageCount > 1, AllowCurrentPage = false })
             {
@@ -34,15 +35,82 @@ namespace KitveiHakodeshLib.Pdf
                 dlg.PrinterSettings.ToPage = Math.Max(1, pageCount);
                 if (dlg.ShowDialog(owner) != DialogResult.OK) return Outcome.Cancelled;
                 var ps = dlg.PrinterSettings;
-                await WithHiddenWebView(owner, environment, address, async core =>
+                // The host window closing (app shutting down) ends the wait too.
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct))
                 {
-                    var settings = ToWebViewSettings(core.Environment, ps);
-                    CoreWebView2PrintStatus status = await core.PrintAsync(settings);
-                    if (status != CoreWebView2PrintStatus.Succeeded)
-                        throw new InvalidOperationException("print failed: " + status);
-                });
+                    var host = owner?.FindForm();
+                    FormClosedEventHandler onClosed = (_, __) => cts.Cancel();
+                    if (host != null) host.FormClosed += onClosed;
+                    try
+                    {
+                        await WithHiddenWebView(owner, environment, address, async (core, readiness) =>
+                        {
+                            var settings = ToWebViewSettings(core.Environment, ps);
+                            // Belt and braces after a verified wait: a failed print that is not a
+                            // printer problem is tried again (bounded by attempts, not time).
+                            CoreWebView2PrintStatus status = CoreWebView2PrintStatus.OtherError;
+                            for (int attempt = 0; attempt < MaxPrintAttempts && status == CoreWebView2PrintStatus.OtherError; attempt++)
+                            {
+                                cts.Token.ThrowIfCancellationRequested();
+                                status = await core.PrintAsync(settings);
+                            }
+                            if (status != CoreWebView2PrintStatus.Succeeded)
+                                throw new InvalidOperationException("print failed: " + status);
+                        }, pageCount, cts.Token, password);
+                    }
+                    finally { if (host != null) host.FormClosed -= onClosed; }
+                }
             }
             return Outcome.Printed;
+        }
+
+        private const int MaxPrintAttempts = 3;
+        private const int MaxProbeAttempts = 20;
+
+        /// <summary>
+        /// The viewer internals could not be read (Edge changed them), so readiness is proven
+        /// by output: print the LAST page (expectedPages) to a memory stream until exactly that
+        /// one page comes out - the last page only exists once the whole document is known, and a
+        /// one-page print stays cheap on a huge file. A too-early print fails or is empty. Bounded
+        /// by attempts, no clock; nothing is written to disk.
+        /// </summary>
+        internal static async Task WaitUntilPrintable(CoreWebView2 core, int expectedPages, CancellationToken ct)
+        {
+            for (int attempt = 1; attempt <= MaxProbeAttempts; attempt++)
+            {
+                ct.ThrowIfCancellationRequested();
+                int pages = 0;
+                try
+                {
+                    using (var stream = await core.PrintToPdfStreamAsync(LastPageSettings(core.Environment, expectedPages)))
+                    {
+                        if (stream != null)
+                        {
+                            var bytes = new byte[stream.Length];
+                            int read = 0, n;
+                            while (read < bytes.Length && (n = stream.Read(bytes, read, bytes.Length - read)) > 0) read += n;
+                            pages = CountPdfPages(bytes);
+                        }
+                    }
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException)) { System.Diagnostics.Debug.WriteLine("[PdfPrint] probe " + attempt + " failed: " + ex.Message); }
+                System.Diagnostics.Debug.WriteLine("[PdfPrint] fallback probe " + attempt + ": last page " + expectedPages + " gave " + pages + " page(s)");
+                if (pages == 1) return;
+            }
+            throw new TimeoutException("the PDF never became printable");
+        }
+
+        private static CoreWebView2PrintSettings LastPageSettings(CoreWebView2Environment environment, int lastPage)
+        {
+            var s = environment.CreatePrintSettings();
+            s.PageRanges = Math.Max(1, lastPage).ToString();
+            return s;
+        }
+
+        internal static int CountPdfPages(byte[] pdf)
+        {
+            string text = System.Text.Encoding.GetEncoding(28591).GetString(pdf);
+            return System.Text.RegularExpressions.Regex.Matches(text, @"/Type\s*/Page(?![A-Za-z])").Count;
         }
 
         /// <summary>The dialog's choices as WebView2 print settings.</summary>
@@ -68,9 +136,12 @@ namespace KitveiHakodeshLib.Pdf
 
         /// <summary>
         /// Load the PDF file in an off-screen WebView2 and run <paramref name="work"/> on it once
-        /// its document has loaded; the window is closed afterwards in every case.
+        /// the viewer really holds the document (see <see cref="PdfViewerReady"/>); throws
+        /// <see cref="PdfLoadException"/> when it cannot (password, damaged, not a PDF). The window
+        /// is closed afterwards in every case.
         /// </summary>
-        internal static async Task WithHiddenWebView(Control owner, CoreWebView2Environment environment, Uri address, Func<CoreWebView2, Task> work)
+        internal static async Task WithHiddenWebView(Control owner, CoreWebView2Environment environment, Uri address,
+            Func<CoreWebView2, PdfViewerReady.Result, Task> work, int expectedPages, CancellationToken ct = default(CancellationToken), string password = null)
         {
             if (address.IsFile && !File.Exists(address.LocalPath)) throw new FileNotFoundException("file not found", address.LocalPath);
             var form = new Form
@@ -90,34 +161,11 @@ namespace KitveiHakodeshLib.Pdf
                 form.Show(owner?.FindForm());
                 await view.EnsureCoreWebView2Async(environment);
                 var core = view.CoreWebView2;
-                // Loaded = the browser's PDF viewer has its document: NavigationCompleted comes
-                // before that (a print then is blank), so wait for the viewer's own frame (a
-                // "webview" DevTools target) to get its title - the viewer sets it once the
-                // document is loaded.
-                var loaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                void OnTarget(object _, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
-                {
-                    using (var json = JsonDocument.Parse(e.ParameterObjectAsJson))
-                    {
-                        if (!json.RootElement.TryGetProperty("targetInfo", out var info)) return;
-                        bool viewer = info.TryGetProperty("type", out var type) && type.GetString() == "webview";
-                        bool titled = info.TryGetProperty("title", out var title) && !string.IsNullOrEmpty(title.GetString());
-                        if (viewer && titled) loaded.TrySetResult(true);
-                    }
-                }
-                core.GetDevToolsProtocolEventReceiver("Target.targetCreated").DevToolsProtocolEventReceived += OnTarget;
-                core.GetDevToolsProtocolEventReceiver("Target.targetInfoChanged").DevToolsProtocolEventReceived += OnTarget;
-                await core.CallDevToolsProtocolMethodAsync("Target.setDiscoverTargets", "{\"discover\":true}");
-                core.NavigationCompleted += (_, e) =>
-                {
-                    if (!e.IsSuccess) loaded.TrySetException(new IOException("the file could not be loaded: " + e.WebErrorStatus));
-                };
-                core.Navigate(address.AbsoluteUri);
-                // A viewer that never reports (not a PDF, a broken file): give up instead of waiting forever.
-                if (await Task.WhenAny(loaded.Task, Task.Delay(TimeSpan.FromSeconds(60))) != loaded.Task)
-                    throw new TimeoutException("the PDF did not load");
-                await loaded.Task;
-                await work(core);
+                ct.ThrowIfCancellationRequested();
+                var readiness = await PdfViewerReady.WaitAsync(core, () => core.Navigate(address.AbsoluteUri), ct,
+                    m => System.Diagnostics.Debug.WriteLine("[PdfPrint] " + m),
+                    probeCt => WaitUntilPrintable(core, expectedPages, probeCt), password);
+                await work(core, readiness);
             }
             finally
             {

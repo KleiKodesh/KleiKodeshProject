@@ -49,7 +49,7 @@ function activateIndex(index: number, openInNewTab = false) {
 /** Secondary line: book count for a folder; a book's author is in its title. */
 function getSecondaryLine(item: FsItem): string {
   if (item.kind !== 'folder') return ''
-  const count = item.node.subtreeBookIds?.length ?? 0
+  const count = item.node.bookCount ?? item.node.subtreeBookIds?.length ?? 0
   return count ? t('bookCatalog.bookCount', { n: count }) : ''
 }
 

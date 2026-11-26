@@ -1318,6 +1318,48 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
+        /// <summary>Raw rows of one folder: its subcategories (id, title, subtree book count) and the
+        /// ids of the books filed directly in it. categoryId null = the top level, whose "books" are
+        /// the orphans (books without a category row); orphans = true reads only those.</summary>
+        internal (List<CategoryFolderRow> Folders, List<int> BookIds) ReadCategoryContents(int? categoryId, bool orphans)
+        {
+            var folders = new List<CategoryFolderRow>();
+            var bookIds = new List<int>();
+            using var conn = Open();
+            if (!orphans)
+            {
+                bool hasOrder = ColumnExists(conn, "category", "orderIndex");
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetCategoryChildren(hasOrder, categoryId == null);
+                if (categoryId != null) cmd.Parameters.AddWithValue("@categoryId", categoryId.Value);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    folders.Add(new CategoryFolderRow { Id = r.GetInt32(0), Title = r.IsDBNull(1) ? "" : r.GetString(1), BookCount = r.GetInt32(2) });
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                bool orphanRead = orphans || categoryId == null;
+                cmd.CommandText = orphanRead ? SeforimDbSqlStrings.GetOrphanBookIds : SeforimDbSqlStrings.GetCategoryBookIds;
+                if (!orphanRead) cmd.Parameters.AddWithValue("@categoryId", categoryId!.Value);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) bookIds.Add(r.GetInt32(0));
+            }
+            return (folders, bookIds);
+        }
+
+        /// <summary>A category's ancestors and itself, root first.</summary>
+        internal List<CategoryChainStep> ReadCategoryChain(int categoryId)
+        {
+            var list = new List<CategoryChainStep>();
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetCategoryChain;
+            cmd.Parameters.AddWithValue("@categoryId", categoryId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) list.Add(new CategoryChainStep { Id = r.GetInt32(0), Title = r.IsDBNull(1) ? "" : r.GetString(1) });
+            return list;
+        }
+
         /// <summary>A category's titles from the root down to it - its own chain only.</summary>
         private static List<string> CategoryPathOf(SqliteConnection conn, int categoryId)
         {

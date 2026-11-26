@@ -320,6 +320,12 @@ public sealed class LineBooksResult { public List<LineBookRow> Rows { get; set; 
 public sealed class BookIdsArgs { public List<int> BookIds { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CategoryIdArgs { public int? CategoryId { get; set; } }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CategoryChainResult { public List<CategoryChainStep> Rows { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookSummariesResult { public List<BookSummaryRow> Rows { get; set; } = new(); }
 
 /// <summary>The lines whose commentary panel is wanted: their ids, or - when LineIds is empty -

@@ -43,6 +43,7 @@ const {
   openCategory,
   navigateTo,
   navigateToSibling,
+  loadFolder,
   ROOT,
 } = useBookCatalog()
 
@@ -277,15 +278,15 @@ function onGoHome() {
 }
 
 // A category to open at, stamped on the tab by a home folder card. One-shot like
-// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
-// cold start stamps it before the categories exist. Arriving at a folder is like
+// catalogQuery; Core resolves the category's chain, so it opens at once even on a cold start. Arriving at a folder is like
 // entering one: the bar shows the path, not the field.
 watch(
-  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
-  ([categoryId]) => {
+  () => paneNavigation.activeTab.catalogCategoryId,
+  async (categoryId) => {
     if (categoryId === undefined) return
-    if (!openCategory(categoryId)) return
+    const opened = await openCategory(categoryId)
     paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
+    if (!opened) return
     editingSearch.value = false
     focusSearchInput()
   },
@@ -404,6 +405,7 @@ function onSearchEnter() {
           v-bind="activeViewProps"
           @select-book="onSelectBook"
           @enter-folder="onEnterFolder"
+          @expand-folder="loadFolder"
         />
         <!-- select-book/select-toc emit (item, openInNewTab) — the boolean is
              forwarded straight through to the pane-navigation helper. -->
