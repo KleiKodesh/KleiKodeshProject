@@ -211,6 +211,8 @@ export function useAppTitleBarShortcuts(options: {
         else pane.closeCurrentPage()
         return true
       case 'KeyX':
+        // A place that owns Ctrl+X (the PDF thumbnails panel with pages selected: cut them) keeps it.
+        if (hostWindow.document.activeElement?.closest('[data-ctrlx-enabled]')) return false
         if (hasNativeChromeTabs) pane.closeAllTabs()
         else pane.closeAllPages()
         return true

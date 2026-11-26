@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="256" height="256">
+  <!-- Klei Kodesh logo: toolbox with a wrench and a quill, redrawn from the old 500px
+       KleiKodesh_Main.png. Box and wrench are exact shapes; the quill is smooth fitted curves
+       (slim feathered side, fuller plain side). -->
+  <defs>
+    <mask id="slots"><rect width="500" height="500" fill="#fff"/><path fill="#000" d="M60 231H91.5A6.5 6.5 0 0 1 91.5 244H60ZM440 231H394.5A6.5 6.5 0 0 0 394.5 244H440Z"/></mask>
+    <mask id="jaws"><rect x="-100" y="-100" width="700" height="700" fill="#fff"/><g fill="#000"><g transform="translate(0 0) rotate(-2.2)"><rect x="-55.2" y="-19.4" width="46.3" height="38.9"/><circle cx="-8.9" r="19.5"/></g><g transform="translate(239.8 0) rotate(-2.1)"><rect x="8.9" y="-19.4" width="46.3" height="38.9"/><circle cx="8.9" r="19.5"/></g></g></mask>
+    <clipPath id="inBox"><rect x="75" y="123" width="350" height="284" rx="22"/></clipPath>
+    <clipPath id="edge"><path d="M97 115H403A30 30 0 0 1 433 145V385A30 30 0 0 1 403 415H97A30 30 0 0 1 67 385V145A30 30 0 0 1 97 115ZM100 380H215V470H100Z"/></clipPath>
+    <path id="quill" d="M157.8,426.9c24.7,-11.7 46.2,-55.2 60.5,-79c24.6,-41.2 52.1,-80 85,-115c12.7,-13.6 25.7,-28.7 41,-39.4c-8.7,16.6 -24.2,31 -35.8,45.6c-20.8,25.5 -40.1,52.1 -58.6,79l-20.6,30.5c-2.4,3.7 -7,9.7 -7.5,13.5c10,-9.7 18.1,-23.4 26,-34.7c23.8,-12.1 65.9,-31.6 78.8,-57.2l-26.9,2.7c29.8,-11.3 60.8,-37.4 74.6,-65.9l-26.5,1.5c10,-3.2 37.3,-30.9 45.1,-52.1c2.3,-6.3 5.6,-14.7 5,-20.6c-13.7,3.7 -35.4,14.3 -48.8,23.1c-42.8,27.7 -79.2,69 -102.8,114.1c-9.6,18.4 -13.1,39.4 -24.5,56.9l-43.4,61.3c-7.4,10.6 -15.9,24.2 -20.4,35.9z"/>
+  </defs>
+  <path fill="#7434FF" mask="url(#slots)" d="M97 115H403A30 30 0 0 1 433 145V385A30 30 0 0 1 403 415H97A30 30 0 0 1 67 385V145A30 30 0 0 1 97 115ZM189 61H312A25 25 0 0 1 337 86V118H311V92A6 6 0 0 0 305 86H195A6 6 0 0 0 189 92V118H164V86A25 25 0 0 1 189 61Z"/>
+  <g clip-path="url(#inBox)"><g fill="#FFFFFF" transform="translate(141.2 192.9) rotate(44.5)" mask="url(#jaws)">
+    <circle r="45.2"/><circle cx="239.8" r="45.2"/><rect y="-21.9" width="239.8" height="43.9"/>
+  </g></g>
+  <use href="#quill" fill="none" stroke="#7434FF" stroke-width="18" stroke-linejoin="round" clip-path="url(#edge)"/>
+  <use href="#quill" fill="#FFFFFF"/>
+</svg>

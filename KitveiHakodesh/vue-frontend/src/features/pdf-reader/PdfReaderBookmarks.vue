@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { WindowedScroller, type WindowedScrollerApi } from 'vue-windowed-scroller'
-import { IconAdd16Regular, IconEdit16Regular, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconEdit16Regular, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
 import { useI18n } from 'vue-i18n'
 import { PDF_KEYS, withKey } from './usePdfReaderShortcuts'
 import { loadBookBookmarks, loadedBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
@@ -118,12 +118,6 @@ defineExpose({ add })
       </div>
       </template>
     </WindowedScroller>
-    <div class="footer">
-      <button type="button" class="add" :title="withKey($t('pdfReader.panel.addBookmark'), PDF_KEYS.addBookmark)" @click="add">
-        <IconAdd16Regular />
-        <span>{{ $t('pdfReader.panel.addBookmark') }}</span>
-      </button>
-    </div>
   </div>
 </template>
 
@@ -234,30 +228,5 @@ defineExpose({ add })
   border: 1px solid var(--accent-color);
   border-radius: 3px;
   outline: none;
-}
-.footer {
-  flex-shrink: 0;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border-color);
-}
-.add {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.add:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-.add span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 </style>

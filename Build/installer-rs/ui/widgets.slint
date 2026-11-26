@@ -34,8 +34,9 @@ export component ProductIcon inherits Rectangle {
     Image {
         width: parent.width;
         height: parent.height;
-        // Add-in: the Word icon itself (taken from WINWORD.EXE), badged below as an add-in.
-        source: root.id == "addin" ? @image-url("images/word.png")
+        // Add-in: the Klei Kodesh logo, badged below as an add-in. (Not Word's own icon:
+        // that is Microsoft's artwork.)
+        source: root.id == "addin" ? @image-url("images/kleikodesh-logo.png")
             : root.id == "kitvei" ? @image-url("images/kitvei-logo.svg")
             : root.id == "kleikodesh" ? @image-url("images/kleikodesh-logo.png")
             : root.id == "calendar" ? @image-url("images/calendar.svg")

@@ -5,7 +5,8 @@ import type { OcrScript } from '@/features/pdf-reader/pdfOcrTypes'
 export const usePdfOcrStore = defineStore('pdfOcr', () => {
   const isActive = ref(false)
   const script = ref<OcrScript>('mixed')
-  const skipExistingText = ref(false)
+  // Force (OCR the image even where the PDF has a text layer): on by default.
+  const skipExistingText = ref(true)
 
   function toggle() {
     isActive.value = !isActive.value

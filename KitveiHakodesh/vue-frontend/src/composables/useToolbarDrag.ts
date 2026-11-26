@@ -13,6 +13,16 @@ const DRAG_START_THRESHOLD_PX = 5
  *
  * @param pageSelector - CSS selector of the page root the toolbar docks to (closest ancestor)
  */
+/**
+ * The bare background: the toolbar itself, or the empty room of a layout group inside it
+ * (marked data-toolbar-background, e.g. the PDF toolbar's start / centre / end zones, which
+ * otherwise cover the whole bar and leave nowhere to start a drag).
+ */
+function isBackgroundOf(toolbar: HTMLElement | null, target: EventTarget | null): boolean {
+  return !!toolbar && (target === toolbar
+    || (target instanceof Element && target.hasAttribute('data-toolbar-background') && toolbar.contains(target)))
+}
+
 export function useToolbarDrag(
   toolbarEl: Ref<HTMLElement | null>,
   toolbarPosition: Ref<ToolbarPosition>,
@@ -20,6 +30,7 @@ export function useToolbarDrag(
 ) {
   // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
   const hostWindow = useHostWindow()
+  const isBackground = (target: EventTarget | null) => isBackgroundOf(toolbarEl.value, target)
   const dropTarget = ref<ToolbarPosition | null>(null)
   const viewRect = ref<DOMRect | null>(null)
   let pressX = 0
@@ -38,7 +49,7 @@ export function useToolbarDrag(
 
   useEventListener(toolbarEl, 'pointerdown', (e: PointerEvent) => {
     // Background only - presses on buttons and dropdowns keep their normal behaviour.
-    if (e.button !== 0 || e.target !== toolbarEl.value) return
+    if (e.button !== 0 || !isBackground(e.target)) return
     pressed = true
     pressX = e.clientX
     pressY = e.clientY
@@ -74,7 +85,7 @@ export function useToolbarDrag(
    */
   const isOverBackground = ref(false)
   useEventListener(toolbarEl, 'mouseover', (e: MouseEvent) => {
-    isOverBackground.value = e.target === toolbarEl.value
+    isOverBackground.value = isBackground(e.target)
   })
   useEventListener(toolbarEl, 'mouseleave', () => {
     isOverBackground.value = false

@@ -8,7 +8,11 @@ export interface ContextMenuTextItem {
   type?: 'text'
   label: string
   shortcut?: string
+  /** Tooltip: the longer explanation, so the label itself stays short. */
+  title?: string
   action: () => void
+  /** Shown greyed out; a click does nothing. */
+  disabled?: boolean
   /** Optional icon shown before the label. */
   icon?: import('vue').Component
   /** Not offered as a button on the selection toolbar (it stays in the menu). */
@@ -23,6 +27,8 @@ export interface ContextMenuCheckboxItem {
   type: 'checkbox'
   label: string
   checked: boolean
+  /** Tooltip: the longer explanation, so the label itself stays short. */
+  title?: string
   onChange: (checked: boolean) => void
   /** Optional icon shown before the label; replaces the tick; a checked item highlights its row. */
   icon?: import('vue').Component
@@ -196,6 +202,7 @@ function hide() {
 }
 
 function runItem(item: ContextMenuTextItem) {
+  if (item.disabled) return
   restoreSelection()
   item.action()
   hide()
@@ -224,6 +231,7 @@ defineExpose({ show, showAtPosition, hide })
         <div
           v-else-if="item.type === 'checkbox'"
           class="context-menu-item context-menu-checkbox"
+          :title="(item as ContextMenuCheckboxItem).title"
           :class="{ 'is-selected': (item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked }"
           @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
           @mouseenter="closeSubmenu"
@@ -249,7 +257,7 @@ defineExpose({ show, showAtPosition, hide })
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
           <span class="submenu-chevron"><IconChevronLeft16Regular class="dir-icon" /></span>
         </div>
-        <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)" @mouseenter="closeSubmenu">
+        <div v-else class="context-menu-item" :class="{ disabled: (item as ContextMenuTextItem).disabled }" :aria-disabled="(item as ContextMenuTextItem).disabled || undefined" :title="(item as ContextMenuTextItem).title" @click="runItem(item as ContextMenuTextItem)" @mouseenter="closeSubmenu">
           <component :is="(item as ContextMenuTextItem).icon" v-if="(item as ContextMenuTextItem).icon" class="item-icon" />
           <span class="item-label">{{ (item as ContextMenuTextItem).label }}</span>
           <span v-if="(item as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (item as ContextMenuTextItem).shortcut }}</span>
@@ -271,6 +279,7 @@ defineExpose({ show, showAtPosition, hide })
             <div
               v-else-if="child.type === 'checkbox'"
               class="context-menu-item context-menu-checkbox"
+              :title="(child as ContextMenuCheckboxItem).title"
               :class="{ 'is-selected': (child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked }"
               @click.stop="toggleCheckbox(child as ContextMenuCheckboxItem)"
             >
@@ -283,7 +292,7 @@ defineExpose({ show, showAtPosition, hide })
               <span class="item-label">{{ (child as ContextMenuCheckboxItem).label }}</span>
               <IconCheckmark16Regular v-if="(child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked" class="item-check" />
             </div>
-            <div v-else class="context-menu-item" @click.stop="runItem(child as ContextMenuTextItem)">
+            <div v-else class="context-menu-item" :title="(child as ContextMenuTextItem).title" @click.stop="runItem(child as ContextMenuTextItem)">
               <component :is="(child as ContextMenuTextItem).icon" v-if="(child as ContextMenuTextItem).icon" class="item-icon" />
               <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
               <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
@@ -401,6 +410,11 @@ defineExpose({ show, showAtPosition, hide })
 }
 .context-menu-item:active {
   background: color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+.context-menu-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: none;
 }
 .context-menu-checkbox {
   gap: 6px;

@@ -494,6 +494,7 @@
       "hebcal": "The Hebrew calendar, holidays and daily learning",
       "pdfjs": "The PDF viewer",
       "tesseract": "Text recognition in scanned pages",
+      "dictarashi": "Recognizing Rashi script in scanned pages",
       "kiwix": "The Wikipedia reader in Word",
       "vue": "The app interface",
       "lucene": "Searching book titles and tables of contents",

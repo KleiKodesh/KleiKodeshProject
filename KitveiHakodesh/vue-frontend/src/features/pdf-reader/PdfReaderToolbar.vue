@@ -15,6 +15,7 @@ import {
   IconSearch20Regular,
   IconEdit20Regular,
   IconComment20Regular,
+  IconBookmarkAdd20Regular,
   IconEdit20Filled,
   IconScanText20Regular,
   IconMoreHorizontal24Regular,
@@ -28,9 +29,9 @@ import { usePressRepeat } from '@/composables/usePressRepeat'
 import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import IconPdfScrollPage from './icons/IconPdfScrollPage.vue'
 import IconPdfScrollVertical from './icons/IconPdfScrollVertical.vue'
+import IconPdfNavigation from './icons/IconPdfNavigation.vue'
 import IconPdfScrollHorizontal from './icons/IconPdfScrollHorizontal.vue'
 import IconPdfScrollWrapped from './icons/IconPdfScrollWrapped.vue'
 import IconPdfSpreadNone from './icons/IconPdfSpreadNone.vue'
@@ -96,6 +97,7 @@ const emit = defineEmits<{
   presentation: []
   properties: []
   print: []
+  addBookmark: []
   toggleOrganizer: []
   save: []
   saveAs: []
@@ -133,20 +135,20 @@ const spreadOptions = computed<IconDropdownOption<number>[]>(() => [
 // -- Overflow: a narrow toolbar collapses controls into the "more" menu (the book view's
 // shared fit arithmetic, useToolbarOverflow). First key = first to go; reading essentials last.
 const OVERFLOW_ORDER = [
-  'properties', 'print', 'organize', 'presentation', 'rotate', 'spread', 'scroll', 'preset',
-  'saveas', 'ocr', 'note', 'edit', 'hand', 'zoom', 'first-last', 'search', 'save', 'toc', 'pages',
+  'print', 'organize', 'presentation', 'rotate', 'spread', 'scroll', 'preset',
+  'bookmark', 'note', 'edit', 'ocr', 'hand', 'zoom', 'first-last', 'search', 'save', 'toc', 'pages',
 ] as const
 type OverflowKey = (typeof OVERFLOW_ORDER)[number]
 /** The controls in the order the toolbar shows them. */
 const TOOLBAR_ORDER: OverflowKey[] = [
-  'toc', 'first-last', 'pages', 'search', 'hand', 'edit', 'note', 'ocr',
-  'zoom', 'preset', 'scroll', 'spread', 'rotate', 'presentation', 'organize', 'save', 'saveas', 'print', 'properties',
+  'toc', 'preset', 'scroll', 'spread', 'rotate', 'presentation',
+  'first-last', 'pages', 'search', 'hand', 'zoom',
+  'bookmark', 'note', 'edit', 'ocr', 'organize', 'save', 'print',
 ]
 const OVERFLOW_GROUP: Record<OverflowKey, string> = {
-  properties: 'document', print: 'document', organize: 'document', presentation: 'document',
-  save: 'document', saveas: 'document',
+  print: 'document', organize: 'document', presentation: 'document', save: 'document',
   rotate: 'layout', spread: 'layout', scroll: 'layout', preset: 'layout',
-  ocr: 'tools', edit: 'tools', note: 'tools', hand: 'tools',
+  ocr: 'tools', edit: 'tools', note: 'tools', bookmark: 'tools', hand: 'tools',
   zoom: 'zoom',
   'first-last': 'pages', pages: 'pages',
   search: 'panels', toc: 'panels',
@@ -155,6 +157,13 @@ const OVERFLOW_GROUP: Record<OverflowKey, string> = {
 // controls while there is still room. The last width is kept while a box sits in the menu.
 const isVertical = computed(() => toolbarPosition.value === 'left' || toolbarPosition.value === 'right')
 const pageBoxEl = ref<HTMLElement | null>(null)
+const pageInputEl = ref<HTMLInputElement | null>(null)
+function focusPageInput(e: MouseEvent) {
+  if (e.target === pageInputEl.value) return
+  e.preventDefault()
+  pageInputEl.value?.focus()
+  pageInputEl.value?.select()
+}
 const zoomBoxEl = ref<HTMLElement | null>(null)
 // Measured along the toolbar's own axis: the width on a top/bottom toolbar, the height on a side one
 // (there the boxes stack their parts and are about one button tall, not 80px wide).
@@ -186,10 +195,14 @@ function widthOf(key: OverflowKey): number {
 }
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible: shown } = useToolbarOverflow(
   toolbarEl,
-  computed(() => [...OVERFLOW_ORDER]),
+  // Save only while there is something to save: no room is kept for a button not drawn.
+  computed(() => OVERFLOW_ORDER.filter((k) => k !== 'save' || props.canSave)),
   isVertical,
   widthOf,
 )
+// "Navigation: table of contents, bookmarks, comments, thumbnails, search results" - what the side panel holds.
+const sidePanelTitle = computed(() =>
+  `${t('pdfReader.sidePanel')}: ${['outline', 'bookmarks', 'comments', 'thumbnails', 'search'].map((m) => t(`pdfReader.panel.${m}`)).join(', ')}`)
 const moreButton = ref<HTMLElement | null>(null)
 const moreMenu = ref<InstanceType<typeof ContextMenu> | null>(null)
 function openMore() {
@@ -210,11 +223,10 @@ const moreItems = computed<ContextMenuItem[]>(() => {
     const group = OVERFLOW_GROUP[key]
     if (items.length && group !== lastGroup) items.push({ type: 'separator' })
     lastGroup = group
-    if (key === 'properties') items.push({ icon: IconPdfDocumentProperties, label: t('pdfReader.properties'), shortcut: K.properties, action: () => emit('properties') })
-    else if (key === 'save') {
+    if (key === 'save') {
       if (props.canSave) items.push({ icon: IconSave20Regular, label: t('pdfReader.saveDoc.save'), shortcut: K.save, action: () => emit('save') })
-    } else if (key === 'saveas') items.push({ icon: IconSaveEdit20Regular, label: t('pdfReader.saveDoc.saveAs'), shortcut: K.saveAs, action: () => emit('saveAs') })
-    else if (key === 'print') items.push({ icon: IconPrint20Regular, label: t('pdfReader.print'), shortcut: K.print, action: () => emit('print') })
+    } else if (key === 'print') items.push({ icon: IconPrint20Regular, label: t('pdfReader.print'), shortcut: K.print, action: () => emit('print') })
+    else if (key === 'bookmark') items.push({ icon: IconBookmarkAdd20Regular, label: t('pdfReader.panel.addBookmarkShort'), title: t('pdfReader.panel.addBookmark'), shortcut: K.addBookmark, action: () => emit('addBookmark') })
     else if (key === 'organize') items.push({ type: 'checkbox', label: withKey(t('pdfOrganizer.toggle'), K.organizer), icon: IconGrid20Regular, checked: !!props.organizerOpen, onChange: () => { emit('toggleOrganizer'); moreMenu.value?.hide() } })
     else if (key === 'presentation') items.push({ icon: IconPdfPresentation, label: t('pdfReader.presentation'), shortcut: K.presentation, action: () => emit('presentation') })
     else if (key === 'rotate') {
@@ -224,7 +236,7 @@ const moreItems = computed<ContextMenuItem[]>(() => {
     else if (key === 'scroll') items.push({ type: 'submenu', icon: scrollOptions.value.find((o) => o.value === props.scrollMode)?.icon, label: withKey(t('pdfReader.menuScroll'), K.scrollCycle), items: radio(scrollOptions.value, props.scrollMode, (v) => emit('setScrollMode', v)) })
     else if (key === 'preset') items.push({ type: 'submenu', icon: (presetOptions.value.find((o) => o.value === props.preset) ?? presetOptions.value[0])?.icon, label: withKey(t('pdfReader.menuFit'), K.fitCycle), items: radio(presetOptions.value, props.preset, (v) => emit('setPreset', v)) })
     else if (key === 'ocr') items.push({ type: 'checkbox', label: withKey(t('pdfReader.ocr'), K.ocr), icon: IconScanText20Regular, checked: props.ocrActive, onChange: () => { emit('toggleOcr'); moreMenu.value?.hide() } })
-    else if (key === 'note') items.push({ type: 'checkbox', label: withKey(t('pdfReader.notes.tool'), K.editTool.note), icon: IconComment20Regular, checked: props.noteActive, onChange: () => { emit('addNote'); moreMenu.value?.hide() } })
+    else if (key === 'note') items.push({ type: 'checkbox', label: withKey(t('pdfReader.notes.add'), K.editTool.note), title: t('pdfReader.notes.tool'), icon: IconComment20Regular, checked: props.noteActive, onChange: () => { emit('addNote'); moreMenu.value?.hide() } })
     else if (key === 'edit') items.push({ type: 'checkbox', label: withKey(t('pdfReader.toggleEdit'), K.edit), icon: IconEdit20Regular, checked: props.editVisible, onChange: () => { emit('toggleEdit'); moreMenu.value?.hide() } })
     else if (key === 'hand') items.push({ type: 'checkbox', label: withKey(t('pdfReader.handTool'), K.handTool), icon: IconPdfHandTool, checked: props.handTool, onChange: () => { emit('toggleHandTool'); moreMenu.value?.hide() } })
     else if (key === 'zoom') {
@@ -235,13 +247,16 @@ const moreItems = computed<ContextMenuItem[]>(() => {
       items.push({ icon: IconPdfLastPage, label: t('pdfReader.lastPage'), shortcut: K.lastPage, action: () => emit('jumpToPage', props.pageCount) })
     } else if (key === 'search') items.push({ type: 'checkbox', label: withKey(t('pdfReader.search'), K.search), icon: IconSearch20Regular, checked: props.searchVisible, onChange: () => { emit('toggleSearch'); moreMenu.value?.hide() } })
     else if (key === 'toc') {
-      if (props.hasOutline) items.push({ type: 'checkbox', label: withKey(t('pdfReader.toc'), K.toc), icon: IconTreeRtl, checked: props.tocVisible, onChange: () => { if (moreButton.value) emit('toggleToc', moreButton.value); moreMenu.value?.hide() } })
+      if (props.hasOutline) items.push({ type: 'checkbox', label: withKey(t('pdfReader.sidePanel'), K.toc), title: sidePanelTitle.value, icon: IconPdfNavigation, checked: props.tocVisible, onChange: () => { if (moreButton.value) emit('toggleToc', moreButton.value); moreMenu.value?.hide() } })
     } else if (key === 'pages') {
       items.push({ icon: IconChevronRight20Regular, label: t('pdfReader.prevPage'), shortcut: K.prevPage, action: () => emit('goToPage', props.pageNumber - 1) })
       items.push({ icon: IconChevronLeft20Regular, label: t('pdfReader.nextPage'), shortcut: K.nextPage, action: () => emit('goToPage', props.pageNumber + 1) })
     }
   }
-  if (items[items.length - 1]?.type === 'separator') items.pop()
+  // Always in "more" (rare file actions): save as and document properties.
+  if (items.length) items.push({ type: 'separator' })
+  items.push({ icon: IconSaveEdit20Regular, label: t('pdfReader.saveDoc.saveAs'), shortcut: K.saveAs, action: () => emit('saveAs') })
+  items.push({ icon: IconPdfDocumentProperties, label: t('pdfReader.properties'), shortcut: K.properties, action: () => emit('properties') })
   return items
 })
 
@@ -286,18 +301,44 @@ function discardZoom(event: KeyboardEvent) {
     </Teleport>
 
 
-    <!-- table of contents (the PDF's outline), as the book view / FastDocView TOC button -->
+    <!-- Three zones (RTL): view tools at the start (right), navigation / zoom / search in the centre,
+         editing and file tools at the end (left). -->
+    <div class="tb-zone tb-zone-start" data-toolbar-background>
     <template v-if="shown('toc')">
     <button
       :class="{ active: tocVisible }"
       :disabled="!hasOutline"
-      :title="withKey($t('pdfReader.toc'), K.toc)"
+      :title="withKey(sidePanelTitle, K.toc)"
       @click="emit('toggleToc', $event.currentTarget as HTMLElement)"
     >
-      <IconTreeRtl />
+      <!-- navigation in the document (outline, bookmarks, comments, thumbnails): filled while open -->
+      <IconPdfNavigation :filled="tocVisible" />
     </button>
     </template>
-    <!-- pages -->
+    <template v-if="shown('preset')">
+    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuFit'), K.fitCycle)" :options="presetOptions" :value="preset" @select="emit('setPreset', $event)" />
+    </template>
+    <template v-if="shown('scroll')">
+    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuScroll'), K.scrollCycle)" :options="scrollOptions" :value="scrollMode" @select="emit('setScrollMode', $event)" />
+    </template>
+    <template v-if="shown('spread')">
+    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuSpread'), K.spreadCycle)" :options="spreadOptions" :value="spreadMode" @select="emit('setSpreadMode', $event)" />
+    </template>
+    <template v-if="shown('rotate')">
+    <button :title="withKey($t('pdfReader.rotateLeft'), K.rotateLeft)" @click="emit('rotate', -90)">
+      <IconPdfRotateCounterclockwise />
+    </button>
+    <button :title="withKey($t('pdfReader.rotateRight'), K.rotateRight)" @click="emit('rotate', 90)">
+      <IconPdfRotateClockwise />
+    </button>
+    </template>
+    <template v-if="shown('presentation')">
+    <button :title="withKey($t('pdfReader.presentation'), K.presentation)" @click="emit('presentation')">
+      <IconPdfPresentation />
+    </button>
+    </template>
+    </div>
+    <div class="tb-zone tb-zone-center" data-toolbar-background>
     <template v-if="shown('first-last')">
     <button :disabled="pageNumber <= 1" :title="withKey($t('pdfReader.firstPage'), K.firstPage)" @click="emit('jumpToPage', 1)">
       <IconPdfFirstPage />
@@ -307,8 +348,11 @@ function discardZoom(event: KeyboardEvent) {
     <button :disabled="pageNumber <= 1" :title="withKey($t('pdfReader.prevPage'), K.prevPage)" @click="emit('goToPage', pageNumber - 1)">
       <IconChevronRight20Regular class="dir-icon" />
     </button>
-    <span ref="pageBoxEl" class="page-box">
+    <!-- One box to the eye ("27 / 112"); only the page number is typed in. A click on the
+         count puts the caret in the number. -->
+    <span ref="pageBoxEl" class="page-box" @mousedown="focusPageInput">
       <input
+        ref="pageInputEl"
         v-model="pageDraft"
         class="page-input"
         :class="{ labeled: !!pageLabel }"
@@ -331,13 +375,11 @@ function discardZoom(event: KeyboardEvent) {
       <IconPdfLastPage />
     </button>
     </template>
-
     <template v-if="shown('search')">
     <button :class="{ active: searchVisible }" :title="withKey($t('pdfReader.search'), K.search)" @click="emit('toggleSearch')">
       <IconSearch20Regular />
     </button>
     </template>
-    <!-- Hand tool: the button shows the tool you switch TO (the cursor while the hand is on). -->
     <template v-if="shown('hand')">
     <button
       :aria-pressed="handTool"
@@ -348,25 +390,6 @@ function discardZoom(event: KeyboardEvent) {
       <IconPdfHandTool v-else />
     </button>
     </template>
-    <!-- Add note, on the toolbar as in the old viewer: note mode (a click on a page places one note). -->
-    <template v-if="shown('note')">
-    <button :class="{ active: noteActive }" :aria-pressed="noteActive" :title="withKey($t('pdfReader.notes.tool'), K.editTool.note)" @click="emit('addNote')">
-      <IconComment20Regular />
-    </button>
-    </template>
-    <template v-if="shown('edit')">
-    <button :class="{ active: editVisible }" :aria-pressed="editVisible" :title="withKey($t('pdfReader.toggleEdit'), K.edit)" @click="emit('toggleEdit')">
-      <IconEdit20Filled v-if="editVisible" />
-      <IconEdit20Regular v-else />
-    </button>
-    </template>
-    <template v-if="shown('ocr')">
-    <button :class="{ active: ocrActive }" :aria-pressed="ocrActive" :title="withKey($t('pdfReader.ocr'), K.ocr)" @click="emit('toggleOcr')">
-      <IconScanText20Regular />
-    </button>
-    </template>
-
-    <!-- zoom -->
     <template v-if="shown('zoom')">
     <button
       :disabled="scale <= MIN_SCALE"
@@ -400,29 +423,27 @@ function discardZoom(event: KeyboardEvent) {
       <IconZoomIn20Regular />
     </button>
     </template>
-    <template v-if="shown('preset')">
-    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuFit'), K.fitCycle)" :options="presetOptions" :value="preset" @select="emit('setPreset', $event)" />
-    </template>
-
-    <!-- layout -->
-    <template v-if="shown('scroll')">
-    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuScroll'), K.scrollCycle)" :options="scrollOptions" :value="scrollMode" @select="emit('setScrollMode', $event)" />
-    </template>
-    <template v-if="shown('spread')">
-    <PdfIconDropdown :menu-title="withKey($t('pdfReader.menuSpread'), K.spreadCycle)" :options="spreadOptions" :value="spreadMode" @select="emit('setSpreadMode', $event)" />
-    </template>
-    <template v-if="shown('rotate')">
-    <button :title="withKey($t('pdfReader.rotateLeft'), K.rotateLeft)" @click="emit('rotate', -90)">
-      <IconPdfRotateCounterclockwise />
-    </button>
-    <button :title="withKey($t('pdfReader.rotateRight'), K.rotateRight)" @click="emit('rotate', 90)">
-      <IconPdfRotateClockwise />
+    </div>
+    <div class="tb-zone tb-zone-end" data-toolbar-background>
+    <template v-if="shown('bookmark')">
+    <button :title="withKey($t('pdfReader.panel.addBookmark'), K.addBookmark)" @click="emit('addBookmark')">
+      <IconBookmarkAdd20Regular />
     </button>
     </template>
-
-    <template v-if="shown('presentation')">
-    <button :title="withKey($t('pdfReader.presentation'), K.presentation)" @click="emit('presentation')">
-      <IconPdfPresentation />
+    <template v-if="shown('note')">
+    <button :class="{ active: noteActive }" :aria-pressed="noteActive" :title="withKey($t('pdfReader.notes.tool'), K.editTool.note)" @click="emit('addNote')">
+      <IconComment20Regular />
+    </button>
+    </template>
+    <template v-if="shown('edit')">
+    <button :class="{ active: editVisible }" :aria-pressed="editVisible" :title="withKey($t('pdfReader.toggleEdit'), K.edit)" @click="emit('toggleEdit')">
+      <IconEdit20Filled v-if="editVisible" />
+      <IconEdit20Regular v-else />
+    </button>
+    </template>
+    <template v-if="shown('ocr')">
+    <button :class="{ active: ocrActive }" :aria-pressed="ocrActive" :title="withKey($t('pdfReader.ocr'), K.ocr)" @click="emit('toggleOcr')">
+      <IconScanText20Regular />
     </button>
     </template>
     <template v-if="shown('organize')">
@@ -430,10 +451,9 @@ function discardZoom(event: KeyboardEvent) {
       <IconGrid20Regular />
     </button>
     </template>
-    <template v-if="shown('save')">
+    <template v-if="canSave && shown('save')">
     <button
       class="save-btn"
-      :disabled="!canSave"
       :title="withKey($t('pdfReader.saveDoc.save'), K.save) + (dirty ? ` - ${$t('pdfReader.saveDoc.unsaved')}` : '')"
       @click="emit('save')"
     >
@@ -441,27 +461,18 @@ function discardZoom(event: KeyboardEvent) {
       <span v-if="dirty" class="dirty-dot" aria-hidden="true" />
     </button>
     </template>
-    <template v-if="shown('saveas')">
-    <button :title="withKey($t('pdfReader.saveDoc.saveAs'), K.saveAs)" @click="emit('saveAs')">
-      <IconSaveEdit20Regular />
-    </button>
-    </template>
     <template v-if="shown('print')">
     <button :title="withKey($t('pdfReader.print'), K.print)" @click="emit('print')">
       <IconPrint20Regular />
     </button>
     </template>
-    <template v-if="shown('properties')">
-    <button :title="withKey($t('pdfReader.properties'), K.properties)" @click="emit('properties')">
-      <IconPdfDocumentProperties />
-    </button>
-    </template>
+    </div>
 
-    <!-- The book view's "more" button: one fixed place at the far end, shown once something has collapsed. -->
+    <!-- The book view's "more" button: one fixed place at the far end; always there (save as, properties live in it). -->
     <button
       ref="moreButton"
       class="overflow-btn"
-      :disabled="!hasToolbarOverflow"
+      :class="{ 'has-collapsed': hasToolbarOverflow }"
       :title="$t('pdfReader.more')"
       aria-haspopup="menu"
       @click="openMore"
@@ -498,16 +509,26 @@ button:disabled {
 .page-box {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   font-size: 12px;
   flex-shrink: 0;
+  /* the frame is the box's, not the input's: number and count read as one field */
+  height: 22px;
+  padding-inline: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: text;
+}
+.page-box:focus-within {
+  border-color: var(--accent-color);
 }
 .page-input {
   width: 3.5em;
-  height: 22px;
+  height: 100%;
+  padding: 0;
   text-align: center;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border: none;
+  outline: none;
   background: transparent;
   color: inherit;
 }
@@ -560,6 +581,35 @@ button:disabled {
   border-radius: 50%;
   background: var(--accent-color);
 }
+/* The shared toolbar shell reserves the "more" button's room at BOTH ends (to centre the book view's
+   row). Here the zones place the groups, so only the end that holds "more" keeps that room. */
+.pdf-reader-toolbar.toolbar-top,
+.pdf-reader-toolbar.toolbar-bottom {
+  padding-inline-start: var(--toolbar-edge-inset);
+}
+/* Zones: start and end take the free room equally, so the centre group sits in the middle. */
+.tb-zone {
+  display: flex;
+  align-items: center;
+  flex-direction: inherit;
+  min-width: 0;
+  min-height: 0;
+}
+.tb-zone-start,
+.tb-zone-end {
+  flex: 1 1 0;
+  /* Never below its own buttons: with equal halves, the fuller side overran the centre while
+     the whole row still fit (so nothing collapsed). Now that side takes what it needs and the
+     centre shifts over; the overflow arithmetic (the sum of all controls) holds again. */
+  min-width: max-content;
+  min-height: max-content;
+}
+.tb-zone-end {
+  justify-content: flex-end;
+}
+.tb-zone-center {
+  flex: 0 0 auto;
+}
 .page-count {
   opacity: 0.75;
   white-space: nowrap;
@@ -570,6 +620,7 @@ button:disabled {
   flex-direction: column;
   gap: 1px;
   width: var(--toolbar-button-size);
+  height: auto;
   /* padding, not margin: the measured border box (widthOf) must include it */
   padding: 2px 0;
 }

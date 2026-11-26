@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
+import { useLocalStorage } from '@vueuse/core'
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
@@ -26,12 +28,15 @@ import { disposeLocalFileHost, openUrlInSystemBrowser, restoreLocalFile } from '
 import { useTabStore } from '@/stores/tabStore'
 import type { PdfOutlineEntry as BridgeOutlineEntry } from '@/stores/bookViewStore'
 import { usePdfSave } from './usePdfSave'
+import { usePdfPageEdits } from './usePdfPageEdits'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import PdfReaderToc from './PdfReaderToc.vue'
 import PdfReaderSideModes, { type PdfSideMode } from './PdfReaderSideModes.vue'
 import PdfReaderBookmarks from './PdfReaderBookmarks.vue'
 import PdfReaderComments from './PdfReaderComments.vue'
 import PdfReaderThumbnails from './PdfReaderThumbnails.vue'
+import PdfReaderSearchResults from './PdfReaderSearchResults.vue'
+import { usePdfSearchResults, type PdfSearchHit } from './usePdfSearchResults'
 import { usePdfComments, type PdfComment } from './usePdfComments'
 import { pdfBookmarksKey, type BookBookmark } from '@/stores/bookBookmarks'
 import { usePdfOutline, type PdfOutlineNode } from './usePdfOutline'
@@ -118,6 +123,9 @@ watch(editing.mode, (mode) => {
 // The book view's toolbar setting: position, and shown / hidden (Ctrl+B, the title bar's toolbar button).
 // Toolbar shown/hidden follows the reading toolbars' toggle (Ctrl+B, F9); its EDGE is the PDF viewer's own.
 const { toolbarVisible } = storeToRefs(useBookViewStore())
+// With the toolbar hidden or on a side, the pages meet the title (address) bar: a line marks
+// that edge, only while the title bar shows (Ctrl+H hides it).
+const { titleBarVisible } = useUiChromeVisibility()
 const { pdfToolbarPosition: toolbarPosition } = storeToRefs(useSettingsStore())
 
 // Table of contents: the PDF's outline in the book view's TOC side panel (inline with a sash
@@ -156,25 +164,28 @@ const {
   // otherwise the panel floats over them.
   inlineWhen: (width, panelWidth) => width - panelWidth - 6 >= fullPageWidth.value + 2 * PAGE_SIDE_MARGIN,
 })
-// The panel's mode (outline, bookmarks, comments, thumbnails); kept while the tab lives.
-// Until the reader picks a mode, a document without an outline opens on its thumbnails.
-const sideMode = ref<PdfSideMode>('outline')
-let sideModeChosen = false
-const onSideModeChosen = () => { sideModeChosen = true }
+// The panel's mode (outline, bookmarks, comments, thumbnails, search results): the last one used, shared by
+// every PDF (and window); the table of contents until the reader picks another.
+const sideMode = useLocalStorage<PdfSideMode>('pdfReader.sidePanelMode', 'outline')
+const onSideModeChosen = () => {}
 const hasOutline = () => outline.nodes.value.length > 0 || outlineEdit.canEdit.value
-watch(tocVisible, (open) => {
-  if (open && !sideModeChosen) sideMode.value = hasOutline() ? 'outline' : 'thumbnails'
-})
 // The panel's open state and mode are part of the file's saved view (usePdfViewHistory).
-pdf.viewHistory.onRestoreSidePanel((open, mode) => {
-  if (mode === 'outline' || mode === 'bookmarks' || mode === 'comments' || mode === 'thumbnails') {
-    sideMode.value = mode
-    sideModeChosen = true
-  }
+// Only the open state is per file; the mode is the shared last-used one (above).
+pdf.viewHistory.onRestoreSidePanel((open) => {
   tocVisible.value = open
 })
 watch([tocVisible, sideMode], ([open, mode]) => pdf.viewHistory.saveSidePanel(open, mode), { flush: 'sync' })
 const comments = usePdfComments(pdf, computed(() => tocVisible.value && sideMode.value === 'comments'), notes)
+const searchResults = usePdfSearchResults(pdf)
+// The panel opened on its search results (or switched to them) with a query typed but no search
+// running (the bar closed, or a reopened file): run it again, so its results show. A search
+// that is already on is left as it is - running it again would only lose the current match.
+watch(
+  () => tocVisible.value && sideMode.value === 'search',
+  (shown) => {
+    if (shown && query.value.trim() && !searchResults.hasQuery.value) pdf.find(query.value)
+  },
+)
 const bookmarksOwner = computed(() => pdfBookmarksKey(props.filePath || props.url))
 /** The top of the view: page and the y there in PDF units (PDF.js's view location). */
 let viewTop: { pageNumber: number; top?: number } | null = null
@@ -215,6 +226,10 @@ async function onCommentSelect(c: PdfComment) {
 }
 function onThumbnailSelect(n: number) {
   pdf.jumpToPage(n)
+}
+function onSearchHitSelect(hit: PdfSearchHit) {
+  // The panel stays open, also when it floats: results are gone through one after another.
+  searchResults.select(hit)
 }
 function toggleToc(toggleButton?: HTMLElement | null) {
   if (toggleButton) tocToggleButton.value = toggleButton
@@ -358,6 +373,13 @@ const saving = usePdfSave(pdf, outlineEdit, notes, {
   },
 })
 
+// Page selection and the thumbnails panel's Manage menu (copy / cut / delete / export selected).
+const pageEdits = usePdfPageEdits(pdf, saving, {
+  fileName: () => props.fileName ?? null,
+  filePath: () => props.filePath ?? null,
+  url: () => props.url ?? null,
+})
+
 // The title bar's section path (tab.tocPath) and its outline dropdowns, from this view's outline.
 const OUTLINE_SEPARATOR = ' · '
 const outlineEntries = computed<BridgeOutlineEntry[]>(() => {
@@ -458,6 +480,12 @@ const contextMenu = usePdfReaderContextMenu(container, contextMenuRef, {
   searchInCatalog: (q) => useHostSearchStore().openCatalogSearch(q),
   noteAtSelection: notes.noteAtSelection,
 })
+// Add a bookmark at the current place (toolbar button, Ctrl+Shift+D): shows the bookmarks list.
+function addBookmark() {
+  if (!pdf.pdfDocument.value) return
+  showSideMode('bookmarks')
+  void nextTick(() => bookmarksPanel.value?.add())
+}
 usePdfReaderShortcuts(root, container, pdf, {
   undoRedo: (redo) => {
     const pdfJsHasKeys = editing.mode.value !== AnnotationEditorType.NONE && root.value?.ownerDocument === document
@@ -502,11 +530,7 @@ usePdfReaderShortcuts(root, container, pdf, {
   cycleSpread: () => pdf.setSpreadMode(cycle([SpreadMode.NONE, SpreadMode.ODD, SpreadMode.EVEN], pdf.spreadMode.value)),
   toggleOrganizer: () => { if (pdf.pdfDocument.value) toggleOrganizer() },
   properties: () => { if (pdf.pdfDocument.value) showProperties.value = true },
-  addBookmark: () => {
-    if (!pdf.pdfDocument.value) return
-    showSideMode('bookmarks')
-    void nextTick(() => bookmarksPanel.value?.add())
-  },
+  addBookmark,
   showSideMode,
   adjacentSection: goToAdjacentSection,
 })
@@ -525,7 +549,7 @@ function showSideMode(mode: PdfSideMode) {
 </script>
 
 <template>
-  <div ref="root" class="pdf-reader" :class="`toolbar-at-${toolbarPosition}`" data-local-history>
+  <div ref="root" class="pdf-reader" :class="[`toolbar-at-${toolbarPosition}`, { 'title-bar-edge': titleBarVisible && (!toolbarVisible || toolbarPosition === 'left' || toolbarPosition === 'right') }]" data-local-history>
     <PdfReaderToolbar
       v-if="toolbarVisible"
       :page-number="pdf.pageNumber.value"
@@ -555,6 +579,7 @@ function showSideMode(mode: PdfSideMode) {
       @presentation="presentation.start"
       @properties="showProperties = true"
       @print="printDocument"
+      @add-bookmark="addBookmark"
       @toggle-edit="toggleEditBar"
       @add-note="onAddNoteButton"
       @toggle-ocr="ocr.toggle"
@@ -604,12 +629,26 @@ function showSideMode(mode: PdfSideMode) {
           :label-of="pdf.pageLabel"
           @select="onCommentSelect"
         />
+        <PdfReaderSearchResults
+          v-else-if="sideMode === 'search'"
+          :hits="searchResults.hits.value"
+          :searching="searchResults.searching.value"
+          :has-query="searchResults.hasQuery.value"
+          :current-match="pdf.currentMatch.value"
+          :snippet-of="searchResults.snippetOf"
+          :label-of="pdf.pageLabel"
+          :query="query"
+          @select="onSearchHitSelect"
+          @query-change="onQueryChange"
+          @next="(previous) => query.trim() && pdf.find(query, true, previous)"
+        />
         <PdfReaderThumbnails
           v-else-if="pdf.pdfDocument.value"
           :document="pdf.pdfDocument.value"
           :page-number="pdf.pageNumber.value"
           :rotation="pdf.rotation.value"
           :label-of="pdf.pageLabel"
+          :edits="pageEdits"
           @select="onThumbnailSelect"
         />
       </div>
@@ -668,6 +707,8 @@ function showSideMode(mode: PdfSideMode) {
       :is-processing="ocr.isProcessing.value"
       :processing-progress="ocr.processingProgress.value"
       @dismiss="ocr.dismissResult"
+      @start-new="ocr.startNew"
+      @rerun="ocr.rerunWithForce"
       @update:script="pdfOcrStore.setScript"
     />
     <ContextMenu ref="contextMenuRef" :items="contextMenu.items.value" />
@@ -712,6 +753,19 @@ function showSideMode(mode: PdfSideMode) {
   width: 100%;
   height: 100%;
   min-height: 0;
+  box-sizing: border-box;
+}
+/* The line at the edge shared with the app's side bar (its start edge: right in Hebrew, left in
+   English). A top / bottom toolbar is left out: the line runs beside the pages only; with a
+   side toolbar the whole height is that edge. */
+.pdf-reader.toolbar-at-top .pdf-reader-row,
+.pdf-reader.toolbar-at-bottom .pdf-reader-row,
+.pdf-reader.toolbar-at-left,
+.pdf-reader.toolbar-at-right {
+  border-inline-start: 1px solid var(--border-color);
+}
+.pdf-reader.title-bar-edge {
+  border-top: 1px solid var(--border-color);
 }
 .pdf-reader.toolbar-at-bottom { flex-direction: column-reverse; }
 .pdf-reader.toolbar-at-right { flex-direction: row; }

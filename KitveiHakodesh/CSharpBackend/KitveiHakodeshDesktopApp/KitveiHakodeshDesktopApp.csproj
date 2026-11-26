@@ -182,7 +182,10 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="KitveiHakodesh.ico" />
-    <Content Include="KitveiHakodeshLarge.ico" />
+    <!-- Also embedded: the window icon is read from it with every size (MainForm.CreateWindowIcon). -->
+    <EmbeddedResource Include="KitveiHakodeshLarge.ico">
+      <LogicalName>KitveiHakodesh.WindowIcon.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\KitveiHakodesh.targets" />
