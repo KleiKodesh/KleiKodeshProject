@@ -136,4 +136,60 @@ export function applyTheme(preset: ThemePreset, backgroundTint = BACKGROUND_TINT
   const { r, g, b } = hexToRgbObj(ui.accentColor)
   s.setProperty('--accent-bg', `rgba(${r}, ${g}, ${b}, 0.1)`)
   s.setProperty('--accent-bg-light', `rgba(${r}, ${g}, ${b}, 0.05)`)
+
+  // The PDF page colour filter (the PDF viewer's page canvases and thumbnails): the theme's own,
+  // else one made from its colours. Applied only while the "PDF page filters" setting is on
+  // (data-pdf-filters on <html>, see pdf-reader/pdfReaderTheme.css). Root style and attributes
+  // are mirrored into every app window, so all windows follow live.
+  s.setProperty('--pdf-page-filter', base.pdfFilter ?? calcPdfFilter(theme))
+}
+
+// -- PDF page filter ------------------------------------------------------------
+
+/** The CSS filter that fits a PDF page to the theme: dark themes invert it (tinted by the accent
+ *  colour), warm light themes add sepia, strongly coloured ones a hue tint; else "none". */
+export function calcPdfFilter(theme: Theme): string {
+  if (theme.isDark) {
+    const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
+    const [rv, gv, bv] = [r / 255, g / 255, b / 255]
+    const max = Math.max(rv, gv, bv),
+      min = Math.min(rv, gv, bv),
+      delta = max - min
+    let hue = 0
+    if (delta) {
+      if (max === rv) hue = 60 * (((gv - bv) / delta) % 6)
+      else if (max === gv) hue = 60 * ((bv - rv) / delta + 2)
+      else hue = 60 * ((rv - gv) / delta + 4)
+    }
+    if (hue < 0) hue += 360
+    const sat = max === 0 ? 0 : delta / max
+    let f = 'invert(0.9) hue-rotate(180deg)'
+    if (sat > 0.3)
+      f += ` sepia(${Math.min(0.9, sat * 1.2)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.6, 1.2 + sat * 0.8)})`
+    return f + ' brightness(0.8) contrast(0.9)'
+  }
+
+  const bg = hexToRgbObj(theme.reading.bgPrimary)
+  const warmth = bg.r > bg.b && bg.g > bg.b ? (bg.r + bg.g - 2 * bg.b) / 255 : 0
+  if (warmth > 0.2) {
+    const s = Math.min(1, warmth * 2)
+    return `sepia(${s}) brightness(${0.88 + (1 - s) * 0.04})`
+  }
+  const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
+  const [rv, gv, bv] = [r / 255, g / 255, b / 255]
+  const max = Math.max(rv, gv, bv),
+    min = Math.min(rv, gv, bv),
+    delta = max - min
+  const sat = max === 0 ? 0 : delta / max
+  if (sat > 0.4) {
+    let hue = 0
+    if (delta) {
+      if (max === rv) hue = 60 * (((gv - bv) / delta) % 6)
+      else if (max === gv) hue = 60 * ((bv - rv) / delta + 2)
+      else hue = 60 * ((rv - gv) / delta + 4)
+    }
+    if (hue < 0) hue += 360
+    return `sepia(${Math.min(0.9, sat * 1.5)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.6, 1.2 + sat * 0.6)})`
+  }
+  return 'none'
 }

@@ -34,6 +34,10 @@ namespace KitveiHakodeshLib.LocalFile
         private readonly WebView2 _webView;
         private readonly Dictionary<string, FolderMapping> _hosts =
             new Dictionary<string, FolderMapping>(StringComparer.OrdinalIgnoreCase);
+        // Full paths of the non-HTML files tabs have open (ref-counted): the only files
+        // writePdfFile accepts.
+        private readonly Dictionary<string, int> _openedFiles =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         // HTML folders are served by us rather than by SetVirtualHostNameToFolderMapping -
         // see RegisterServedFolder. Separate from _hosts so the same folder can hold both a
         // natively mapped host (opened .pdf) and a served host (opened .html).
@@ -360,11 +364,15 @@ namespace KitveiHakodeshLib.LocalFile
         {
             try
             {
+                string filePath = root.GetProperty("filePath").GetString();
+                // Only a PDF a tab has open may be written (as HandleWritePdfFile).
+                if (!IsOpenedPdf(filePath)) { _bridge.Reply(id, new { error = "file is not open" }); return; }
                 string error = PdfIncrementalSaveWriter.WriteTail(
-                    root.GetProperty("filePath").GetString(),
+                    filePath,
                     root.GetProperty("offset").GetInt64(),
                     Convert.FromBase64String(root.GetProperty("tail").GetString() ?? ""),
-                    Convert.FromBase64String(root.GetProperty("anchor").GetString() ?? ""));
+                    Convert.FromBase64String(root.GetProperty("anchor").GetString() ?? ""),
+                    root.TryGetProperty("length", out var len) && len.ValueKind == JsonValueKind.Number ? len.GetInt64() : (long?)null);
                 _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -415,6 +423,9 @@ namespace KitveiHakodeshLib.LocalFile
                         filePath = dlg.FileName;
                     }
                     string error = PdfFileWriter.Write(filePath, bytes, mustExist: false);
+                    // The saved copy becomes the tab's file: later in-place saves to it must pass IsOpenedPdf.
+                    string savedFull = error == null ? FullPathOrNull(filePath) : null;
+                    if (savedFull != null && !_openedFiles.ContainsKey(savedFull)) _openedFiles[savedFull] = 1;
                     _bridge.Reply(id, error == null
                         ? (object)new { filePath, fileName = Path.GetFileName(filePath) }
                         : new { error });
@@ -423,12 +434,20 @@ namespace KitveiHakodeshLib.LocalFile
             }));
         }
 
-        /// <summary>True when the path is an existing PDF whose folder a tab has mapped for viewing.</summary>
-        private bool IsOpenedPdf(string filePath)
+        /// <summary>True when the path is an existing .pdf file that a tab has open (exact file,
+        /// full path, case-insensitive).</summary>
+        internal bool IsOpenedPdf(string filePath)
         {
-            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-            string folder = Path.GetDirectoryName(filePath);
-            return folder != null && _hosts.ContainsKey(folder);
+            string full = FullPathOrNull(filePath);
+            if (full == null || !File.Exists(full)) return false;
+            if (!string.Equals(Path.GetExtension(full), ".pdf", StringComparison.OrdinalIgnoreCase)) return false;
+            return _openedFiles.ContainsKey(full);
+        }
+
+        private static string FullPathOrNull(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return null;
+            try { return Path.GetFullPath(filePath); } catch { return null; }
         }
 
         public async Task HandleReadTxtFileContent(JsonElement root, string id)
@@ -472,6 +491,11 @@ namespace KitveiHakodeshLib.LocalFile
             }
             else if (_hosts.TryGetValue(folder, out var m))
             {
+                string full = FullPathOrNull(filePath);
+                if (full != null && _openedFiles.TryGetValue(full, out int n))
+                {
+                    if (n <= 1) _openedFiles.Remove(full); else _openedFiles[full] = n - 1;
+                }
                 m.RefCount--;
                 if (m.RefCount <= 0)
                 {
@@ -542,6 +566,7 @@ namespace KitveiHakodeshLib.LocalFile
                 _servedHandlerInstalled = false;
             }
             _hosts.Clear();
+            _openedFiles.Clear();
             _servedHosts.Clear();
             _servedFolderByHost.Clear();
         }
@@ -565,6 +590,9 @@ namespace KitveiHakodeshLib.LocalFile
             }
             m.RefCount++;
             _hosts[folder] = m;
+            string fullFile = FullPathOrNull(filePath);
+            if (fullFile != null)
+                _openedFiles[fullFile] = _openedFiles.TryGetValue(fullFile, out int c) ? c + 1 : 1;
             
             string filename = Path.GetFileName(filePath);
             return "http://" + m.HostName + "/" + filename;

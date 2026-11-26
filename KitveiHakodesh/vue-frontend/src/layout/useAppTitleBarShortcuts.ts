@@ -146,7 +146,11 @@ export function useAppTitleBarShortcuts(options: {
         // focus is in it: it marks itself [data-local-history] and cancels the 'localhistory'
         // event when it moved. Nothing to go back to there: the tab's history, as everywhere.
         const back = e.code === 'ArrowRight'
-        const local = (hostWindow.document.activeElement as Element | null)?.closest('[data-local-history]')
+        // Focus on the body (after a click on a non-focusable spot) counts as in the page's view.
+        const focused = hostWindow.document.activeElement as Element | null
+        const local = focused === hostWindow.document.body
+          ? hostWindow.document.querySelector('[data-local-history]')
+          : focused?.closest('[data-local-history]')
         if (local && !local.dispatchEvent(new hostWindow.CustomEvent('localhistory', { cancelable: true, detail: { back } }))) return true
         if (back) pane.goBack()
         else pane.goForward()
@@ -211,6 +215,8 @@ export function useAppTitleBarShortcuts(options: {
         else pane.closeAllPages()
         return true
       case 'KeyB':
+        // A field that owns Ctrl+B (the PDF outline's "add entry" while editable) keeps it.
+        if (hostWindow.document.activeElement?.closest('[data-ctrlb-enabled]')) return false
         // The PDF view shows the book view's toolbar setting (Ctrl+B in either).
         if (isBookViewActive.value || activeTab.value?.route === '/pdf-view') bookViewStore.toggleToolbar()
         else if (isFastDocViewActive.value) sendFastDocViewCommand('toggleToolbar')

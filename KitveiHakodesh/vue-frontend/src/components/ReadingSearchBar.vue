@@ -35,6 +35,8 @@ const props = defineProps<{
   statusMessage?: string | null
   /** Shows `statusMessage` as a warning (nothing found). */
   statusDanger?: boolean
+  /** Its own search history (recent searches); default: the book view's. */
+  historyKey?: string
 }>()
 const emit = defineEmits<{
   close: []
@@ -60,7 +62,7 @@ const searchMode = ref<SearchMode>(props.mode)
  * `recents.query` IS the input's model, so `inputValue` keeps its old meaning and the
  * watchers below are unchanged.
  */
-const recents = useRecentSearches({ key: 'book-view-search', max: 10 })
+const recents = useRecentSearches({ key: props.historyKey ?? 'book-view-search', max: 10 })
 const inputValue = recents.query
 inputValue.value = props.query ?? ''
 

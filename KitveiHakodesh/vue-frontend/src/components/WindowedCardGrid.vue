@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { computed, ref, watch } from 'vue'
-import { useElementSize } from '@vueuse/core'
 import { WindowedScroller } from 'vue-windowed-scroller'
 import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import type { CardsViewMode } from '@/stores/settingsStore'
@@ -36,7 +36,7 @@ const props = withDefaults(
 )
 
 const hostRef = ref<HTMLElement | null>(null)
-const { width: hostWidth } = useElementSize(hostRef)
+const { width: hostWidth } = useHostElementSize(hostRef)
 const layout = useCardGridLayout(
   () => Math.max(0, hostWidth.value - 2 * props.paddingInline),
   () => props.view,

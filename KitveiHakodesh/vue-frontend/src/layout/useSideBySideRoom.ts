@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 /** The width below which a second column inside one book view stops being usable. */
@@ -10,6 +11,6 @@ const SIDE_BY_SIDE_MIN_WIDTH = 768
  * HebrewBooks edition shown beside a book).
  */
 export function useSideBySideRoom() {
-  const { width } = useWindowSize()
+  const { width } = useWindowSize({ window: useHostWindow() })
   return computed(() => !isVsto && width.value >= SIDE_BY_SIDE_MIN_WIDTH)
 }

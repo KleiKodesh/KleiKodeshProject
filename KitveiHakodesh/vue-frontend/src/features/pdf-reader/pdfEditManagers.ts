@@ -1,6 +1,6 @@
 import { markRaw, reactive, shallowRef } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import { AnnotationEditorParamsType, CSSConstants, SignatureExtractor, applyOpacity, findContrastColor } from 'pdfjs-dist'
+import { AnnotationEditorParamsType, CSSConstants, PDFDateString, SignatureExtractor, applyOpacity, findContrastColor } from 'pdfjs-dist'
 import type { EventBus } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import { t } from '@/i18n'
 
@@ -159,8 +159,8 @@ export function createPdfEditManagers(eventBus: EventBus) {
     d.editor._uiManager?.addEditListeners?.()
   }
 
-  // ---- comments ----
-  /** PDF.js's UI manager (handed to us at its creation): the notes tool adds editors through it. */
+  // ---- comments (PDF.js's web/comment_manager.js: CommentManager, CommentDialog, CommentPopup) ----
+  /** PDF.js's UI manager (handed to us at its creation): its undo stack also holds our notes' steps. */
   let uiManager: Obj = null
   /** Bumped on every comment change: the side panel re-reads. */
   const commentsVersion = shallowRef(0)
@@ -169,32 +169,64 @@ export function createPdfEditManagers(eventBus: EventBus) {
     eventBus.dispatch('kkcommentschanged', { source: null })
   }
 
-  /** The comment dialog (add / edit a comment's text). `pendingNote`: a new note removed if left empty. */
-  const commentDialog = shallowRef<{ uiManager: Obj; editor: Obj; text: string; isNew: boolean } | null>(null)
-  /** The comment popup over the page (hover or selected). */
-  const popup = reactive({ editor: null as Obj, selected: false, editable: true, x: 0, y: 0, text: '', date: null as Date | null })
-  const pendingNotes = new WeakSet<object>()
+  /** The annotation's colour behind a comment (dialog, popup), as PDF.js: null = the theme's. */
+  function commentColor(color: number[] | null | undefined, opacity?: number): string | null {
+    return color ? findContrastColor(applyOpacity(color as [number, number, number], opacity ?? 1), (CSSConstants as Obj).commentForegroundColor) : null
+  }
+  const hex = (c: number[]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('')
 
-  function dataOf(editor: Obj): { str: string; date: Date | null } {
+  /**
+   * The comment dialog (PDF.js's CommentDialog): opened next to the comment button, at window
+   * point (x, y) in px.
+   */
+  const commentDialog = shallowRef<{
+    uiManager: Obj; editor: Obj; text: string
+    x: number; y: number; height: number | null; parent: DOMRect | null; defaultPosition: boolean
+    background: string | null; border: string | null
+  } | null>(null)
+  /** The <dialog> element (PdfEditDialogs.vue); the editors' comment buttons point at it (aria-controls). */
+  let dialogEl: HTMLElement | null = null
+  const setDialogElement = (el: HTMLElement | null) => { dialogEl = el }
+
+  /** The comment popup (PDF.js's CommentPopup): drawn inside the page, after the annotation, at x / y (fractions of the page). */
+  const popup = reactive({
+    editor: null as Obj, host: null as HTMLElement | null, selected: false, editable: true,
+    x: 0, y: 0, correct: false, text: '', date: null as Date | null, background: '' as string,
+  })
+
+  function dataOf(editor: Obj): { str: string; date: Date | null; color: number[] | null; opacity?: number } {
     try {
       const d = editor.getData()
       const raw = d.modificationDate || d.creationDate
       const date = raw instanceof Date ? raw : typeof raw === 'string' ? parsePdfDate(raw) : null
-      return { str: d.contentsObj?.str || d.richText?.str || '', date }
+      const str = d.richText?.str && (!d.contentsObj?.str || d.richText.str === d.contentsObj.str) ? d.richText.str : d.contentsObj?.str
+      return { str: str || '', date, color: d.color ?? null, opacity: d.opacity }
     } catch {
       const c = editor.comment
-      return { str: (typeof c === 'string' ? c : c?.text) || '', date: c?.date ? new Date(c.date) : null }
+      return { str: (typeof c === 'string' ? c : c?.text) || '', date: c?.date ? new Date(c.date) : null, color: null }
+    }
+  }
+
+  /** The comment still at its default place (PDF.js's; an editor with no comment yet has none to ask). */
+  function hasDefaultPosition(editor: Obj): boolean {
+    try {
+      return editor.hasDefaultPopupPosition?.() ?? true
+    } catch {
+      return true
     }
   }
 
   function hidePopup() {
     popup.editor?.setCommentButtonStates?.({ selected: false, hasPopup: false })
     popup.editor = null
+    popup.host = null
     popup.selected = false
   }
 
   const commentManager = markRaw({
-    dialogElement: null as HTMLElement | null,
+    get dialogElement(): HTMLElement | null {
+      return dialogEl
+    },
     setSidebarUiManager(ui: Obj) {
       uiManager = ui ? markRaw(ui) : null
     },
@@ -214,43 +246,59 @@ export function createPdfEditManagers(eventBus: EventBus) {
       }
       if (!visibility) return hidePopup()
       if (popup.editor && popup.editor !== editor) popup.editor.setCommentButtonStates?.({ selected: false, hasPopup: false })
-      const { str, date } = dataOf(editor)
-      const r: DOMRect = editor.parentBoundingClientRect
-      const [px, py] = editor.commentPopupPosition ?? [0, 0]
+      const { str, date, color, opacity } = dataOf(editor)
+      const [x, y] = editor.commentPopupPosition ?? [0, 0]
       popup.editor = markRaw(editor)
+      popup.host = (editor.elementBeforePopup as HTMLElement | null)?.parentElement ?? null
       popup.selected = isSelected
       popup.editable = isEditable
       popup.text = str
       popup.date = date
-      popup.x = r.x + px * r.width
-      popup.y = r.y + py * r.height
+      popup.background = commentColor(color, opacity) ?? ''
+      popup.x = x
+      popup.y = y
+      popup.correct = hasDefaultPosition(editor)
       editor.setCommentButtonStates?.({ selected: isSelected, hasPopup: true })
     },
     destroyPopup: hidePopup,
-    updatePopupColor() {},
-    showDialog(ui: Obj, editor: Obj) {
+    updatePopupColor(editor: Obj) {
+      if (popup.editor !== editor) return
+      const { color, opacity } = dataOf(editor)
+      popup.background = commentColor(color, opacity) ?? ''
+    },
+    showDialog(ui: Obj, editor: Obj, posX?: number, posY?: number, options?: { height?: number; parentDimensions?: DOMRect }) {
       ui?.removeEditListeners?.()
       hidePopup()
-      commentDialog.value = { uiManager: ui ? markRaw(ui) : null, editor: markRaw(editor), text: dataOf(editor).str, isNew: pendingNotes.has(editor) }
+      const { str, color, opacity } = dataOf(editor)
+      let x = posX
+      let y = posY
+      if (x === undefined || y === undefined) {
+        // Not from a comment button: beside the annotation.
+        const r = (editor.div as HTMLElement | undefined)?.getBoundingClientRect()
+        x = r ? r.right : 0
+        y = r ? r.bottom : 0
+      }
+      commentDialog.value = {
+        uiManager: ui ? markRaw(ui) : null, editor: markRaw(editor), text: str,
+        x, y, height: options?.height ?? null, parent: options?.parentDimensions ?? null,
+        defaultPosition: hasDefaultPosition(editor),
+        background: commentColor(color, opacity), border: color ? hex(color) : null,
+      }
     },
-    makeCommentColor(color: number[] | null, opacity?: number) {
-      return color ? findContrastColor(applyOpacity(color as [number, number, number], opacity ?? 1), (CSSConstants as Obj).commentForegroundColor) : null
-    },
+    makeCommentColor: commentColor,
     destroy() {
       hidePopup()
       commentDialog.value = null
     },
   })
 
-  /** Save (text) or cancel (undefined) the comment dialog. A new note left empty is removed. */
+  /** Save (text) or cancel (undefined) the comment dialog, as PDF.js's. */
   function closeCommentDialog(text?: string) {
     const d = commentDialog.value
     if (!d) return
     commentDialog.value = null
-    pendingNotes.delete(d.editor)
-    if (text !== undefined && text.trim()) d.editor.comment = text
-    else if (text !== undefined && !text.trim() && !d.isNew) d.editor.comment = null
-    else if (d.isNew) d.editor.remove()
+    if (text !== undefined) d.editor.comment = text
+    d.editor.focusCommentButton?.()
     d.uiManager?.addEditListeners?.()
     changed()
   }
@@ -261,48 +309,48 @@ export function createPdfEditManagers(eventBus: EventBus) {
     const saved = editor.comment
     hidePopup()
     if (saved?.text && editor._uiManager?.deleteComment) editor._uiManager.deleteComment(editor, saved)
-    else editor.comment = null
+    else if (typeof saved === 'string' && saved && uiManager?.addCommands) {
+      // A comment on the page's annotation layer (reading mode): its text is a plain string and
+      // PDF.js adds no undo step for it - add one, so Ctrl+Z brings it back as for an editor's.
+      uiManager.addCommands({
+        cmd: () => { editor.comment = null; changed() },
+        undo: () => { editor.comment = saved; changed() },
+        mustExec: true,
+      })
+    } else editor.comment = null
+    editor.focus?.()
     changed()
   }
-  function editPopupComment() {
+  /** The popup's Edit: the dialog, as tall as the popup's text. */
+  function editPopupComment(height?: number) {
     const editor = popup.editor
     if (!editor) return
     hidePopup()
-    editor.editComment?.({})
+    editor.editComment?.(height ? { height } : {})
   }
 
-  /**
-   * The notes tool: a click on a page's editor layer (image editor on) adds a small note image
-   * there and opens its comment - a PDF.js stamp with a comment, saved in the file as such.
-   */
-  function addNoteAt(layerDiv: HTMLElement, clientX: number, clientY: number, bitmapUrl: string) {
-    const pageDiv = layerDiv.closest<HTMLElement>('.page')
-    const pageIndex = Number(pageDiv?.dataset.pageNumber) - 1
-    const layer = uiManager?.getLayer?.(pageIndex)
-    if (!layer || Number.isNaN(pageIndex)) return
-    const rect = layerDiv.getBoundingClientRect()
-    const editor = layer.createAndAddNewEditor({ offsetX: clientX - rect.left, offsetY: clientY - rect.top }, false, { bitmapUrl })
-    if (!editor) return
-    pendingNotes.add(editor)
-    commentManager.showDialog(uiManager, editor)
+  /** Open the popup of a comment listed in the side panel (PDF.js's CommentSidebar click). */
+  function selectComment(pageIndex: number, uid: string) {
+    uiManager?.selectComment?.(pageIndex, uid)
   }
+  const waitForEditorsRendered = (pageNumber: number): Promise<void> =>
+    uiManager?.waitForEditorsRendered?.(pageNumber) ?? Promise.resolve()
 
   return {
     signatureManager, commentManager,
     saved, loadSignatures, saveSignature, deleteSignature, placeSignature, newSignature,
     signatureDialog, closeSignatureDialog, descriptionDialog, closeDescriptionDialog,
-    commentDialog, closeCommentDialog, popup, hidePopup, deletePopupComment, editPopupComment,
-    commentsVersion, addNoteAt,
+    commentDialog, closeCommentDialog, setDialogElement, popup, hidePopup, deletePopupComment, editPopupComment,
+    commentsVersion, selectComment, waitForEditorsRendered,
+    /** PDF.js's UI manager of the open document (its undo / redo stack), or null. */
+    getUiManager: (): Obj => uiManager,
     canSaveMore: () => stored.value.length < MAX_SAVED_SIGNATURES,
   }
 }
 
-/** PDF date "D:YYYYMMDDHHmmSS" to a Date. */
+/** PDF date "D:YYYYMMDDHHmmSS+HH'mm'" to a Date (PDF.js's reading, time zone included). */
 function parsePdfDate(s: string): Date | null {
-  const m = /^(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?/.exec(s)
-  if (!m) return null
-  const d = new Date(Number(m[1]), Number(m[2] ?? 1) - 1, Number(m[3] ?? 1), Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0))
-  return Number.isNaN(d.getTime()) ? null : d
+  return PDFDateString.toDateObject(s)
 }
 
 export type PdfEditManagers = ReturnType<typeof createPdfEditManagers>

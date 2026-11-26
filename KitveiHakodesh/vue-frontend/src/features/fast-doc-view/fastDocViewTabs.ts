@@ -297,7 +297,7 @@ function underlineOf(span: HTMLElement, paragraph: HTMLElement): Underline | nul
 export const vFastDocViewTabs = {
   mounted(element: HTMLElement) { run(element) },
   updated(element: HTMLElement) { run(element) },
-  unmounted(element: HTMLElement) { widthObserver.unobserve(element); widths.delete(element) },
+  unmounted(element: HTMLElement) { widthObserverFor(element).unobserve(element); widths.delete(element) },
 }
 
 function run(element: HTMLElement) {
@@ -313,24 +313,33 @@ const pending = new Set<HTMLElement>()
 let frame = 0
 // a width change moves line breaks; the pass runs in the next frame (inside the observer callback a height change of the
 // scroller's rows would be an observer loop)
-const widthObserver = new ResizeObserver((entries) => {
+// One observer per window: an app window is a popup of this page, and an observer from another
+// window stops reporting its elements' sizes (only the element's own window's observer keeps up).
+const widthObservers = new WeakMap<Window, ResizeObserver>()
+function widthObserverFor(element: Element): ResizeObserver {
+  const win = element.ownerDocument.defaultView ?? window
+  let observer = widthObservers.get(win)
+  if (!observer) widthObservers.set(win, (observer = new win.ResizeObserver(onWidths)))
+  return observer
+}
+function onWidths(entries: ResizeObserverEntry[]) {
   for (const entry of entries) {
     const width = Math.round(entry.contentRect.width)
     if (widths.get(entry.target) === width) continue
     widths.set(entry.target, width)
     pending.add(entry.target as HTMLElement)
   }
-  if (pending.size && !frame) frame = requestAnimationFrame(() => {
+  if (pending.size && !frame) frame = (entries[0]!.target.ownerDocument.defaultView ?? window).requestAnimationFrame(() => {
     frame = 0
     for (const element of pending) if (element.isConnected) run(element)
     pending.clear()
   })
-})
+}
 
 /** Watches a block that has tabs; its width now is the one the pass just used (a change before the first observation counts too). */
 function watchWidth(element: HTMLElement) {
   if (widths.has(element)) return
   const style = getComputedStyle(element)          // the content box, as the observer's contentRect measures it
   widths.set(element, Math.round(element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)))
-  widthObserver.observe(element)
+  widthObserverFor(element).observe(element)
 }

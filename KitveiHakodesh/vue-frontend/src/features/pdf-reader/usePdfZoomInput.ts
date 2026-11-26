@@ -1,6 +1,7 @@
 import { type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { PdfScroller } from './usePdfScroller'
 
 /**
@@ -10,6 +11,7 @@ import type { PdfScroller } from './usePdfScroller'
  */
 export function usePdfZoomInput(root: Ref<HTMLElement | null>, scroller: Ref<HTMLElement | null>, pdf: PdfScroller) {
   const hostWindow = useHostWindow()
+  const paneNavigation = usePaneNavigation()
 
   // Ctrl+wheel / trackpad pinch: a smooth factor from the wheel delta (pinch sends small deltas).
   useEventListener(scroller, 'wheel', (e: WheelEvent) => {
@@ -49,11 +51,14 @@ export function usePdfZoomInput(root: Ref<HTMLElement | null>, scroller: Ref<HTM
   useEventListener(scroller, 'touchend', endTouch, { passive: true })
   useEventListener(scroller, 'touchcancel', endTouch, { passive: true })
 
-  // Keyboard, while focus is inside this viewer.
+  // Keyboard: while this PDF tab shows, wherever focus is (the title bar too), as the book view's
+  // zoom keys - never the browser's page zoom. Not inside a dialog.
   useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return
     const active = hostWindow.document.activeElement
-    if (!root.value || !(active === hostWindow.document.body || root.value.contains(active))) return
+    if (!root.value || !root.value.isConnected || !active) return
+    const inside = active === hostWindow.document.body || root.value.contains(active)
+    if (!inside && (paneNavigation.activeTab.route !== '/pdf-view' || active.closest('[role="dialog"], dialog'))) return
     if (e.code === 'Equal' || e.code === 'NumpadAdd') pdf.zoomIn()
     else if (e.code === 'Minus' || e.code === 'NumpadSubtract') pdf.zoomOut()
     else if (e.code === 'Digit0' || e.code === 'Numpad0') pdf.fitWidth()

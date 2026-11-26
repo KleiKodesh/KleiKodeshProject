@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 /**
@@ -24,7 +25,7 @@ import { opensInFastDocView } from '@/utils/fastDocViewFiles'
  * pane it belongs to for all navigation, so results open in the right pane.
  */
 import { ref, computed, nextTick, watch } from 'vue'
-import { useIntervalFn, useResizeObserver } from '@vueuse/core'
+import { useIntervalFn } from '@vueuse/core'
 import { showToast } from '@/composables/useToast'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
@@ -307,7 +308,7 @@ function computeAnchor() {
 //
 // The field wrapper is observed too: the panel hangs off its bottom edge, so the
 // field moving or changing height has to re-anchor as well.
-useResizeObserver([shellEl, rootRef], () => {
+useHostResizeObserver([shellEl, rootRef], () => {
   if (isDropdownOpen.value) computeAnchor()
 })
 

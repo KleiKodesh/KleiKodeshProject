@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useElementSize } from '@vueuse/core'
 import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
@@ -14,6 +14,7 @@ import {
   IconPageFit20Regular,
   IconSearch20Regular,
   IconEdit20Regular,
+  IconComment20Regular,
   IconEdit20Filled,
   IconScanText20Regular,
   IconMoreHorizontal24Regular,
@@ -26,6 +27,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { usePressRepeat } from '@/composables/usePressRepeat'
 import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import IconPdfScrollPage from './icons/IconPdfScrollPage.vue'
 import IconPdfScrollVertical from './icons/IconPdfScrollVertical.vue'
@@ -60,6 +62,8 @@ const props = defineProps<{
   searchVisible: boolean
   handTool: boolean
   editVisible: boolean
+  /** Note mode is on (a click on a page places a note). */
+  noteActive: boolean
   ocrActive: boolean
   tocVisible: boolean
   hasOutline: boolean
@@ -86,6 +90,7 @@ const emit = defineEmits<{
   toggleSearch: []
   toggleHandTool: []
   toggleEdit: []
+  addNote: []
   toggleOcr: []
   toggleToc: [toggleButton: HTMLElement]
   presentation: []
@@ -101,7 +106,8 @@ const { t } = useI18n()
 const zoomRepeat = usePressRepeat()
 
 // The book view's toolbar shell and position (shared useToolbarDrag + app-wide toolbar position).
-const { toolbarPosition } = storeToRefs(useBookViewStore())
+// The PDF viewer's own toolbar position (not the book view's): settingsStore.pdfToolbarPosition.
+const { pdfToolbarPosition: toolbarPosition } = storeToRefs(useSettingsStore())
 const toolbarEl = ref<HTMLElement | null>(null)
 const { isDragging, dropPreviewStyle, isOverBackground } = useToolbarDrag(toolbarEl, toolbarPosition, '.pdf-reader')
 
@@ -128,33 +134,45 @@ const spreadOptions = computed<IconDropdownOption<number>[]>(() => [
 // shared fit arithmetic, useToolbarOverflow). First key = first to go; reading essentials last.
 const OVERFLOW_ORDER = [
   'properties', 'print', 'organize', 'presentation', 'rotate', 'spread', 'scroll', 'preset',
-  'saveas', 'ocr', 'edit', 'hand', 'zoom', 'first-last', 'search', 'save', 'toc', 'pages',
+  'saveas', 'ocr', 'note', 'edit', 'hand', 'zoom', 'first-last', 'search', 'save', 'toc', 'pages',
 ] as const
 type OverflowKey = (typeof OVERFLOW_ORDER)[number]
 /** The controls in the order the toolbar shows them. */
 const TOOLBAR_ORDER: OverflowKey[] = [
-  'toc', 'first-last', 'pages', 'search', 'hand', 'edit', 'ocr',
+  'toc', 'first-last', 'pages', 'search', 'hand', 'edit', 'note', 'ocr',
   'zoom', 'preset', 'scroll', 'spread', 'rotate', 'presentation', 'organize', 'save', 'saveas', 'print', 'properties',
 ]
 const OVERFLOW_GROUP: Record<OverflowKey, string> = {
   properties: 'document', print: 'document', organize: 'document', presentation: 'document',
   save: 'document', saveas: 'document',
   rotate: 'layout', spread: 'layout', scroll: 'layout', preset: 'layout',
-  ocr: 'tools', edit: 'tools', hand: 'tools',
+  ocr: 'tools', edit: 'tools', note: 'tools', hand: 'tools',
   zoom: 'zoom',
   'first-last': 'pages', pages: 'pages',
   search: 'panels', toc: 'panels',
 }
 // The page box ("1 / 364") and zoom box are measured, not guessed: a guess too wide collapses
 // controls while there is still room. The last width is kept while a box sits in the menu.
+const isVertical = computed(() => toolbarPosition.value === 'left' || toolbarPosition.value === 'right')
 const pageBoxEl = ref<HTMLElement | null>(null)
 const zoomBoxEl = ref<HTMLElement | null>(null)
-const { width: pageBoxW } = useElementSize(pageBoxEl, undefined, { box: 'border-box' })
-const { width: zoomBoxW } = useElementSize(zoomBoxEl, undefined, { box: 'border-box' })
+// Measured along the toolbar's own axis: the width on a top/bottom toolbar, the height on a side one
+// (there the boxes stack their parts and are about one button tall, not 80px wide).
+const pageBoxSize = useHostElementSize(pageBoxEl, undefined, { box: 'border-box' })
+const zoomBoxSize = useHostElementSize(zoomBoxEl, undefined, { box: 'border-box' })
+const pageBoxW = computed(() => (isVertical.value ? pageBoxSize.height.value : pageBoxSize.width.value))
+const zoomBoxW = computed(() => (isVertical.value ? zoomBoxSize.height.value : zoomBoxSize.width.value))
 let lastPageBoxW = 78
 let lastZoomBoxW = 46
+let lastAxisVertical = false
 /** Room each control takes, in button-widths. */
 function widthOf(key: OverflowKey): number {
+  // A switch of axis drops the other axis's remembered sizes.
+  if (lastAxisVertical !== isVertical.value) {
+    lastAxisVertical = isVertical.value
+    lastPageBoxW = isVertical.value ? 40 : 78
+    lastZoomBoxW = isVertical.value ? 24 : 46
+  }
   if (key === 'rotate' || key === 'first-last') return 2
   if (key === 'zoom') {
     if (zoomBoxW.value > 0) lastZoomBoxW = zoomBoxW.value
@@ -166,7 +184,6 @@ function widthOf(key: OverflowKey): number {
   }
   return 1
 }
-const isVertical = computed(() => toolbarPosition.value === 'left' || toolbarPosition.value === 'right')
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible: shown } = useToolbarOverflow(
   toolbarEl,
   computed(() => [...OVERFLOW_ORDER]),
@@ -207,6 +224,7 @@ const moreItems = computed<ContextMenuItem[]>(() => {
     else if (key === 'scroll') items.push({ type: 'submenu', icon: scrollOptions.value.find((o) => o.value === props.scrollMode)?.icon, label: withKey(t('pdfReader.menuScroll'), K.scrollCycle), items: radio(scrollOptions.value, props.scrollMode, (v) => emit('setScrollMode', v)) })
     else if (key === 'preset') items.push({ type: 'submenu', icon: (presetOptions.value.find((o) => o.value === props.preset) ?? presetOptions.value[0])?.icon, label: withKey(t('pdfReader.menuFit'), K.fitCycle), items: radio(presetOptions.value, props.preset, (v) => emit('setPreset', v)) })
     else if (key === 'ocr') items.push({ type: 'checkbox', label: withKey(t('pdfReader.ocr'), K.ocr), icon: IconScanText20Regular, checked: props.ocrActive, onChange: () => { emit('toggleOcr'); moreMenu.value?.hide() } })
+    else if (key === 'note') items.push({ type: 'checkbox', label: withKey(t('pdfReader.notes.tool'), K.editTool.note), icon: IconComment20Regular, checked: props.noteActive, onChange: () => { emit('addNote'); moreMenu.value?.hide() } })
     else if (key === 'edit') items.push({ type: 'checkbox', label: withKey(t('pdfReader.toggleEdit'), K.edit), icon: IconEdit20Regular, checked: props.editVisible, onChange: () => { emit('toggleEdit'); moreMenu.value?.hide() } })
     else if (key === 'hand') items.push({ type: 'checkbox', label: withKey(t('pdfReader.handTool'), K.handTool), icon: IconPdfHandTool, checked: props.handTool, onChange: () => { emit('toggleHandTool'); moreMenu.value?.hide() } })
     else if (key === 'zoom') {
@@ -328,6 +346,12 @@ function discardZoom(event: KeyboardEvent) {
     >
       <IconPdfSelectTool v-if="handTool" />
       <IconPdfHandTool v-else />
+    </button>
+    </template>
+    <!-- Add note, on the toolbar as in the old viewer: note mode (a click on a page places one note). -->
+    <template v-if="shown('note')">
+    <button :class="{ active: noteActive }" :aria-pressed="noteActive" :title="withKey($t('pdfReader.notes.tool'), K.editTool.note)" @click="emit('addNote')">
+      <IconComment20Regular />
     </button>
     </template>
     <template v-if="shown('edit')">
@@ -498,17 +522,29 @@ button:disabled {
   background: var(--bg-toolbar);
   z-index: 1;
 }
+/* As the book view's: the opaque fill above replaces main.css's button background wholesale, so
+   the hover wash (and its fade) is restated here, composited onto the toolbar's surface. */
+.overflow-btn {
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.overflow-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
+}
 .overflow-btn:disabled {
   opacity: 0;
   visibility: hidden;
   cursor: default;
 }
+/* The book view's vertical anchor: bottom edge, centred across. No logical inset here - in RTL
+   'inset-inline-end: auto' is 'left: auto' and would undo the centring (the button fell off the bar). */
 .toolbar-left .overflow-btn,
 .toolbar-right .overflow-btn {
+  left: 50%;
+  right: auto;
   top: auto;
   bottom: var(--toolbar-edge-inset);
-  left: 50%;
-  inset-inline-end: auto;
   transform: translateX(-50%);
 }
 .save-btn {
@@ -527,5 +563,29 @@ button:disabled {
 .page-count {
   opacity: 0.75;
   white-space: nowrap;
+}
+/* Side toolbar: the page and zoom boxes stack (input over its count) inside the narrow column. */
+.toolbar-left .page-box,
+.toolbar-right .page-box {
+  flex-direction: column;
+  gap: 1px;
+  width: var(--toolbar-button-size);
+  /* padding, not margin: the measured border box (widthOf) must include it */
+  padding: 2px 0;
+}
+.toolbar-left .page-input,
+.toolbar-right .page-input,
+.toolbar-left .page-input.labeled,
+.toolbar-right .page-input.labeled {
+  width: 100%;
+  padding: 0;
+  font-size: 11px;
+}
+.toolbar-left .page-count,
+.toolbar-right .page-count {
+  font-size: 10px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.1;
 }
 </style>

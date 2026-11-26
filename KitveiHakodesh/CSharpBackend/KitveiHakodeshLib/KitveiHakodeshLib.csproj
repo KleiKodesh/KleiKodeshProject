@@ -158,10 +158,6 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="AppViewerPrintPdf.cs">
-      <DependentUpon>AppViewer.cs</DependentUpon>
-      <SubType>UserControl</SubType>
-    </Compile>
     <Compile Include="AppViewerFocus.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>

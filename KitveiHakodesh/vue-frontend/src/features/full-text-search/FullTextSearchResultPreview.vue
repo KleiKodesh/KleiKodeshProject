@@ -6,7 +6,8 @@
  * past its cap, so only a bounded window is ever in memory.
  */
 import { ref, watch, nextTick } from 'vue'
-import { useInfiniteScroll, until } from '@vueuse/core'
+import { until } from '@vueuse/core'
+import { useHostInfiniteScroll } from '@/composables/useHostInfiniteScroll'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
@@ -35,13 +36,13 @@ const boxEl = ref<HTMLElement | null>(null)
 // otherwise the top loader fires at scrollTop 0 before the seed/restore lands.
 const ready = ref(false)
 
-useInfiniteScroll(boxEl, () => loadAnchored('bottom'), {
+useHostInfiniteScroll(boxEl, () => loadAnchored('bottom'), {
   distance: 30,
   direction: 'bottom',
   canLoadMore: () => ready.value && !props.state.atEnd && !props.state.loading,
 })
 
-useInfiniteScroll(boxEl, () => loadAnchored('top'), {
+useHostInfiniteScroll(boxEl, () => loadAnchored('top'), {
   distance: 30,
   direction: 'top',
   canLoadMore: () => ready.value && !props.state.atStart && !props.state.loading,

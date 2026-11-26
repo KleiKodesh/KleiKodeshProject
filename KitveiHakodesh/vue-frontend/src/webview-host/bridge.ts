@@ -339,6 +339,38 @@ export async function revealFileInFolder(filePath: string): Promise<boolean> {
  * Hosted: the C# host (`writePdfFile`, base64). Dev: the service op of the same name.
  * Returns an error message, or null when written.
  */
+/**
+ * PDF viewer Save in place: write PDF.js's update section (`tail`) into the PDF at `offset`, the
+ * file cut right after it. `anchor` = the loaded bytes just before `offset`; the write is refused
+ * when they no longer match the disk, or the file is no longer exactly `length` bytes (the loaded
+ * length: another tool's later append is never cut off). Rules: Core PdfIncrementalSaveWriter.
+ * Hosted: the C# host writes (`writePdfTail`, bytes as base64). Dev: the service op.
+ * Returns an error message, or null when written.
+ */
+export async function writePdfTail(filePath: string, offset: number, tail: Uint8Array, anchor: Uint8Array, length: number): Promise<string | null> {
+  try {
+    const r =
+      typeof window.__webviewAction !== 'function'
+        ? await serviceCall<{ ok?: boolean; error?: string }>('writePdfTail', {
+            path: filePath,
+            offset,
+            tail: new Uint8Array(tail),
+            anchor: new Uint8Array(anchor),
+            length,
+          })
+        : await action<{ ok?: boolean; error?: string }>('writePdfTail', {
+            filePath,
+            offset,
+            tail: bytesToBase64(tail),
+            anchor: bytesToBase64(anchor),
+            length,
+          })
+    return r?.ok ? null : r?.error || 'write failed'
+  } catch (e) {
+    return String(e)
+  }
+}
+
 export async function writePdfFile(filePath: string, bytes: Uint8Array): Promise<string | null> {
   try {
     const r =
@@ -375,21 +407,6 @@ export async function savePdfAs(bytes: Uint8Array, suggestedName: string, initia
     return { kind: 'error', error: r?.error || 'write failed' }
   } catch (e) {
     return { kind: 'error', error: String(e) }
-  }
-}
-
-/**
- * Print a PDF file on disk through the browser engine's own PDF viewer (system print dialog,
- * full vector quality). Hosted only (C# `printPdfFile`); returns false when there is no host
- * or the host could not open the file; the caller then shows a message (there is no in-page print).
- */
-export async function printPdfFile(filePath: string): Promise<boolean> {
-  if (typeof window.__webviewAction !== 'function') return false
-  try {
-    const r = await action<{ ok?: boolean; error?: string }>('printPdfFile', { filePath })
-    return !!r?.ok
-  } catch {
-    return false
   }
 }
 

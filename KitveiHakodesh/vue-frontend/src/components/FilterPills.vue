@@ -3,8 +3,8 @@
 // Wide: each pill is as wide as its text and rows wrap.
 // Narrow (container under NARROW_WIDTH): one row; pills that don't fit go behind a "+N"
 // pill whose dropdown lists them.
+import { useHostResizeObserver, useHostElementSize } from '@/composables/useHostResizeObserver'
 import { ref, computed, nextTick, watch } from 'vue'
-import { useElementSize, useResizeObserver } from '@vueuse/core'
 import { IconCheckmark16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
@@ -28,7 +28,7 @@ const MORE_PILL_WIDTH = 52
 
 const rootRef = ref<HTMLElement | null>(null)
 const measureRef = ref<HTMLElement | null>(null)
-const { width: rootWidth } = useElementSize(rootRef)
+const { width: rootWidth } = useHostElementSize(rootRef)
 const isNarrow = computed(() => rootWidth.value > 0 && rootWidth.value < NARROW_WIDTH)
 
 // Widths of every pill ("all" first), read from an invisible copy of the full row.
@@ -38,7 +38,7 @@ function measure() {
   if (!el) return
   pillWidths.value = [...el.children].map((c) => (c as HTMLElement).offsetWidth)
 }
-useResizeObserver(measureRef, measure)
+useHostResizeObserver(measureRef, measure)
 watch(() => props.items, () => nextTick(measure), { deep: true })
 
 /** How many items (after "all") fit in one row; the rest go to the dropdown. */

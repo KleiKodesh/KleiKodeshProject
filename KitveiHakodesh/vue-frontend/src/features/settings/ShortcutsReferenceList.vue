@@ -88,6 +88,9 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F3</kbd><span class="kbd-plus">/</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>F3</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.findNextPrev') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd><span class="kbd-plus">/</span><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.leftArrow') }}</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.history') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideTableOfContents') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.leftArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.nextHeading') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousHeading') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideToolbar') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>N</kbd><span class="kbd-plus">/</span><kbd>J</kbd><span class="kbd-plus">/</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('pdfReader.nextPage') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>P</kbd><span class="kbd-plus">/</span><kbd>K</kbd><span class="kbd-plus">/</span><kbd>{{ $t('settings.shortcutsList.leftArrow') }}</kbd></div><span class="shortcut-description">{{ $t('pdfReader.prevPage') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Home</kbd><span class="kbd-plus">/</span><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.upArrow') }}</kbd></div><span class="shortcut-description">{{ $t('pdfReader.firstPage') }}</span></div>
@@ -107,7 +110,10 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>V</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.cycleScroll') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>D</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.cycleSpread') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>E</kbd></div><span class="shortcut-description">{{ $t('pdfReader.toggleEdit') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>H</kbd><span class="kbd-plus">/</span><kbd>T</kbd><span class="kbd-plus">/</span><kbd>D</kbd><span class="kbd-plus">/</span><kbd>I</kbd><span class="kbd-plus">/</span><kbd>G</kbd><span class="kbd-plus">/</span><kbd>N</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.editTools') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>H</kbd><span class="kbd-plus">/</span><kbd>T</kbd><span class="kbd-plus">/</span><kbd>D</kbd><span class="kbd-plus">/</span><kbd>I</kbd><span class="kbd-plus">/</span><kbd>G</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.editTools') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Z</kbd><span class="kbd-plus">/</span><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Y</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.undoRedo') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>N</kbd></div><span class="shortcut-description">{{ $t('pdfReader.notes.tool') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Enter</kbd><span class="kbd-plus">/</span><kbd>Esc</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.noteBox') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>O</kbd></div><span class="shortcut-description">{{ $t('pdfReader.ocr') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>S</kbd></div><span class="shortcut-description">{{ $t('pdfReader.shortcuts.ocrScript') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>F</kbd></div><span class="shortcut-description">{{ $t('pdfViewer.ocr.forceTitle') }}</span></div>
@@ -145,13 +151,14 @@
 const isDev = import.meta.env.DEV
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { isVstoEnvironment, hasNativeChromeTabs } from '@/webview-host/bridge'
 
 // Mirrors BookViewPage's isWideScreen threshold, the gate the side commentary
 // shortcuts actually hit. That one measures the book pane; this measures the
 // window, which is close enough to it.
 const SIDE_COMMENTARY_MIN_WIDTH = 650
-const { width: windowWidth } = useWindowSize()
+const { width: windowWidth } = useWindowSize({ window: useHostWindow() })
 const hasRoomForSideCommentary = computed(() => windowWidth.value >= SIDE_COMMENTARY_MIN_WIDTH)
 </script>
 

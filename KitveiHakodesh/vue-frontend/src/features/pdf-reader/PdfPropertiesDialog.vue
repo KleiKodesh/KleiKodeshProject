@@ -3,9 +3,11 @@ import { onMounted, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { IconFolderOpen20Regular } from '@iconify-prerendered/vue-fluent'
+import { revealFileInFolder } from '@/webview-host/bridge'
 
 /** Document properties: the PDF's own metadata, in a modal dialog in the window it was opened from. */
-const props = defineProps<{ document: PDFDocumentProxy; fileName: string | null }>()
+const props = defineProps<{ document: PDFDocumentProxy; fileName: string | null; filePath?: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 const hostWindow = useHostWindow()
 
@@ -31,6 +33,7 @@ onMounted(async () => {
   const [w, h] = [page1.view[2]! - page1.view[0]!, page1.view[3]! - page1.view[1]!]
   rows.value = [
     { key: 'fileName', value: props.fileName ?? '' },
+    { key: 'location', value: props.filePath ?? '' },
     { key: 'fileSize', value: size(length) },
     { key: 'title', value: String(i.Title ?? '') },
     { key: 'author', value: String(i.Author ?? '') },
@@ -62,7 +65,18 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
         <dl class="props-list">
           <template v-for="row in rows" :key="row.key">
             <dt>{{ $t(`pdfReader.prop.${row.key}`) }}</dt>
-            <dd>{{ row.value || '-' }}</dd>
+            <dd :class="{ 'props-location': row.key === 'location' }">
+              <span>{{ row.value || '-' }}</span>
+              <!-- the file's exact place on disk: selectable text, plus "open file location" -->
+              <button
+                v-if="row.key === 'location' && row.value"
+                class="props-reveal-btn"
+                :title="$t('pdfReader.prop.openLocation')"
+                @click="revealFileInFolder(row.value)"
+              >
+                <IconFolderOpen20Regular />
+              </button>
+            </dd>
           </template>
         </dl>
         <div class="props-actions">
@@ -117,6 +131,35 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 .props-list dd {
   margin: 0;
   overflow-wrap: anywhere;
+  /* every value can be selected and copied (the dialog sits inside the app, which may disable selection) */
+  user-select: text;
+  cursor: text;
+}
+.props-location {
+  /* a normal line (not flex): the path is an inline run, so it sits on the dialog's side
+     (right in Hebrew, left in English) like every other value */
+  display: block;
+}
+.props-location span {
+  /* inside itself a path reads left to right */
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.props-reveal-btn {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-inline-start: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.props-reveal-btn svg {
+  width: 16px;
+  height: 16px;
 }
 .props-actions {
   display: flex;

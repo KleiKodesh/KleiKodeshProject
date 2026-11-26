@@ -408,7 +408,7 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<WritePdfTailArgs>(req.Args);
                     if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
                         return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
-                    string? writeError = PdfIncrementalSaveWriter.WriteTail(full, a.Offset, a.Tail, a.Anchor);
+                    string? writeError = PdfIncrementalSaveWriter.WriteTail(full, a.Offset, a.Tail, a.Anchor, a.Length);
                     return RpcResponse.Ok(MsgPack.Ser(writeError is null
                         ? new OpenInDefaultAppResult { Ok = true }
                         : new OpenInDefaultAppResult { Error = writeError }));

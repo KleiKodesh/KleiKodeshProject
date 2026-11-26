@@ -4,8 +4,10 @@ import { storeToRefs } from 'pinia'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
 import PdfFindOptions from './PdfFindOptions.vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import PdfReaderToolbar from './PdfReaderToolbar.vue'
 import { usePdfScroller } from './usePdfScroller'
+import { disposeThumbnailEngine, thumbnailEngineFor } from './pdfThumbnailEngine'
 import { usePdfZoomInput } from './usePdfZoomInput'
 import { usePdfHandTool } from './usePdfHandTool'
 import { usePdfPresentation } from './usePdfPresentation'
@@ -16,12 +18,15 @@ import PdfOrganizerWindow from '@/features/pdf-organizer/PdfOrganizerWindow.vue'
 import PdfEditToolbar from './PdfEditToolbar.vue'
 import PdfEditDialogs from './PdfEditDialogs.vue'
 import { usePdfEditing } from './usePdfEditing'
+import { usePdfNotes } from './usePdfNotes'
+import PdfNotesOverlay from './PdfNotesOverlay.vue'
 import SidePanel from '@/components/SidePanel.vue'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
-import { disposeLocalFileHost, openUrlInSystemBrowser, printPdfFile, restoreLocalFile } from '@/webview-host/bridge'
+import { disposeLocalFileHost, openUrlInSystemBrowser, restoreLocalFile } from '@/webview-host/bridge'
 import { useTabStore } from '@/stores/tabStore'
 import type { PdfOutlineEntry as BridgeOutlineEntry } from '@/stores/bookViewStore'
 import { usePdfSave } from './usePdfSave'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import PdfReaderToc from './PdfReaderToc.vue'
 import PdfReaderSideModes, { type PdfSideMode } from './PdfReaderSideModes.vue'
 import PdfReaderBookmarks from './PdfReaderBookmarks.vue'
@@ -47,7 +52,7 @@ import { usePdfReaderShortcuts } from './usePdfReaderShortcuts'
 import { FindState, ScrollMode, SpreadMode, type ScalePreset } from './usePdfScroller'
 import { usePdfExternalLinks } from './usePdfExternalLinks'
 import PdfPasswordDialog from './PdfPasswordDialog.vue'
-import PdfHighlightButton from './PdfHighlightButton.vue'
+import { usePdfSelectionActions } from './usePdfSelectionActions'
 import type { OcrScript } from './pdfOcrTypes'
 import { findOutlineItem, type OutlineItemLike } from './findOutlineItem'
 
@@ -64,6 +69,19 @@ const props = defineProps<{
 
 const container = ref<HTMLDivElement | null>(null)
 const pdf = usePdfScroller(container)
+// Page thumbnails (panel and organizer) share one engine per document: it renders behind this
+// view's pages and takes their drawn canvases; a closed document's thumbnails are freed.
+let detachThumbnails: (() => void) | null = null
+watch([pdf.pdfDocument, pdf.viewer], ([doc, viewer], before) => {
+  detachThumbnails?.()
+  detachThumbnails = null
+  if (before && before[0] && before[0] !== doc) disposeThumbnailEngine(before[0])
+  if (doc && viewer) detachThumbnails = thumbnailEngineFor(doc).attachViewer(viewer, pdf.eventBus)
+}, { immediate: true })
+onBeforeUnmount(() => {
+  detachThumbnails?.()
+  disposeThumbnailEngine(pdf.pdfDocument.value)
+})
 const root = ref<HTMLDivElement | null>(null)
 usePdfZoomInput(root, container, pdf)
 const handTool = usePdfHandTool(container)
@@ -71,6 +89,7 @@ const handTool = usePdfHandTool(container)
 usePdfExternalLinks(container)
 const bodyEl = ref<HTMLDivElement | null>(null)
 const presentation = usePdfPresentation(bodyEl, pdf)
+pdf.viewHistory.setSuspended(() => presentation.active.value)
 const showProperties = ref(false)
 // OCR: drag a box over the pages to read its text (script / force choices in the shared pdfOcrStore).
 const ocr = usePdfReaderOcr(container, pdf)
@@ -78,6 +97,12 @@ const pdfOcrStore = usePdfOcrStore()
 // Editing bar: shown by the toolbar's edit toggle; hiding it leaves the active editor.
 const editing = usePdfEditing(pdf)
 const editBarVisible = ref(false)
+// Notes: speech bubbles on the pages, saved in the file as sticky notes (usePdfNotes).
+const notes = usePdfNotes(pdf, container)
+/** "Add note" (main toolbar, Alt+N, the more menu): note mode on / off - a click on a page places one. */
+function onAddNoteButton() {
+  notes.toggleNoteMode()
+}
 function toggleEditBar() {
   editBarVisible.value = !editBarVisible.value
   if (!editBarVisible.value) editing.stopEditing()
@@ -85,11 +110,14 @@ function toggleEditBar() {
 // The floating "highlight" button on a selection switches PDF.js to the highlight editor:
 // show the editing bar with it, so the mode is visible and can be left (Esc / the bar).
 watch(editing.mode, (mode) => {
-  if (mode !== AnnotationEditorType.NONE && !editBarVisible.value) editBarVisible.value = true
+  if (mode === AnnotationEditorType.NONE || editBarVisible.value) return
+  editBarVisible.value = true
 })
 
 // The book view's toolbar setting: position, and shown / hidden (Ctrl+B, the title bar's toolbar button).
-const { toolbarPosition, toolbarVisible } = storeToRefs(useBookViewStore())
+// Toolbar shown/hidden follows the reading toolbars' toggle (Ctrl+B, F9); its EDGE is the PDF viewer's own.
+const { toolbarVisible } = storeToRefs(useBookViewStore())
+const { pdfToolbarPosition: toolbarPosition } = storeToRefs(useSettingsStore())
 
 // Table of contents: the PDF's outline in the book view's TOC side panel (inline with a sash
 // on a wide page, overlay on a narrow one - shared useSidePanelLayout + SidePanel).
@@ -136,7 +164,16 @@ const hasOutline = () => outline.nodes.value.length > 0 || outlineEdit.canEdit.v
 watch(tocVisible, (open) => {
   if (open && !sideModeChosen) sideMode.value = hasOutline() ? 'outline' : 'thumbnails'
 })
-const comments = usePdfComments(pdf, computed(() => tocVisible.value && sideMode.value === 'comments'))
+// The panel's open state and mode are part of the file's saved view (usePdfViewHistory).
+pdf.viewHistory.onRestoreSidePanel((open, mode) => {
+  if (mode === 'outline' || mode === 'bookmarks' || mode === 'comments' || mode === 'thumbnails') {
+    sideMode.value = mode
+    sideModeChosen = true
+  }
+  tocVisible.value = open
+})
+watch([tocVisible, sideMode], ([open, mode]) => pdf.viewHistory.saveSidePanel(open, mode), { flush: 'sync' })
+const comments = usePdfComments(pdf, computed(() => tocVisible.value && sideMode.value === 'comments'), notes)
 const bookmarksOwner = computed(() => pdfBookmarksKey(props.filePath || props.url))
 /** The top of the view: page and the y there in PDF units (PDF.js's view location). */
 let viewTop: { pageNumber: number; top?: number } | null = null
@@ -159,10 +196,21 @@ function onBookmarkSelect(bookmark: BookBookmark) {
   goToPoint(bookmark.lineId, null, bookmark.pdfTop ?? null)
   closePanelIfOverlay()
 }
-function onCommentSelect(c: PdfComment) {
+async function onCommentSelect(c: PdfComment) {
   // A little above the annotation, so it is not flush against the top edge.
   goToPoint(c.pageIndex + 1, null, Math.max(c.rect[1] ?? 0, c.rect[3] ?? 0) + 20)
   closePanelIfOverlay()
+  // A note: its card, pinned, once its page is drawn.
+  if (c.noteKey) return notes.pin(c.noteKey)
+  // Then its popup, pinned (PDF.js's comment list): an editor's through PDF.js, a file
+  // annotation's through its comment button on the page.
+  const managers = editing.managers
+  await managers.waitForEditorsRendered(c.pageIndex + 1)
+  if (c.uid) return managers.selectComment(c.pageIndex, c.uid)
+  const page = container.value?.querySelector(`.page[data-page-number="${c.pageIndex + 1}"]`)
+  const annotation = page?.querySelector(`.annotationLayer [data-annotation-id="${CSS.escape(c.key)}"]`)
+  const button = annotation?.nextElementSibling
+  if (button?.classList.contains('annotationCommentButton')) (button as HTMLElement).click()
 }
 function onThumbnailSelect(n: number) {
   pdf.jumpToPage(n)
@@ -172,19 +220,38 @@ function toggleToc(toggleButton?: HTMLElement | null) {
   tocVisible.value = !tocVisible.value
 }
 function onOutlineSelect(node: PdfOutlineNode) {
+  if (!goToOutlineNode(node)) return
+  if (sidePanelIsOverlay.value) tocVisible.value = false
+}
+/** Shows an outline entry's place; false when it has none. */
+function goToOutlineNode(node: PdfOutlineNode): boolean {
   if (node.dest) void pdf.goToDestination(node.dest)
   else if (node.url) void openUrlInSystemBrowser(node.url)
   else if (node.pageIndex != null) {
     pdf.jumpHistory.pushCurrentPosition()
     pdf.goToPage(node.pageIndex + 1)
-  } else return
-  if (sidePanelIsOverlay.value) tocVisible.value = false
+  } else return false
+  return true
+}
+/**
+ * Ctrl+Left / Ctrl+Right: the next / previous outline entry from the current one, as the book
+ * view's section keys. Entries that only open a web link are skipped.
+ */
+function goToAdjacentSection(direction: 'next' | 'previous') {
+  const rows = outline.nodes.value.filter((node) => node.dest != null || node.pageIndex != null)
+  if (!rows.length) return
+  const current = rows.findIndex((node) => node.id === outline.activeNodeId.value)
+  const target = direction === 'next'
+    ? rows[current + 1]
+    : current > 0 ? rows[current - 1] : undefined
+  if (target) goToOutlineNode(target)
 }
 
-// One-shot jump to `outlineTarget` once the first document's pages are in.
+// One-shot jump to `outlineTarget` once the first document's initial view is set: it wins over
+// the saved place (the saved zoom and modes still apply).
 if (props.outlineTarget) {
   const target = props.outlineTarget
-  pdf.eventBus.on('pagesinit', () => {
+  pdf.eventBus.on('documentinit', () => {
     const doc = pdf.pdfDocument.value
     void doc?.getOutline().then((items) => {
       const item = items && doc === pdf.pdfDocument.value ? findOutlineItem(items as unknown as OutlineItemLike[], target) : null
@@ -193,7 +260,7 @@ if (props.outlineTarget) {
     })
   }, { once: true })
 }
-onMounted(() => void pdf.open(props.url))
+onMounted(() => void pdf.open(props.url, undefined, !!props.outlineTarget))
 // A Save As re-points the tab at the new file (new url) while this view already shows its bytes.
 let adoptedUrl: string | null = null
 watch(() => props.url, (url) => {
@@ -269,9 +336,10 @@ const output = usePdfReaderOutput(pdf, () => props.fileName ?? null)
 // Save (in place) / Save As, and the document's unsaved state (usePdfSave).
 const tabStore = useTabStore()
 const bookViewStore = useBookViewStore()
-const saving = usePdfSave(pdf, outlineEdit, {
+const saving = usePdfSave(pdf, outlineEdit, notes, {
   filePath: () => props.filePath ?? null,
   fileName: () => props.fileName ?? null,
+  url: () => props.url ?? null,
   onSavedAs: async (filePath, fileName) => {
     if (!props.tabId) return
     const old = props.filePath
@@ -329,10 +397,38 @@ if (props.tabId) {
 // Edits not saved in the file: the user saves first or prints the file as it is on disk.
 // No host (dev browser) or no file on disk: a message - there is no in-page print.
 const printChoiceOpen = ref(false)
-const canPrintFile = () => !!props.filePath && typeof window.__webviewAction === 'function'
+// Print the FILE natively, the same way in the app (WebView2) and in the dev browser: the file's
+// bytes (as loaded / last saved - no unsaved marks) in a hidden frame, printed by the browser's own
+// PDF engine with its print dialog. A blob address is same-origin, so the page may tell it to print
+// (the file's own served address is another origin in the app).
+const canPrintFile = () => !!pdf.pdfDocument.value
+// Captured during setup: the window this viewer is drawn in (a detached window prints there).
+const printHostWindow = useHostWindow()
 async function printFile() {
-  if (!canPrintFile()) return showToast(t(props.filePath ? 'pdfReader.printNoHost' : 'pdfReader.printNoFile'))
-  if (!(await printPdfFile(props.filePath!))) showToast(t('pdfReader.printFailed'))
+  const doc = pdf.pdfDocument.value
+  if (!doc) return showToast(t('pdfReader.printNoFile'))
+  const win = printHostWindow
+  const bytes = await doc.getData()
+  const blobUrl = win.URL.createObjectURL(new win.Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }))
+  const frame = win.document.createElement('iframe')
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden'
+  frame.src = blobUrl
+  const cleanup = () => {
+    frame.remove()
+    win.URL.revokeObjectURL(blobUrl)
+  }
+  frame.addEventListener('load', () => {
+    try {
+      frame.contentWindow?.focus()
+      frame.contentWindow?.print()
+    } catch {
+      showToast(t('pdfReader.printFailed'))
+      return cleanup()
+    }
+    // Removed once the reader is back (the print dialog blocks until then).
+    win.addEventListener('focus', cleanup, { once: true })
+  }, { once: true })
+  win.document.body.appendChild(frame)
 }
 async function printDocument() {
   const doc = pdf.pdfDocument.value
@@ -348,13 +444,27 @@ async function onPrintChoice(choice: 'saveAndPrint' | 'withoutChanges' | 'cancel
   } else if (choice === 'withoutChanges') void printFile()
 }
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+// Highlight mode in a detached window (usePdfSelectionActions).
+usePdfSelectionActions({
+  container,
+  eventBus: pdf.eventBus,
+  highlightMode: () => editing.mode.value === AnnotationEditorType.HIGHLIGHT,
+})
 const contextMenu = usePdfReaderContextMenu(container, contextMenuRef, {
   isBlocked: () => ocr.isActive.value || editing.mode.value !== AnnotationEditorType.NONE,
   copyPageAsImage: () => void output.copyPageAsImage(),
   searchInLibrary: (q) => paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query: q }), searchQuery: q }),
   searchInCatalog: (q) => useHostSearchStore().openCatalogSearch(q),
+  noteAtSelection: notes.noteAtSelection,
 })
 usePdfReaderShortcuts(root, container, pdf, {
+  undoRedo: (redo) => {
+    const pdfJsHasKeys = editing.mode.value !== AnnotationEditorType.NONE && root.value?.ownerDocument === document
+    if (pdfJsHasKeys) return false
+    if (redo) editing.redo()
+    else editing.undo()
+    return true
+  },
   inPresentation: () => presentation.active.value,
   openSearch: openSearchWithSelection,
   findAgain,
@@ -373,7 +483,7 @@ usePdfReaderShortcuts(root, container, pdf, {
   editVisible: () => editBarVisible.value,
   editTool: (tool) => {
     if (tool === 'image') editing.addImage()
-    else if (tool === 'note') editing.toggleNoteMode()
+    else if (tool === 'note') onAddNoteButton()
     else editing.setMode({ highlight: AnnotationEditorType.HIGHLIGHT, text: AnnotationEditorType.FREETEXT, draw: AnnotationEditorType.INK, signature: AnnotationEditorType.SIGNATURE }[tool])
   },
   toggleOcr: () => ocr.toggle(),
@@ -397,6 +507,7 @@ usePdfReaderShortcuts(root, container, pdf, {
     void nextTick(() => bookmarksPanel.value?.add())
   },
   showSideMode,
+  adjacentSection: goToAdjacentSection,
 })
 /** The option after `current` in `options` (the first when `current` is not among them). */
 function cycle<V>(options: V[], current: V | null): V {
@@ -424,6 +535,7 @@ function showSideMode(mode: PdfSideMode) {
       :search-visible="searchVisible"
       :hand-tool="handTool.enabled.value"
       :edit-visible="editBarVisible"
+      :note-active="notes.noteMode.value"
       :ocr-active="ocr.isActive.value"
       :scroll-mode="pdf.scrollMode.value"
       :spread-mode="pdf.spreadMode.value"
@@ -443,6 +555,7 @@ function showSideMode(mode: PdfSideMode) {
       @properties="showProperties = true"
       @print="printDocument"
       @toggle-edit="toggleEditBar"
+      @add-note="onAddNoteButton"
       @toggle-ocr="ocr.toggle"
       :organizer-open="organizerOpen"
       @toggle-organizer="toggleOrganizer"
@@ -504,7 +617,9 @@ function showSideMode(mode: PdfSideMode) {
     <div ref="bodyEl" class="pdf-reader-body" tabindex="-1">
       <PdfEditToolbar v-if="editBarVisible" :editing="editing" @close="toggleEditBar" />
       <PdfEditDialogs :managers="pdf.editManagers" :scroller="pdf.viewer.value?.container ?? null" />
+      <PdfNotesOverlay :notes="notes" />
       <ReadingSearchBar
+        history-key="pdf-reader-search"
         :visible="searchVisible"
         toolbar-position="top"
         :match-count="query.trim() ? pdf.matchCount.value : -1"
@@ -534,13 +649,6 @@ function showSideMode(mode: PdfSideMode) {
         <div class="pdfViewer" />
       </div>
       <PdfReaderOcrBar :ocr="ocr" />
-      <PdfHighlightButton
-        :container="container"
-        :host="bodyEl"
-        :event-bus="pdf.eventBus"
-        :blocked="editing.mode.value !== AnnotationEditorType.NONE || ocr.isActive.value || handTool.enabled.value || presentation.active.value"
-        :highlight-mode="editing.mode.value === AnnotationEditorType.HIGHLIGHT"
-      />
       <div v-if="pdf.loading.value && !pdf.loadFailure.value" class="pdf-reader-progress" :class="{ indeterminate: Number.isNaN(pdf.loadProgress.value) }" role="progressbar" :aria-label="$t('pdfReader.load.progress')">
         <div class="pdf-reader-progress-fill" :style="Number.isNaN(pdf.loadProgress.value) ? undefined : { width: `${pdf.loadProgress.value}%` }" />
       </div>
@@ -574,6 +682,7 @@ function showSideMode(mode: PdfSideMode) {
       v-if="showProperties && pdf.pdfDocument.value"
       :document="pdf.pdfDocument.value"
       :file-name="fileName ?? null"
+      :file-path="filePath ?? null"
       @close="showProperties = false"
     />
     <PdfOrganizerWindow

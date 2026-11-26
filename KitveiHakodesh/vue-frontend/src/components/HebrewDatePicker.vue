@@ -3,6 +3,7 @@
 // a Hebrew-month grid (gematriya day, small civil day) with month back/forward. v-model is a civil Date.
 import { computed, ref, shallowRef, useTemplateRef } from 'vue'
 import { useElementBounding, useEventListener } from '@vueuse/core'
+import { useHostBoundingUpdates } from '@/composables/useHostResizeObserver'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { hebYearGem as yearGem } from '@/features/hebrew-calendar/useMonthlyView'
 import { HDate } from '@hebcal/hdate'
@@ -17,6 +18,7 @@ const btn = useTemplateRef<HTMLElement>('btn')
 const pop = useTemplateRef<HTMLElement>('pop')
 // Its own window/scroll listeners go on the window it is drawn in (VueUse's default is the main one).
 const { bottom, right, update: updatePosition } = useElementBounding(btn, { windowResize: false, windowScroll: false })
+useHostBoundingUpdates(btn, updatePosition, false)
 useEventListener(hostWindow, 'resize', updatePosition, { passive: true })
 useEventListener(hostWindow, 'scroll', updatePosition, { capture: true, passive: true })
 const closer = useDropdownClose(pop, () => { open.value = false }, { toggleButton: btn })

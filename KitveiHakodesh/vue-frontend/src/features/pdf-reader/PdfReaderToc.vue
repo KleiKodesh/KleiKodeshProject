@@ -173,7 +173,7 @@ function onKeydown(event: KeyboardEvent) {
   const edit = props.edit
   const inSearch = (event.target as Element | null)?.tagName === 'INPUT'
   const ctrl = event.ctrlKey || event.metaKey
-  if (ctrl && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'b') {
+  if (ctrl && !event.altKey && !event.shiftKey && event.code === 'KeyB') {
     event.preventDefault()
     addEntry()
     return
@@ -276,7 +276,7 @@ useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <TocTreeLayout v-model:query="query" @focus-list="focusList" @keydown="onKeydown">
+  <TocTreeLayout v-model:query="query" :data-ctrlb-enabled="editable && edit ? '' : undefined" @focus-list="focusList" @keydown="onKeydown">
     <TocTreeSection
       ref="sectionRef"
       class="pdf-reader-toc-section"

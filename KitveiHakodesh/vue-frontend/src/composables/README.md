@@ -18,7 +18,7 @@ That rule is enforced, not aspirational. A composable that becomes single-featur
 
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton`, handles the file picker, external links, and search navigation. Any code that needs to navigate between pages should use this, not call `tabStore` directly.
 
-**useAppShellPane.ts** — `useAppShellPane(paneId)` wraps `tabStore` so every mutation routes to the correct split-view pane: `switchTab`, `closeTab`, `closeAllTabs`, `openTab`, `openNewTab`, `updateActiveTab`, `navigateToSingleton`, `goHome`, `togglePdfViewerTitleBar`. Shell chrome uses this — never call the `*Pane2*` tabStore functions directly.
+**useAppShellPane.ts** — `useAppShellPane(paneId)` wraps `tabStore` so every mutation routes to the correct split-view pane: `switchTab`, `closeTab`, `closeAllTabs`, `openTab`, `openNewTab`, `updateActiveTab`, `navigateToSingleton`, `goHome`. Shell chrome uses this — never call the `*Pane2*` tabStore functions directly.
 
 **usePaneNavigation.ts** — `PANE_NAVIGATION_KEY` injection key plus `usePaneNavigation()`. Feature components inject this to get pane-scoped tab operations from the enclosing `AppShell`, so the same component works unchanged in either pane. Falls back to pane-1 behavior when used outside a shell.
 

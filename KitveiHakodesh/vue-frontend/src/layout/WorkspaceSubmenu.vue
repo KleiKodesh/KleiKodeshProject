@@ -267,7 +267,7 @@ watch(
     // identical value back on the next flush, so nothing flickers.
     panel.style.visibility = 'visible'
     panel.focus({ preventScroll: true })
-    observer = new ResizeObserver(() => props.open && place())
+    observer = new hostWindow.ResizeObserver(() => props.open && place())
     observer.observe(panel)
   },
 )

@@ -18,6 +18,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
  */
 import { computed, watch, nextTick, ref } from 'vue'
 import { useElementBounding, useWindowSize, onClickOutside } from '@vueuse/core'
+import { useHostBoundingUpdates } from '@/composables/useHostResizeObserver'
 import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
 import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import type { RecentSearchesController } from '@/composables/useRecentSearches'
@@ -26,8 +27,10 @@ const props = defineProps<{ controller: RecentSearchesController }>()
 const recents = props.controller
 
 const inputElRef = computed(() => recents.inputEl.value)
-const { top, left, width, height } = useElementBounding(inputElRef)
-const { width: winW, height: winH } = useWindowSize()
+const { top, left, width, height, update: updateInputBounds } = useElementBounding(inputElRef)
+// VueUse's own observer is the page window's; this one is the app window's (useHostResizeObserver)
+useHostBoundingUpdates(inputElRef, updateInputBounds)
+const { width: winW, height: winH } = useWindowSize({ window: useHostWindow() })
 
 // The FTS input is flex:1 (fills the whole bar), so matching its width makes the
 // bubble absurdly wide. Instead size to content with a cap, anchored to the
@@ -70,7 +73,7 @@ function tail(item: string) {
   return typedLen.value ? item.slice(typedLen.value) : ''
 }
 
-onClickOutside(bubbleRef, () => recents.onBlur(), { ignore: [inputElRef] })
+onClickOutside(bubbleRef, () => recents.onBlur(), { ignore: [inputElRef], window: useHostWindow() })
 
 // Pressing the native chrome (tab strip / title bar) produces no DOM event, so the
 // outside-click handler above cannot see it — the host pushes it to us instead.

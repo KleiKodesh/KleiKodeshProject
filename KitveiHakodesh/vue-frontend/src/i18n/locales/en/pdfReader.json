@@ -40,7 +40,9 @@
     "producer": "PDF producer",
     "version": "PDF version",
     "pageCount": "Pages",
-    "pageSize": "Page size"
+    "pageSize": "Page size",
+    "location": "Location",
+    "openLocation": "Open file location"
   },
   "menuFit": "Page fit",
   "menuScroll": "Scrolling",
@@ -100,10 +102,12 @@
       "tool": "Note",
       "title": "Add a note",
       "editTitle": "Edit note",
-      "placeholder": "Type your note",
+      "placeholder": "Start typing\u2026",
       "save": "Save",
-      "edit": "Edit",
-      "delete": "Delete"
+      "edit": "Edit note",
+      "delete": "Remove note",
+      "add": "Add",
+      "update": "Update"
     }
   },
   "more": "More",
@@ -117,7 +121,7 @@
     "copy": "Copy",
     "copyIntoWord": "Copy into Word",
     "copyPageAsImage": "Copy page as image",
-    "searchInCatalog": "Search book in Kitvei Hakodesh",
+    "searchInCatalog": "Copy to catalog search",
     "searchInLibrary": "Copy to library search"
   },
   "printFailed": "Could not print the document.",
@@ -136,14 +140,16 @@
     "cycleScroll": "Change the scrolling",
     "cycleSpread": "Change the page display",
     "sideModes": "Side panel: contents / bookmarks / comments / thumbnails",
-    "editTools": "Editing bar: highlight / text / draw / image / signature / note",
+    "editTools": "Editing bar: highlight / text / draw / image / signature",
+    "undoRedo": "Undo / redo an edit (also a removed note)",
     "ocrScript": "Area text (OCR): change the script",
     "findOptions": "Search options: highlight all / match case / whole words / diacritics",
     "zoom": "Zoom in / out",
     "closeBar": "Close the search or the editing bar",
     "saveAs": "Save as",
     "findNextPrev": "Next / previous search result",
-    "history": "Back / forward to where you were before a link, contents or bookmark jump"
+    "history": "Back / forward to where you were before a link, contents or bookmark jump",
+    "noteBox": "Note box: save / cancel"
   },
   "outline": {
     "add": "Add an entry at the current page (Ctrl+B)",
@@ -183,13 +189,10 @@
     "saved": "Saved",
     "unsaved": "Unsaved changes",
     "failed": "Could not save the document: {error}",
-    "noFile": "This document has no file to save into. Use Save as.",
-    "outlineNotSaved": "Table of contents changes cannot be saved into the file yet; they will be lost when the document reloads.",
-    "savedOutlineNotSaved": "Saved. Table of contents changes cannot be saved into the file yet and were not kept."
+    "noFile": "This document has no file to save into. Use Save as."
   },
   "saveAndPrint": "Save and print",
   "pageOfCount": "({page} of {count})",
-  "printNoHost": "Printing works only in the Kitvei Hakodesh app, not in a web browser.",
   "printNoFile": "This document is not saved as a file on this computer. Save it first, then print.",
   "load": {
     "progress": "Loading the document...",
@@ -212,5 +215,16 @@
     "wrappedBottom": "Reached the end of the document, continued from the top",
     "wrappedTop": "Reached the start of the document, continued from the bottom"
   },
-  "pageOfTitle": "Page {page} of {count}"
+  "pageOfTitle": "Page {page} of {count}",
+  "notes": {
+    "tool": "Add note (click a page to place it; one note per click)",
+    "add": "Add note",
+    "note": "Note",
+    "placeholder": "Write a note\u2026",
+    "save": "Save",
+    "saveHint": "Save (Ctrl+Enter)",
+    "cancelHint": "Cancel (Esc)",
+    "edit": "Edit note",
+    "delete": "Delete note"
+  }
 }

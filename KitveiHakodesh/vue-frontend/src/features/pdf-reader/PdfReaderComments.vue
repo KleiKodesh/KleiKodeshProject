@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { WindowedScroller } from 'vue-windowed-scroller'
 import { useI18n } from 'vue-i18n'
 import type { PdfComment } from './usePdfComments'
 
@@ -13,42 +14,52 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [comment: PdfComment] }>()
 const { locale } = useI18n()
 
-const groups = computed(() => {
-  const out: { pageIndex: number; items: PdfComment[] }[] = []
+/** One WindowedScroller row each: a page's heading before its first comment, then the comments. */
+type Row = { kind: 'page'; pageIndex: number } | { kind: 'comment'; comment: PdfComment }
+const rows = computed(() => {
+  const out: Row[] = []
+  let page = -1
   for (const c of props.comments) {
-    const last = out[out.length - 1]
-    if (last && last.pageIndex === c.pageIndex) last.items.push(c)
-    else out.push({ pageIndex: c.pageIndex, items: [c] })
+    if (c.pageIndex !== page) out.push({ kind: 'page', pageIndex: (page = c.pageIndex) })
+    out.push({ kind: 'comment', comment: c })
   }
   return out
 })
-const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateStyle: 'short', timeStyle: 'short' }))
+// As PDF.js's comment list and popup: a long date, in the app's language.
+const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateStyle: 'long' }))
 </script>
 
 <template>
   <div class="pdf-comments">
-    <div v-if="groups.length === 0" class="empty">{{ loading ? $t('pdfReader.panel.loading') : $t('pdfReader.panel.noComments') }}</div>
-    <section v-for="group in groups" :key="group.pageIndex" class="group">
-      <div class="page-head">{{ $t('pdfReader.panel.page', { n: labelOf?.(group.pageIndex + 1) ?? group.pageIndex + 1 }) }}</div>
-      <button v-for="c in group.items" :key="c.key" type="button" class="comment" @click="emit('select', c)">
-        <span v-if="c.author || c.date" class="meta">
-          <span v-if="c.author" class="author">{{ c.author }}</span>
-          <span v-if="c.date" class="date">{{ dateFormat.format(c.date) }}</span>
-        </span>
-        <span class="text" dir="auto">{{ c.text }}</span>
-      </button>
-    </section>
-    <div v-if="loading && groups.length" class="empty">{{ $t('pdfReader.panel.loading') }}</div>
+    <div v-if="rows.length === 0" class="empty">{{ loading ? $t('pdfReader.panel.loading') : $t('pdfReader.panel.noComments') }}</div>
+    <WindowedScroller v-else class="comment-list" thin :count="rows.length" :row-source-version="rows">
+      <template #row="{ index }">
+        <template v-for="row in rows.slice(index, index + 1)" :key="index">
+          <div v-if="row.kind === 'page'" class="page-head">{{ $t('pdfReader.panel.page', { n: labelOf?.(row.pageIndex + 1) ?? row.pageIndex + 1 }) }}</div>
+          <button v-else type="button" class="comment" @click="emit('select', row.comment)">
+            <span v-if="row.comment.author || row.comment.date" class="meta">
+              <span v-if="row.comment.author" class="author">{{ row.comment.author }}</span>
+              <span v-if="row.comment.date" class="date">{{ dateFormat.format(row.comment.date) }}</span>
+            </span>
+            <span class="text" dir="auto">{{ row.comment.text }}</span>
+          </button>
+        </template>
+      </template>
+    </WindowedScroller>
+    <div v-if="loading && rows.length" class="empty">{{ $t('pdfReader.panel.loading') }}</div>
   </div>
 </template>
 
 <style scoped>
 .pdf-comments {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+}
+.pdf-comments > .windowed-scroller {
+  flex: 1;
+  min-height: 0;
 }
 .empty {
   padding: 10px;
@@ -56,8 +67,6 @@ const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateSt
   color: var(--text-secondary);
 }
 .page-head {
-  position: sticky;
-  top: 0;
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 600;

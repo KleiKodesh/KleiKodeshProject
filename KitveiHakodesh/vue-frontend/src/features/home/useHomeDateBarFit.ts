@@ -1,5 +1,5 @@
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { ref, computed, nextTick, type Ref } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
 
 /**
  * Keeps the home date bar on a single line by dropping optional items by
@@ -55,7 +55,7 @@ export function useHomeDateBarFit(
     step()
   }
 
-  useResizeObserver(dateBarRef, () => measure())
+  useHostResizeObserver(dateBarRef, () => measure())
 
   return {
     showClockInBar,

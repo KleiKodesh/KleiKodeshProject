@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, nextTick, onMounted } from 'vue'
-import { useEventListener, useElementSize } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
@@ -30,7 +31,7 @@ const scrollContainerRef = ref<HTMLElement | null>(null)
 
 // Section titles stick just below the sticky search bar, so they need its live height.
 const toolbarRef = ref<HTMLElement | null>(null)
-const { height: toolbarHeight } = useElementSize(toolbarRef, undefined, { box: 'border-box' })
+const { height: toolbarHeight } = useHostElementSize(toolbarRef, undefined, { box: 'border-box' })
 const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
 
 // Restored here rather than in onMounted so the input renders with the query on the

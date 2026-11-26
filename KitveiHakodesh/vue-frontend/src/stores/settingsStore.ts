@@ -93,6 +93,7 @@ const KEYS = {
   // preference carries over.
   SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
   SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
+  SETTINGS_PDF_TOOLBAR_POSITION: 'pdfReader.toolbarPosition',
   SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
 
   // Per-feature preferences
@@ -256,6 +257,8 @@ const DEFAULTS = {
   scrollbarsHidden: false,
   toolbarVisible: true,
   toolbarPosition: 'top' as ToolbarPosition,
+  /** The PDF viewer's own toolbar edge (separate from the book view's). */
+  pdfToolbarPosition: 'top' as ToolbarPosition,
   // Only a placeholder: both init() and reset() derive this from
   // defaultAutoSyncCommentary rather than reading this value.
   autoSelectTopLine: false,
@@ -392,6 +395,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // (toolbar visible per pane, focused pane) stays there because it is session state.
   const toolbarVisible = ref(DEFAULTS.toolbarVisible)
   const toolbarPosition = ref<ToolbarPosition>(DEFAULTS.toolbarPosition)
+  const pdfToolbarPosition = ref<ToolbarPosition>(DEFAULTS.pdfToolbarPosition)
   const autoSelectTopLine = ref(DEFAULTS.autoSelectTopLine)
   // The nav rail's visibility.
   const navSidebarVisible = ref(DEFAULTS.navSidebarVisible)
@@ -621,6 +625,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
     loadSetting(KEYS.SETTINGS_TOOLBAR_POSITION, toolbarPosition)
+    loadSetting(KEYS.SETTINGS_PDF_TOOLBAR_POSITION, pdfToolbarPosition)
     // No stored value means "follow the commentary default" rather than the bare
     // `false` — that fallback was bookViewStore.init()'s and has to survive the move.
     const storedAutoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
@@ -706,6 +711,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
   persistSetting(toolbarPosition, KEYS.SETTINGS_TOOLBAR_POSITION)
+  persistSetting(pdfToolbarPosition, KEYS.SETTINGS_PDF_TOOLBAR_POSITION)
   persistSetting(autoSelectTopLine, KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
   persistSetting(navSidebarVisible, KEYS.SETTINGS_NAV_SIDEBAR)
   persistSetting(hbEditionInSidePanel, KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL)
@@ -867,6 +873,7 @@ export const useSettingsStore = defineStore('settings', () => {
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     toolbarVisible.value = DEFAULTS.toolbarVisible
     toolbarPosition.value = DEFAULTS.toolbarPosition
+    pdfToolbarPosition.value = DEFAULTS.pdfToolbarPosition
     // Mirrors the load-time rule (no stored value => follow defaultAutoSyncCommentary)
     // rather than the bare default, so the state right after a reset matches the state
     // after the reload that follows it. Assigned after defaultAutoSyncCommentary above.
@@ -902,7 +909,7 @@ export const useSettingsStore = defineStore('settings', () => {
     appZoom, dictionaryZoom, dictionarySourceFilter, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     dateBarPinned,
-    toolbarVisible, toolbarPosition, autoSelectTopLine,
+    toolbarVisible, toolbarPosition, pdfToolbarPosition, autoSelectTopLine,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyStripNikkud, copyStripTeamim, copyStripModernPunctuation, copyCleanFlags,

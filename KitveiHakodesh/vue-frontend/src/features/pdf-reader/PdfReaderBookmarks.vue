@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { WindowedScroller, type WindowedScrollerApi } from 'vue-windowed-scroller'
 import { IconAdd16Regular, IconEdit16Regular, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
 import { useI18n } from 'vue-i18n'
 import { PDF_KEYS, withKey } from './usePdfReaderShortcuts'
@@ -48,13 +49,28 @@ async function add() {
 
 const editingId = ref<number | null>(null)
 const editingText = ref('')
-const inputRef = ref<HTMLInputElement[] | null>(null)
+const scroller = ref<WindowedScrollerApi | null>(null)
+/** The rename box takes focus when it mounts (its row may mount later, once landed on). */
+let focusRenameBox = false
+function setRenameBox(el: unknown) {
+  // (No instanceof: the panel may be drawn in another window, with its own HTMLElement.)
+  if (!el || !focusRenameBox) return
+  focusRenameBox = false
+  const input = el as HTMLInputElement
+  // After v-model has filled it (its mounted hook runs after this ref).
+  void nextTick(() => {
+    input.focus()
+    input.select()
+  })
+}
 async function startRename(bookmark: BookBookmark) {
   editingId.value = bookmark.id
   editingText.value = bookmark.label
+  focusRenameBox = true
+  // The row may be outside the scroller's window (a new bookmark at the end): land on it.
   await nextTick()
-  inputRef.value?.[0]?.focus()
-  inputRef.value?.[0]?.select()
+  const index = bookmarks.value.findIndex((b) => b.id === bookmark.id)
+  if (index >= 0 && scroller.value && !scroller.value.isRowFullyVisible(index)) void scroller.value.scrollToIndex(index, { align: 'end' })
 }
 function commitRename() {
   const id = editingId.value
@@ -73,17 +89,18 @@ defineExpose({ add })
 
 <template>
   <div class="pdf-bookmarks">
-    <div class="list">
-      <div v-if="bookmarks.length === 0" class="empty">{{ $t('pdfReader.panel.noBookmarks') }}</div>
+    <div v-if="bookmarks.length === 0" class="list empty">{{ $t('pdfReader.panel.noBookmarks') }}</div>
+    <WindowedScroller v-else ref="scroller" class="list" thin :count="bookmarks.length" :row-source-version="bookmarks">
+      <template #row="{ index }">
       <div
-        v-for="bookmark in bookmarks"
+        v-for="bookmark in bookmarks.slice(index, index + 1)"
         :key="bookmark.id"
         class="row"
         :class="{ current: bookmark.lineId === pageNumber }"
       >
         <input
           v-if="editingId === bookmark.id"
-          ref="inputRef"
+          :ref="setRenameBox"
           v-model="editingText"
           class="rename-input"
           @keydown.enter.prevent="commitRename"
@@ -99,7 +116,8 @@ defineExpose({ add })
           <button type="button" class="row-action danger" :title="$t('pdfReader.panel.delete')" @click="remove(bookmark)"><IconDelete16Regular /></button>
         </div>
       </div>
-    </div>
+      </template>
+    </WindowedScroller>
     <div class="footer">
       <button type="button" class="add" :title="withKey($t('pdfReader.panel.addBookmark'), PDF_KEYS.addBookmark)" @click="add">
         <IconAdd16Regular />
@@ -116,12 +134,10 @@ defineExpose({ add })
   flex: 1;
   min-height: 0;
 }
-.list {
+.pdf-bookmarks > .windowed-scroller,
+.list.empty {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
 }
 .empty {
   padding: 10px;

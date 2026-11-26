@@ -1,47 +1,41 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: '**/PdfViewPage.vue|**/pdf-viewer/**|**/pdfjs/**|**/themes.ts|**/settingsStore.ts'
+fileMatchPattern: '**/pdf-reader/**|**/pdf-organizer/**|**/legacy-pdf/**|**/themes.ts|**/settingsStore.ts'
 ---
 
-# PDF.js Viewer Management
+# PDF Viewer (PDF.js) Management
 
 ## Overview
 
-The PDF.js viewer (v5.7.284) lives in `vue-frontend/public/pdfjs/` and is served via an iframe in `PdfViewPage.vue`. All customizations are applied directly to the files in that folder.
+The PDF viewer is `vue-frontend/src/features/pdf-reader/` (route `/pdf-view`), drawn in the page
+itself - no iframe. It uses the `pdfjs-dist` npm package: the headless `PDFViewer`, `EventBus`,
+`PDFLinkService` and `PDFFindController` from `pdfjs-dist/web/pdf_viewer.mjs`, with our own Vue
+toolbar, search bar, side panel, editing bar, dialogs and shortcuts around it. The page organizer
+window is `src/features/pdf-organizer/`.
 
-A copy of the original unmodified 5.5.207 dist is kept in `Misc/pdfjs-dist-5.5.207/` as a baseline for generating patch diffs. The full PDF.js source is in `Misc/pdf.js-master/` for reference.
+The PDF.js source fork is the submodule `vue-frontend/pdf.js` (reference / future builds).
+Never patch files in `node_modules/pdfjs-dist`; change behaviour in our Vue code.
 
-The git branch `pdf-vue-toolbar` preserves a previous experiment adding a Vue toolbar wrapper. The current approach uses the native PDF.js toolbar inside the iframe.
+## Theme
 
-## Customized Files
+- `theme/themes.ts` `calcPdfFilter()` - the page colour filter for dark themes (a theme's own
+  `pdfFilter`, else computed from the accent colour).
+- `settingsStore.pdfPageFilters` (Settings, setup wizard) - turns the page filter on/off.
+- The filter applies to the page canvases only (pages, side panel thumbnails, organizer
+  thumbnails), never to our toolbars or the annotation-editor UI. PDF.js CSS variables
+  (pdf_viewer.css) are mapped to the app's colour variables, so light/dark follow the app theme
+  live in every window.
 
-- `web/viewer.mjs` — 5 patches:
-  1. Page cache size: `DEFAULT_CACHE_SIZE` reduced from 10 to 3 to cut canvas bitmap memory by ~70%
-  2. Hebrew locale default: reads `?locale=` URL param, falls back to `he`
-  3. Cross-origin allow: permits `http://` origins for WebView2 virtual hosts
-  4. Filename param: reads `?filename=` and sets `_contentDispositionFilename`
-  5. Save dialog: `_triggerDownload` uses `showSaveFilePicker()` with anchor fallback
-- `web/viewer.html` — adds `viewer-custom.css` stylesheet and `pixel-ratio-override.js` script
-- `web/viewer-custom.css` — CSS variable hooks for theme sync; PDF page filter via `data-pdf-filters` attribute
-- `web/pixel-ratio-override.js` — forces minimum 2x `devicePixelRatio` for sharp rendering (added file)
+## Old viewer (archived)
 
-## Vue Integration
-
-- `PdfViewPage.vue` — embeds the viewer iframe; passes `?file=`, `?locale=he`, `?filename=`, `?cMapPacked=true`
-- `themes.ts syncPdfViewerTheme()` — injects theme CSS variables and `--pdf-filter-custom` into the iframe
-- `settingsStore.togglePdfPageFilters()` — sets `data-pdf-filters` attribute on iframe document element; `viewer-custom.css` applies the filter only when this attribute is `"true"`
+The old iframe viewer - the patched PDF.js build that lived in `public/pdfjs/` and its host page
+`PdfViewPage.vue` - is in `vue-frontend/legacy-pdf/` (see its README and `CUSTOMIZATIONS.md`).
+It is not built or served; reference only.
 
 ## Upgrading PDF.js
 
-1. Save the current dist: `Copy-Item -Recurse vue-frontend/public/pdfjs Misc/pdfjs-dist-X.X.XXX`
-2. Download the new prebuilt release zip from GitHub releases
-3. Replace `vue-frontend/public/pdfjs/` with the new build
-4. Re-apply the 4 patches to `viewer.mjs` (search for the same surrounding code — it rarely moves far)
-5. Re-add `viewer-custom.css` and `pixel-ratio-override.js`
-6. Update `viewer.html` with the two extra tags
-7. Update this file with the new version number
-
-## Key Rules
-
-- Never modify files in `Misc/pdfjs-dist-5.5.207/` — it is a read-only baseline
-- Document any new customization here and in `vue-frontend/public/pdfjs/Pdf.js_Cotumizations.md`
+1. Bump `pdfjs-dist` in `vue-frontend/package.json`, `npm install`.
+2. Check the PDF.js changelog for `PDFViewer` / editor API changes used in `features/pdf-reader`
+   and `features/pdf-organizer`, and for CSS variable renames in `pdf_viewer.css` (our theme
+   mapping uses them).
+3. Run the type check and test the viewer live (open, search, edit, save, print, organizer).

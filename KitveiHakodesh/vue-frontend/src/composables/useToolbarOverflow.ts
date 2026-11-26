@@ -1,5 +1,5 @@
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { computed, type ComputedRef, type Ref } from 'vue'
-import { useElementSize } from '@vueuse/core'
 
 /**
  * Geometry the fit arithmetic mirrors from the page toolbars' CSS (BookViewToolbar,
@@ -152,7 +152,12 @@ export function useToolbarOverflow<Key extends string>(
   // first fires, so a content-box read is a whole slot too large for that first frame. A
   // toolbar one button too long for one frame overflows its pane visibly, and the button is
   // not in the flyout either, because the arithmetic still counts it as fitting.
-  const { width, height } = useElementSize(toolbarEl, undefined, { box: 'border-box' })
+  //
+  // Observed with the HOST window's ResizeObserver: an app window is a popup this page draws
+  // into, and an observer from another window reports a popup's element once, then never again
+  // (measured: resizing the popup fired only the popup's own observer). The toolbar kept its
+  // first width, so narrowing the window collapsed nothing and the row ran off the edge.
+  const { width, height } = useHostElementSize(toolbarEl, undefined, { box: 'border-box' })
 
   /** The room the toolbar's flex children actually share, along the axis they run on. */
   const availableLength = computed(() =>

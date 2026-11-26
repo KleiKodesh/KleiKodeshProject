@@ -1,6 +1,6 @@
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, watch, nextTick, type Ref } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
 
 /** Breathing room kept between a submenu and the viewport edges. */
 const SUBMENU_MARGIN = 8
@@ -73,7 +73,7 @@ export function useToolbarOverflowSubmenu(
   // A panel whose content arrives after it opens (book info) grows after it was placed, so
   // the side picked for its first, smaller size can leave it over the flyout. Place again
   // when its size changes; comparing against the placed size keeps this from looping.
-  useResizeObserver(panelEl, () => {
+  useHostResizeObserver(panelEl, () => {
     const panel = panelEl.value
     if (!inOverflow() || !isOpen.value || !panel) return
     if (sizeKey(panel) !== placedSize) void place()

@@ -308,7 +308,7 @@ function schedule(element: HTMLElement) {
   }
   if (!observers.has(element) && typeof ResizeObserver !== 'undefined') {
     let width = element.clientWidth
-    const observer = new ResizeObserver(() => { if (element.clientWidth !== width) { width = element.clientWidth; run() } })
+    const observer = new (element.ownerDocument.defaultView ?? window).ResizeObserver(() => { if (element.clientWidth !== width) { width = element.clientWidth; run() } })
     observer.observe(element)
     observers.set(element, observer)
   }

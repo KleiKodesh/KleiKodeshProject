@@ -83,7 +83,7 @@ export function isInsideHorizontalScroller(target: EventTarget | null): boolean 
   return false
 }
 
-// Custom event name used by iframe relays (PdfViewPage, HtmlViewPage, etc.) to
+// Custom event name used by iframe relays (HtmlViewPage, etc.; the PDF reader draws in the page itself) to
 // signal a completed swipe gesture that originated inside an iframe where native
 // touch/wheel events cannot bubble to the parent document.
 export const TAB_SWIPE_EVENT = 'tab-swipe-gesture'

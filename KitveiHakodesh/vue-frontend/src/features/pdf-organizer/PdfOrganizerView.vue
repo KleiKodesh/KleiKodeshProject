@@ -5,8 +5,9 @@
  * files or images. Save writes the document (the viewer then reloads it); Save a copy
  * writes a new file. Every change can be undone until then.
  */
-import { computed, onBeforeUnmount, ref, toRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { WindowedScroller, type WindowedScrollerApi } from 'vue-windowed-scroller'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import {
   IconArrowUndo20Regular,
@@ -33,7 +34,6 @@ import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import { pickLocalFilePath, restoreLocalFile, writePdfFile } from '@/webview-host/bridge'
 import { usePdfOrganizer } from './usePdfOrganizer'
-import { createThumbnailCache } from './thumbnailCache'
 import { loadPdfBytes, type OrganizerPage } from './pdfPageAssembly'
 import { baseName, pdfBlob, pickOutputFolder, saveBlobAs } from './organizerFiles'
 import { pageImage } from './pageImages'
@@ -45,11 +45,7 @@ const emit = defineEmits<{ close: []; saved: [bytes: Uint8Array] }>()
 
 const hostWindow = useHostWindow()
 const organizer = usePdfOrganizer(toRef(props, 'document'))
-const cache = createThumbnailCache(hostWindow)
-onBeforeUnmount(() => {
-  cache.dispose()
-  organizer.dispose()
-})
+onBeforeUnmount(() => organizer.dispose())
 
 const { pages, selected } = organizer
 const hasSelection = computed(() => selected.value.size > 0)
@@ -66,6 +62,46 @@ function onThumbWidth(e: Event) {
   thumbWidth.value = Number((e.target as HTMLInputElement).value)
   try { hostWindow.sessionStorage.setItem('pdfOrganizer.thumbWidth', String(thumbWidth.value)) } catch { /* private mode */ }
 }
+
+// -- The grid: a WindowedScroller of rows of `perRow` cards, so only the rows near the view are
+// in the DOM (and only their pages render). perRow follows the width and the thumbnail size.
+const GRID_PADDING = 16
+const GRID_GAP = 12
+/** A card's extra width around its thumbnail: padding and border. */
+const CARD_CHROME = 20
+const gridBox = ref<HTMLElement | null>(null)
+const gridWidth = ref(0)
+// This window's ResizeObserver (VueUse's is the main window's, late or silent for a detached window).
+let gridObserver: ResizeObserver | null = null
+onMounted(() => {
+  const box = gridBox.value
+  if (!box) return
+  gridWidth.value = box.clientWidth
+  gridObserver = new hostWindow.ResizeObserver(([entry]) => { if (entry) gridWidth.value = entry.contentRect.width })
+  gridObserver.observe(box)
+})
+onBeforeUnmount(() => gridObserver?.disconnect())
+const perRow = computed(() => {
+  // The scroller's bar takes a little of the width; leave it room.
+  const room = gridWidth.value - 2 * GRID_PADDING - 12
+  return Math.max(1, Math.floor((room + GRID_GAP) / (thumbWidth.value + CARD_CHROME + GRID_GAP)))
+})
+const rowCount = computed(() => Math.ceil(pages.value.length / perRow.value))
+function rowPages(row: number): { page: OrganizerPage; index: number }[] {
+  const out: { page: OrganizerPage; index: number }[] = []
+  const end = Math.min(pages.value.length, (row + 1) * perRow.value)
+  for (let i = row * perRow.value; i < end; i++) out.push({ page: pages.value[i]!, index: i })
+  return out
+}
+const gridScroller = ref<WindowedScrollerApi | null>(null)
+/** A new cards-per-row is a new list: rebuilt (its start row an argument) at the row holding the first card in view. */
+const gridKey = ref(0)
+const gridStart = ref(0)
+watch(perRow, (now, before) => {
+  const first = gridScroller.value?.readFirstVisible()
+  gridStart.value = first ? Math.floor((first.index * before) / now) : 0
+  gridKey.value++
+})
 
 // -- Labels: the page's number in the open document, or the other file's name and page.
 function pageLabel(page: OrganizerPage): string {
@@ -84,7 +120,6 @@ function onCardClick(e: MouseEvent, page: OrganizerPage) {
 }
 
 // -- Drag and drop: the dragged page, or all selected pages when it is one of them.
-const gridEl = ref<HTMLElement | null>(null)
 let dragKeys: Set<number> | null = null
 const dropIndex = ref<number | null>(null)
 function onDragStart(e: DragEvent, page: OrganizerPage) {
@@ -97,10 +132,13 @@ function onDragOver(e: DragEvent) {
   if (!dragKeys) return
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  const card = (e.target as HTMLElement).closest<HTMLElement>('[data-index]')
+  const target = e.target as HTMLElement
+  const card = target.closest<HTMLElement>('[data-index]')
   if (!card) {
-    // Empty room after the last card: drop at the end.
-    if (e.target === gridEl.value) dropIndex.value = pages.value.length
+    // Empty room in a row: after its last card; below the last row: at the end.
+    const row = target.closest<HTMLElement>('[data-row]')
+    if (row) dropIndex.value = Math.min(pages.value.length, (Number(row.dataset.row) + 1) * perRow.value)
+    else if (target === gridScroller.value?.scrollerElement) dropIndex.value = pages.value.length
     return
   }
   const index = Number(card.dataset.index)
@@ -324,50 +362,63 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
       </button>
     </div>
 
-    <div
-      ref="gridEl"
-      class="org-grid toc-thin-scroll"
-      :style="{ '--thumb-w': `${thumbWidth}px` }"
-      @click.self="organizer.selectNone()"
-      @dragover="onDragOver"
-      @drop="onDrop"
-    >
-      <div
-        v-for="(page, i) in pages"
-        :key="page.key"
-        class="card"
-        :class="{
-          selected: selected.has(page.key),
-          'drop-before': dropIndex === i,
-          'drop-after': dropIndex === pages.length && i === pages.length - 1,
-        }"
-        :data-index="i"
-        draggable="true"
-        :title="pageLabel(page)"
-        @click="onCardClick($event, page)"
-        @dragstart="onDragStart($event, page)"
-        @dragend="onDragEnd"
+    <div ref="gridBox" class="org-grid-box">
+      <WindowedScroller
+        v-if="gridWidth > 0"
+        :key="gridKey"
+        ref="gridScroller"
+        class="org-grid"
+        :class="{ 'has-selection': hasSelection }"
+        thin
+        :count="rowCount"
+        :initial-index="Math.min(gridStart, Math.max(0, rowCount - 1))"
+        :row-source-version="pages"
+        :end-padding-em="1"
+        :style="{ '--thumb-w': `${thumbWidth}px`, '--per-row': perRow }"
+        @click.self="organizer.selectNone()"
+        @dragover="onDragOver"
+        @drop="onDrop"
       >
-        <input
-          class="card-check"
-          type="checkbox"
-          :checked="selected.has(page.key)"
-          :aria-label="$t('pdfOrganizer.selectPage', { page: i + 1 })"
-          @click.stop="organizer.select(page.key, $event.shiftKey ? 'range' : 'toggle')"
-        />
-        <PdfOrganizerThumb
-          :cache="cache"
-          :doc="organizer.sources.value.get(page.source)?.doc ?? null"
-          :page-index="page.pageIndex"
-          :rotation="page.rotation"
-          :width="thumbWidth"
-          :blank-ratio="blankRatio(page)"
-        />
-        <div class="card-label">
-          <span class="card-pos">{{ i + 1 }}</span>
-          <span v-if="page.pageIndex < 0 || organizer.sources.value.get(page.source)?.bytes || page.pageIndex !== i" class="card-origin">{{ pageLabel(page) }}</span>
-        </div>
-      </div>
+        <template #row="{ index: row }">
+          <div class="org-row" :class="{ first: row === 0 }" :data-row="row" @click.self="organizer.selectNone()">
+            <div
+              v-for="{ page, index: i } in rowPages(row)"
+              :key="page.key"
+              class="card"
+              :class="{
+                selected: selected.has(page.key),
+                'drop-before': dropIndex === i,
+                'drop-after': dropIndex === pages.length && i === pages.length - 1,
+              }"
+              :data-index="i"
+              draggable="true"
+              :title="pageLabel(page)"
+              @click="onCardClick($event, page)"
+              @dragstart="onDragStart($event, page)"
+              @dragend="onDragEnd"
+            >
+              <input
+                class="card-check"
+                type="checkbox"
+                :checked="selected.has(page.key)"
+                :aria-label="$t('pdfOrganizer.selectPage', { page: i + 1 })"
+                @click.stop="organizer.select(page.key, $event.shiftKey ? 'range' : 'toggle')"
+              />
+              <PdfOrganizerThumb
+                :doc="organizer.sources.value.get(page.source)?.doc ?? null"
+                :page-index="page.pageIndex"
+                :rotation="page.rotation"
+                :width="thumbWidth"
+                :blank-ratio="blankRatio(page)"
+              />
+              <div class="card-label">
+                <span class="card-pos">{{ i + 1 }}</span>
+                <span v-if="page.pageIndex < 0 || organizer.sources.value.get(page.source)?.bytes || page.pageIndex !== i" class="card-origin">{{ pageLabel(page) }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </WindowedScroller>
     </div>
 
     <div class="org-status">
@@ -456,16 +507,25 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   width: 110px;
   accent-color: var(--accent-color);
 }
-.org-grid {
+.org-grid-box {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--thumb-w) + 20px), 1fr));
-  align-content: start;
-  gap: 12px;
-  padding: 16px;
   background: var(--bg-secondary);
+}
+.org-grid-box > .windowed-scroller {
+  flex: 1;
+  min-height: 0;
+}
+.org-row {
+  display: grid;
+  grid-template-columns: repeat(var(--per-row), minmax(0, 1fr));
+  gap: 12px;
+  padding: 6px 16px;
+}
+.org-row.first {
+  padding-top: 16px;
 }
 .card {
   position: relative;
@@ -516,7 +576,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
 }
 .card:hover .card-check,
 .card.selected .card-check,
-.org-grid:has(.selected) .card-check {
+.org-grid.has-selection .card-check {
   opacity: 1;
 }
 .card-label {

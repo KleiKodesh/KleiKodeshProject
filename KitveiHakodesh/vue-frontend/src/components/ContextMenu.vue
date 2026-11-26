@@ -159,7 +159,9 @@ async function openSubmenu(index: number, row: EventTarget | null): Promise<void
 
 useDropdownClose(menuRef, () => {
   visible.value = false
-}, { ignore: [submenuElement] })
+  // No viewport fit: showAtPosition places the menu itself (4px margin, CSS max-height). The fit
+  // uses an 8px margin, so a menu flipped up to end at its button got capped a few px short and scrolled.
+}, { ignore: [submenuElement], fitToViewport: false })
 
 async function show(event: MouseEvent) {
   event.preventDefault()

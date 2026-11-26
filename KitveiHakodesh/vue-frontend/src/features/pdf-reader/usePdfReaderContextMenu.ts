@@ -13,7 +13,7 @@ import { selectionToHtml, selectionToText } from './pdfSelectionText'
 
 /**
  * The PDF view's right-click / long-press menu (the old viewer's items): copy, copy into Word,
- * search the selection in the library / catalog, copy the page as an image.
+ * search the selection in the library / catalog, add a note on it, copy the page as an image.
  * Copies (menu and Ctrl+C) go out as RTL Word-friendly text with the word gaps of OCR'd pages.
  */
 export function usePdfReaderContextMenu(
@@ -24,6 +24,8 @@ export function usePdfReaderContextMenu(
     copyPageAsImage: () => void
     searchInLibrary: (query: string) => void
     searchInCatalog: (query: string) => void
+    /** "Add note" for the selection as it is now: a note at its end (usePdfNotes), no highlight; null = none. */
+    noteAtSelection: () => (() => void) | null
   },
 ) {
   const hostWindow = useHostWindow()
@@ -71,15 +73,20 @@ export function usePdfReaderContextMenu(
     else options.searchInLibrary(query)
   }
 
+  // The book view's order: the copy actions, then add note.
   function buildItems(text: string): ContextMenuItem[] {
+    const hasText = !!text.trim()
     const list: ContextMenuItem[] = []
-    if (text.trim()) {
+    if (hasText) {
       list.push({ label: t('pdfReader.menu.copy'), action: () => void copySelection(), shortcut: 'Ctrl+C' })
       list.push({ label: t('pdfReader.menu.copyIntoWord'), action: () => copyIntoWord(text), shortcut: 'Ctrl+V' })
       list.push({ label: t('pdfReader.menu.searchInLibrary'), action: () => searchSelection(text), shortcut: 'Ctrl+Shift+C' })
       list.push({ label: t('pdfReader.menu.searchInCatalog'), action: () => searchSelection(text, true) })
     }
     list.push({ label: t('pdfReader.menu.copyPageAsImage'), action: options.copyPageAsImage })
+    // Read where the selection ends now: clicking the menu may clear it.
+    const addNote = hasText ? options.noteAtSelection() : null
+    if (addNote) list.push({ label: t('pdfReader.notes.add'), action: addNote })
     return list
   }
 

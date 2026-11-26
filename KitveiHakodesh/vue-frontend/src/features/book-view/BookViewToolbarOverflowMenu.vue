@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch, nextTick } from 'vue'
-import { useEventListener, useResizeObserver } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
 const hostWindow = useHostWindow()
@@ -134,7 +135,7 @@ useEventListener(hostWindow, 'resize', () => props.open && place())
 // clamp run again, or a panel that fitted when it opened hangs off the bottom. Observing
 // the element covers that without the toolbar having to announce it - and `placing` is what
 // keeps `place()`'s own writes from coming straight back round as another callback.
-useResizeObserver(panelRef, () => {
+useHostResizeObserver(panelRef, () => {
   if (props.open && !placing) place()
 })
 

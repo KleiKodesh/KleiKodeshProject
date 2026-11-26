@@ -15,13 +15,13 @@
  * the same scroller: one code path for keys, focus and the bar, and rows of any
  * height are what it is built for.
  */
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { ref, computed, watch, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
 import { WindowedScroller } from 'vue-windowed-scroller'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { SegmentSearchTree, type TreeSearcher } from '@/utils/segmentSearchTree'
-import { useElementSize } from '@vueuse/core'
 import {
   ancestorPath,
   changedSpans,
@@ -329,7 +329,7 @@ const headerRef = ref<HTMLElement | null>(null)
 const headerPath = ref<TreeNodeItem[]>([])
 // The scroller's drawn bar - the header stops short of it so the bar stays usable.
 const scrollbarWidth = ref(0)
-const { height: headerHeight } = useElementSize(headerRef, undefined, { box: 'border-box' })
+const { height: headerHeight } = useHostElementSize(headerRef, undefined, { box: 'border-box' })
 
 function headerRowHeight(node: TreeNodeItem): number {
   const shownAt = headerPath.value.findIndex((n) => n.id === node.id)

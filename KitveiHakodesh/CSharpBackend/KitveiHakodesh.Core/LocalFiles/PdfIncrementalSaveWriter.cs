@@ -19,16 +19,22 @@ namespace KitveiHakodesh.Core.LocalFiles;
 ///
 /// Guard: <c>anchor</c> is the last bytes the viewer loaded before <c>offset</c>. They must
 /// still be on disk at the same place, or the file changed under the viewer (replaced,
-/// re-downloaded) and writing would corrupt it.
+/// re-downloaded) and writing would corrupt it. <c>expectedLength</c> (when given) is the length
+/// the viewer loaded: the file must still be exactly that long, so bytes another tool appended
+/// after the viewer loaded the file are never cut off.
 /// </summary>
 public static class PdfIncrementalSaveWriter
 {
     /// <summary>Returns null on success, else an error message (nothing written).</summary>
-    public static string? WriteTail(string? path, long offset, byte[]? tail, byte[]? anchor)
+    public static string? WriteTail(string? path, long offset, byte[]? tail, byte[]? anchor, long? expectedLength = null)
     {
-        // A drive-letter path (also compiled into the net48 host, which has no IsPathFullyQualified).
-        if (string.IsNullOrWhiteSpace(path) || path!.Length < 3 || path[1] != ':' || (path[2] != '\\' && path[2] != '/'))
-            return "invalid path";
+        // A drive-letter (C:\x.pdf) or UNC (\\server\share\x.pdf) path, as PdfFileWriter; relative
+        // and device paths are refused. (No IsPathFullyQualified: also compiled into the net48 host.)
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) return "invalid path";
+        try { path = Path.GetFullPath(path!); } catch { return "invalid path"; }
+        bool driveLetter = path.Length >= 3 && path[1] == ':' && path[2] == '\\';
+        bool unc = path.Length > 2 && path[0] == '\\' && path[1] == '\\' && path[2] != '?' && path[2] != '.';
+        if (!driveLetter && !unc) return "invalid path";
         if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase)) return "not a pdf";
         if (tail is null || tail.Length == 0) return "nothing to write";
         if (anchor is null || anchor.Length == 0 || offset < anchor.Length) return "missing anchor";
@@ -38,6 +44,7 @@ public static class PdfIncrementalSaveWriter
         {
             using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
             if (fs.Length < offset) return "file changed on disk";
+            if (expectedLength is long expected && (expected < offset || fs.Length != expected)) return "file changed on disk";
 
             byte[] onDisk = new byte[anchor.Length];
             fs.Seek(offset - anchor.Length, SeekOrigin.Begin);

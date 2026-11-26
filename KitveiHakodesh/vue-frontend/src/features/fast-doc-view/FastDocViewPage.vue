@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useDebounceFn, useElementSize, useEventListener, useStyleTag } from '@vueuse/core'
+import { useDebounceFn, useEventListener, useStyleTag } from '@vueuse/core'
 import { WindowedScroller } from 'vue-windowed-scroller'
 import SplitPane from '@/components/SplitPane.vue'
 import SidePanel from '@/components/SidePanel.vue'
@@ -470,7 +471,7 @@ const notesSync = ref(true)
  */
 type NotesPlace = 'bottom' | 'right' | 'left'
 const notesPlace = ref<NotesPlace>('bottom')
-const { width: pageWidth } = useElementSize(pageElement)
+const { width: pageWidth } = useHostElementSize(pageElement)
 const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
 const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
 /** The notes split button's main half: opens / closes the pane in the chosen place. */

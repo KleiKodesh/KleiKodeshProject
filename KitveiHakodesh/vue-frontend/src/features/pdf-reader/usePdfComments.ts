@@ -1,6 +1,7 @@
 import { shallowRef, watch, type Ref } from 'vue'
-import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { PDFDateString, type PDFDocumentProxy } from 'pdfjs-dist'
 import type { PdfScroller } from './usePdfScroller'
+import type { PdfNotes } from './usePdfNotes'
 
 /** One comment in the side panel: an annotation with text, from the file or made in this session. */
 export interface PdfComment {
@@ -10,13 +11,17 @@ export interface PdfComment {
   rect: number[]
   /** PDF.js annotation subtype (Text, FreeText, Highlight, ...) or the editor's type. */
   kind: string
+  /** A note (usePdfNotes): its key - a click pins its card. */
+  noteKey?: string
+  /** A comment made through an editor in this session: the editor's uid (PDF.js's selectComment). */
+  uid?: string
   text: string
   author?: string
   date?: Date
 }
 
-/** The annotation subtypes that never hold a reader's comment of their own. */
-const SKIPPED = new Set(['Link', 'Popup', 'Widget'])
+/** The annotation subtypes that never hold a reader's comment of their own; sticky notes (Text) come from usePdfNotes. */
+const SKIPPED = new Set(['Link', 'Popup', 'Widget', 'Text'])
 
 interface RawAnnotation {
   id: string
@@ -30,17 +35,15 @@ interface RawAnnotation {
   inReplyTo?: string
 }
 
-/** PDF date "D:YYYYMMDDHHmmSS..." to a Date, or undefined. */
+/** PDF date "D:YYYYMMDDHHmmSS+HH'mm'" to a Date (PDF.js's reading, time zone included), or undefined. */
 function parsePdfDate(s: string | null | undefined): Date | undefined {
-  const m = s && /^(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?/.exec(s)
-  if (!m) return undefined
-  const d = new Date(Number(m[1]), Number(m[2] ?? 1) - 1, Number(m[3] ?? 1), Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0))
-  return Number.isNaN(d.getTime()) ? undefined : d
+  return (s && PDFDateString.toDateObject(s)) || undefined
 }
 
 /** The editor objects PDF.js keeps in the document's annotationStorage (duck-typed: no public type). */
 interface EditorLike {
   id: string
+  uid?: string
   pageIndex: number
   annotationElementId?: string | null
   deleted?: boolean
@@ -56,9 +59,9 @@ function isEditor(v: unknown): v is EditorLike {
 /**
  * Every comment in the document, read lazily (only while `active`), page by page through
  * page.getAnnotations(), plus what the editors added, changed or deleted in this session
- * (read from annotationStorage). Re-read on editing changes.
+ * (read from annotationStorage), and the notes (usePdfNotes). Re-read on editing changes.
  */
-export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>) {
+export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>, notes: Pick<PdfNotes, 'notes' | 'loadAll'>) {
   const comments = shallowRef<PdfComment[]>([])
   const loading = shallowRef(false)
   /** The file's own annotations, by page - read once per document. */
@@ -101,7 +104,7 @@ export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>) {
         const text = (value.comment && !value.comment.deleted ? value.comment.text : '') || s?.value || s?.contents || ''
         if (text.trim() && s?.rect) {
           const date = value.comment?.date
-          item = { key: value.id, pageIndex: value.pageIndex, rect: s.rect, kind: value.editorType ?? '', text: text.trim(), date: date ? new Date(date) : undefined }
+          item = { key: value.id, uid: value.uid, pageIndex: value.pageIndex, rect: s.rect, kind: value.editorType ?? '', text: text.trim(), date: date ? new Date(date) : undefined }
         }
       }
       if (value.annotationElementId) overrides.set(value.annotationElementId, item)
@@ -118,6 +121,9 @@ export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>) {
       }
     }
     out.push(...added)
+    for (const n of notes.notes.value) {
+      if (n.text) out.push({ key: n.key, noteKey: n.key, pageIndex: n.pageIndex, rect: n.rect, kind: 'Text', text: n.text, author: n.author, date: n.date ?? undefined })
+    }
     return out.sort((a, b) => a.pageIndex - b.pageIndex || (b.rect[3] ?? 0) - (a.rect[3] ?? 0))
   }
 
@@ -128,6 +134,7 @@ export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>) {
     if (fileDoc !== doc || !fileRead) {
       fileDoc = doc
       fileRead = readFile(doc).catch(() => [])
+      void notes.loadAll()
     }
     loading.value = true
     const pages = await fileRead
@@ -151,6 +158,7 @@ export function usePdfComments(pdf: PdfScroller, active: Ref<boolean>) {
   pdf.eventBus.on('switchannotationeditorparams', queueRefresh)
   // A comment added, edited or deleted (notes, comments on editors): pdfEditManagers.
   pdf.eventBus.on('kkcommentschanged', queueRefresh)
+  watch(notes.notes, queueRefresh)
 
   watch([active, pdf.pdfDocument], () => void refresh(), { immediate: true })
 

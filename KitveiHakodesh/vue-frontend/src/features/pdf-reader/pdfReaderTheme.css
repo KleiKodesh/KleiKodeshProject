@@ -1,0 +1,151 @@
+/*
+ * The PDF viewer (features/pdf-reader) and page organizer (features/pdf-organizer) in the app's
+ * theme. Global (not scoped): it styles the DOM PDF.js builds (pages, text layer, editors).
+ * Every app window mirrors the app's stylesheets and <html> attributes/style, so this follows
+ * a theme switch, dark mode and the "PDF page filters" setting live in all of them.
+ *
+ * Page colour filter: --pdf-page-filter is set on <html> by theme/themes.ts applyTheme (the
+ * theme's pdfFilter, else calcPdfFilter); data-pdf-filters="true" on <html> (settingsStore
+ * pdfPageFilters) turns it on. Like the old viewer, only the rendered page pictures are
+ * filtered - never our toolbars, the text layer, or the annotation-editor UI.
+ */
+
+/* pdf_viewer.css sets `:root { color-scheme: light dark }`, which would make light themes
+   follow the OS's dark mode for everything drawn with light-dark(). The app decides. */
+:root:not(.dark) {
+  color-scheme: light;
+}
+
+/* ── Page colour filter ─────────────────────────────────────────────────────── */
+
+:root[data-pdf-filters='true'] .pdf-reader-scroller .page .canvasWrapper > canvas,
+:root[data-pdf-filters='true'] .pdf-reader .thumb-frame img,
+:root[data-pdf-filters='true'] [data-widget='pdf-organizer'] .thumb img,
+:root[data-pdf-filters='true'] [data-widget='pdf-organizer'] .thumb .blank {
+  filter: var(--pdf-page-filter, none);
+}
+
+/* ── Pages ──────────────────────────────────────────────────────────────────── */
+
+/* PDF.js sizes the page box as content-box (its width = the canvas, plus a 9px border outside).
+   The app's global `* { box-sizing: border-box }` put the border inside, so every canvas was
+   drawn 18px wider than shown and the browser shrank it: grey, soft text at every zoom. */
+.pdf-reader-scroller .pdfViewer .page {
+  box-sizing: content-box;
+}
+
+/* usePdfPixelSnap: a page's layers move together by under one screen pixel when a right-to-left
+   scroller's overflow ends between screen pixels. `translate` composes before PDF.js's own rotate
+   transforms, so it stays a screen-space move.
+   Only then: any transform, even a zero one, stops the browser's own pixel snapping of the canvas. */
+.pdf-reader-scroller .pdfViewer .page[style*='--kk-snap-fix-x'] > * {
+  translate: var(--kk-snap-fix-x) 0px;
+}
+
+.pdf-reader-scroller .pdfViewer .page .canvasWrapper {
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+:root.dark .pdf-reader-scroller .pdfViewer .page .canvasWrapper {
+  box-shadow:
+    0 0 0 1px var(--border-color),
+    0 2px 8px rgb(0 0 0 / 0.5);
+}
+
+@media not (forced-colors: active) {
+  /* PDF.js's own colour variables, from the app's. */
+  .pdf-reader-scroller {
+    --focus-outline-color: var(--accent-color);
+    --text-color: var(--text-primary);
+    --link-color: var(--accent-color);
+    --outline-color: var(--accent-color);
+    --outline-around-color: var(--bg-primary);
+    --hover-outline-color: var(--text-secondary);
+    --hover-outline-around-color: var(--bg-primary);
+    --resizer-bg-color: var(--accent-color);
+  }
+
+  /* Text selection on the page. */
+  .pdf-reader-scroller .textLayer:not(.selectionRendering) ::selection {
+    background: color-mix(in srgb, var(--accent-color) 35%, transparent);
+    color: transparent;
+  }
+
+  /* Find highlights: all matches, and the current one stronger. */
+  .pdf-reader-scroller .pdfViewer .textLayer .highlight {
+    --highlight-bg-color: color-mix(in srgb, var(--accent-color) 28%, transparent);
+    --highlight-selected-bg-color: color-mix(in srgb, var(--accent-color) 55%, transparent);
+  }
+
+  /* The small toolbar PDF.js draws on a selected annotation (delete, colour, alt text). */
+  .pdf-reader-scroller .pdfViewer .page .editToolbar {
+    --editor-toolbar-bg-color: var(--bg-primary);
+    --editor-toolbar-fg-color: var(--text-primary);
+    --editor-toolbar-border-color: var(--border-color);
+    --editor-toolbar-hover-bg-color: var(--hover-bg);
+    --editor-toolbar-hover-fg-color: var(--text-primary);
+    --editor-toolbar-hover-border-color: var(--border-color);
+    --editor-toolbar-focus-outline-color: var(--accent-color);
+  }
+  :root.dark .pdf-reader-scroller .pdfViewer .page .editToolbar {
+    --editor-toolbar-shadow: 0 2px 8px 0 rgb(0 0 0 / 0.5);
+  }
+}
+
+/* ── Notes (usePdfNotes): bubbles on the pages, note-mode cursor ─────────────── */
+
+/* PDF.js's own sticky-note icons and their comment buttons: our bubbles show these notes. */
+.pdf-reader-scroller .annotationLayer .textAnnotation,
+.pdf-reader-scroller .annotationLayer .textAnnotation + .annotationCommentButton {
+  display: none !important;
+}
+.pdf-reader-scroller .page > .kk-notes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+.pdf-reader-scroller .kk-note-bubble {
+  position: absolute;
+  /* fixed colours (see below), not the theme's accent */
+  width: calc(20px * var(--total-scale-factor, 1));
+  height: calc(20px * var(--total-scale-factor, 1));
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--accent-color);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.pdf-reader-scroller .kk-note-bubble svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.18));
+}
+/* The same bubble in every theme (it sits on the page, not on the app's surface): a white bubble
+   with a fixed blue outline (Fluent's comment icon); hover fills it with a light blue wash. */
+.pdf-reader-scroller .kk-note-bubble .fill {
+  fill: #ffffff;
+}
+.pdf-reader-scroller .kk-note-bubble .ring {
+  fill: #0f6cbd;
+}
+.pdf-reader-scroller .kk-note-bubble:hover .fill,
+.pdf-reader-scroller .kk-note-bubble:focus-visible .fill {
+  fill: #dbe9f7;
+}
+.pdf-reader-scroller .kk-note-bubble.draft {
+  opacity: 0.75;
+}
+/* Note mode: a speech-bubble cursor (its tip is the hotspot) over the pages; no text selection. */
+.pdf-reader-scroller.kk-note-mode .page,
+.pdf-reader-scroller.kk-note-mode .page * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 20 20'%3E%3Cpath fill='%23ffffff' d='M6.799 17.803a1.01 1.01 0 0 1-1.4-.199a.98.98 0 0 1-.199-.59v-2.172h-.6c-1.436 0-2.6-1.149-2.6-2.566v-6.71C2 4.149 3.164 3 4.6 3h10.8C16.836 3 18 4.149 18 5.566v6.71c0 1.418-1.164 2.566-2.6 2.566h-4.59z'/%3E%3Cpath fill='%231f1f1f' d='M10.48 13.842h4.92c.896 0 1.6-.713 1.6-1.566v-6.71C17 4.713 16.296 4 15.4 4H4.6C3.704 4 3 4.713 3 5.566v6.71c0 .853.704 1.566 1.6 1.566h1.6V17h.003l.002-.001zM6.8 17.803a1.01 1.01 0 0 1-1.4-.199a.98.98 0 0 1-.199-.59v-2.172h-.6c-1.436 0-2.6-1.149-2.6-2.566v-6.71C2 4.149 3.164 3 4.6 3h10.8C16.836 3 18 4.149 18 5.566v6.71c0 1.418-1.164 2.566-2.6 2.566h-4.59z'/%3E%3C/svg%3E") 6 21, crosshair !important;
+  user-select: none;
+}
+:root.dark .pdf-reader-scroller.kk-note-mode .page,
+:root.dark .pdf-reader-scroller.kk-note-mode .page * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 20 20'%3E%3Cpath fill='%232b2b2b' d='M6.799 17.803a1.01 1.01 0 0 1-1.4-.199a.98.98 0 0 1-.199-.59v-2.172h-.6c-1.436 0-2.6-1.149-2.6-2.566v-6.71C2 4.149 3.164 3 4.6 3h10.8C16.836 3 18 4.149 18 5.566v6.71c0 1.418-1.164 2.566-2.6 2.566h-4.59z'/%3E%3Cpath fill='%23ffffff' d='M10.48 13.842h4.92c.896 0 1.6-.713 1.6-1.566v-6.71C17 4.713 16.296 4 15.4 4H4.6C3.704 4 3 4.713 3 5.566v6.71c0 .853.704 1.566 1.6 1.566h1.6V17h.003l.002-.001zM6.8 17.803a1.01 1.01 0 0 1-1.4-.199a.98.98 0 0 1-.199-.59v-2.172h-.6c-1.436 0-2.6-1.149-2.6-2.566v-6.71C2 4.149 3.164 3 4.6 3h10.8C16.836 3 18 4.149 18 5.566v6.71c0 1.418-1.164 2.566-2.6 2.566h-4.59z'/%3E%3C/svg%3E") 6 21, crosshair !important;
+}

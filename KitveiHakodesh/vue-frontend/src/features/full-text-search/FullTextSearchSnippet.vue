@@ -65,8 +65,8 @@ function cancelFit(row: SnippetFitter) {
  * (binary search over the text before the match, so a handful of reflows at most) until it
  * is in the middle, and a "…" takes their place. Rows that need nothing cost one rect read.
  */
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
 
 const props = defineProps<{ html: string }>()
 
@@ -234,7 +234,7 @@ watch(() => props.html, () => {
 onBeforeUnmount(() => { cancelFit(fitter); unregister() })
 // Fires once on mount and on every size change of the row; only a width change matters
 // (a height change is this row's own trim, or the clamp, and must not loop back here).
-useResizeObserver(el, () => {
+useHostResizeObserver(el, () => {
   const width = el.value?.clientWidth ?? 0
   if (width === fittedWidth) return
   scheduleFit(fitter)

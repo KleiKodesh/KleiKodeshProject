@@ -10,19 +10,19 @@ import { getDocument } from 'pdfjs-dist'
  * strings in an encrypted file stay valid, and nothing else in the file changes.
  */
 
-const enc = (s: string): Uint8Array => {
+export const enc = (s: string): Uint8Array => {
   const out = new Uint8Array(s.length)
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff
   return out
 }
-function latin1(bytes: Uint8Array): string {
+export function latin1(bytes: Uint8Array): string {
   let s = ''
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
   return s
 }
 
 /** End (exclusive) of the PDF value starting at `start` - a dictionary, array, string or plain token. */
-function valueEnd(text: string, start: number): number {
+export function valueEnd(text: string, start: number): number {
   let depth = 0
   let i = start
   for (; i < text.length; i++) {
@@ -49,7 +49,7 @@ function valueEnd(text: string, start: number): number {
   return i
 }
 
-function dictAt(text: string, from: number): string | null {
+export function dictAt(text: string, from: number): string | null {
   const open = text.indexOf('<<', from)
   if (open < 0) return null
   return text.slice(open, valueEnd(text, open))
@@ -72,7 +72,7 @@ function intValue(text: string, dict: string, key: string): number | null {
 }
 
 /** Every object held in an object stream, by number (later streams win). */
-async function objectStreamObjects(bytes: Uint8Array, text: string): Promise<Map<number, string>> {
+export async function objectStreamObjects(bytes: Uint8Array, text: string): Promise<Map<number, string>> {
   const objects = new Map<number, string>()
   const re = /(\d+)\s+(\d+)\s+obj\s*<</g
   for (let m = re.exec(text); m; m = re.exec(text)) {
@@ -142,21 +142,45 @@ export async function setPageRotations(bytes: Uint8Array, turns: Map<number, num
     parts.push({ num: t.num, gen: t.gen, body })
   }
 
-  // The last cross-reference section: its trailer (or xref stream dictionary) gives Root, Size, ...
+  return appendObjects(bytes, text, parts)
+}
+
+/** The newest object `num gen`: its dictionary (plain "n g obj", else from an object stream), or null. */
+export async function readObjectValue(bytes: Uint8Array, text: string, num: number, gen: number, cache: { streams?: Map<number, string> } = {}): Promise<string | null> {
+  const plain = [...text.matchAll(new RegExp(`(?:^|[\\s>])${num}\\s+${gen}\\s+obj\\b`, 'g'))].pop()
+  if (plain) {
+    const at = plain.index! + plain[0].length
+    const m = /^\s*/.exec(text.slice(at, at + 64))!
+    const start = at + m[0].length
+    return text.slice(start, valueEnd(text, start))
+  }
+  cache.streams ??= await objectStreamObjects(bytes, text)
+  const obj = cache.streams.get(num)
+  return obj ?? null
+}
+
+/** The last trailer (or xref stream dictionary) of the file: /Root, /Size, /Encrypt... */
+export function lastTrailer(text: string): { dict: string; prev: number; size: number } {
   const startxref = [...text.matchAll(/startxref\s+(\d+)/g)].pop()
   if (!startxref) throw new Error('no startxref')
   const prev = Number(startxref[1])
-  const trailer = /^xref/.test(text.slice(prev, prev + 4))
-    ? dictAt(text, text.indexOf('trailer', prev))
-    : dictAt(text, prev)
-  if (!trailer) throw new Error('no trailer')
+  const dict = /^xref/.test(text.slice(prev, prev + 4)) ? dictAt(text, text.indexOf('trailer', prev)) : dictAt(text, prev)
+  if (!dict) throw new Error('no trailer')
+  const size = Number(/\/Size\s+(\d+)/.exec(dict)?.[1])
+  if (!Number.isFinite(size)) throw new Error('no /Size')
+  return { dict, prev, size }
+}
+
+/**
+ * Appends one incremental update to `bytes`: the given objects (new or rewritten, by number),
+ * then an uncompressed cross-reference stream (numbered after every object in it).
+ */
+export function appendObjects(bytes: Uint8Array, text: string, parts: { num: number; gen: number; body: string }[]): Uint8Array {
+  const { dict: trailer, prev, size } = lastTrailer(text)
   const pick = (re: RegExp) => re.exec(trailer)?.[0] ?? ''
   const root = pick(/\/Root\s+\d+\s+\d+\s+R/)
   if (!root) throw new Error('no /Root')
-  const size = Number(/\/Size\s+(\d+)/.exec(trailer)?.[1])
-  if (!Number.isFinite(size)) throw new Error('no /Size')
 
-  // Append: the pages' new dictionaries, then an uncompressed xref stream (object `size`).
   const chunks: Uint8Array[] = [bytes]
   let offset = bytes.length
   const push = (s: string | Uint8Array) => {
@@ -166,17 +190,17 @@ export async function setPageRotations(bytes: Uint8Array, turns: Map<number, num
   }
   if (bytes[bytes.length - 1] !== 0x0a) push('\n')
   const entries: { num: number; gen: number; offset: number }[] = []
-  for (const p of parts.sort((a, b) => a.num - b.num)) {
+  for (const p of [...parts].sort((a, b) => a.num - b.num)) {
     entries.push({ num: p.num, gen: p.gen, offset })
     push(`${p.num} ${p.gen} obj\n${p.body}\nendobj\n`)
   }
-  const xrefNum = size
+  const xrefNum = Math.max(size, ...parts.map((p) => p.num + 1))
   const xrefOffset = offset
   entries.push({ num: xrefNum, gen: 0, offset: xrefOffset })
   const row = (e: { gen: number; offset: number }) => [1, (e.offset >>> 24) & 0xff, (e.offset >>> 16) & 0xff, (e.offset >>> 8) & 0xff, e.offset & 0xff, (e.gen >>> 8) & 0xff, e.gen & 0xff]
   const data = new Uint8Array(entries.flatMap(row))
   const index = entries.map((e) => `${e.num} 1`).join(' ')
-  const dict = `<</Type /XRef /Size ${size + 1} /W [1 4 2] /Index [${index}] ${root} ${pick(/\/Info\s+\d+\s+\d+\s+R/)} ${pick(/\/Encrypt\s+\d+\s+\d+\s+R/)} ${pick(/\/ID\s*\[[^\]]*\]/)} /Prev ${prev} /Length ${data.length}>>`
+  const dict = `<</Type /XRef /Size ${xrefNum + 1} /W [1 4 2] /Index [${index}] ${root} ${pick(/\/Info\s+\d+\s+\d+\s+R/)} ${pick(/\/Encrypt\s+\d+\s+\d+\s+R/)} ${pick(/\/ID\s*\[[^\]]*\]/)} /Prev ${prev} /Length ${data.length}>>`
   push(`${xrefNum} 0 obj\n${dict}\nstream\n`)
   push(data)
   push(`\nendstream\nendobj\nstartxref\n${xrefOffset}\n%%EOF\n`)

@@ -1,6 +1,7 @@
 import { type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { PdfScroller } from './usePdfScroller'
 import type { PdfSideMode } from './PdfReaderSideModes.vue'
 import type { PdfFindOptionsModel } from './PdfFindOptions.vue'
@@ -9,6 +10,7 @@ import type { PdfFindOptionsModel } from './PdfFindOptions.vue'
  * Every PDF view control's key, as its tooltip shows it (the book view's "Label (Key)").
  * Bare letters: PDF.js / Acrobat-style single keys, ignored while typing.
  * Alt+letter: keys for the floating bars and search options, which also work while typing.
+ * Ctrl+Left / Ctrl+Right: next / previous outline entry, as the book view's sections.
  * Not used (the app's): Ctrl + W X B J K(TOC here too) U F N E T G H L M, Ctrl+digit,
  * Ctrl+Shift+digit, Alt+W, Alt+X, Alt+arrows, F1 F4 F8 F9 F11.
  */
@@ -41,6 +43,8 @@ export const PDF_KEYS = {
   addBookmark: 'Ctrl+Shift+D',
   findNext: 'F3',
   findPrev: 'Shift+F3',
+  nextSection: 'Ctrl+Left',
+  prevSection: 'Ctrl+Right',
   // The app's tab Back / Forward keys; in the PDF view they first step back through its jumps.
   historyBack: 'Alt+Right',
   historyForward: 'Alt+Left',
@@ -61,7 +65,10 @@ const FIND_KEYS: Record<string, keyof PdfFindOptionsModel> = { KeyA: 'highlightA
 
 /**
  * The PDF view's keyboard: PDF.js's own viewer keys (as the old viewer had them) plus the
- * app's copy keys. Active while focus is inside this viewer. Zoom keys: usePdfZoomInput;
+ * app's copy keys. Bare keys, Alt keys and the selection keys act while focus is inside this
+ * viewer; the Ctrl commands (search, TOC, print, save, properties, bookmark, go to page,
+ * presentation, sections) and F3 act while this PDF tab is the window's active tab, wherever
+ * focus is (as the book view's Ctrl keys) - except inside a dialog or another search field. Zoom keys: usePdfZoomInput;
  * keys inside presentation mode: usePdfPresentation.
  *
  * Not taken from PDF.js: Ctrl+G / Ctrl+Shift+G (find again - the app's go-home key; Enter in the
@@ -104,9 +111,18 @@ export function usePdfReaderShortcuts(
     showSideMode: (mode: PdfSideMode) => void
     /** F3 / Shift+F3: the next / previous match; false when there is no search to step. */
     findAgain: (previous: boolean) => boolean
+    /** Ctrl+Left / Ctrl+Right: the next / previous outline entry (RTL, as the book view). */
+    adjacentSection: (direction: 'next' | 'previous') => void
+    /**
+     * Undo / redo of PDF.js's edits (a deleted comment, a note...) where PDF.js's own keys do not
+     * reach: in reading mode (it listens only while an editor is on) and in an extra window (it
+     * listens on the main window). False when PDF.js takes the key itself.
+     */
+    undoRedo: (redo: boolean) => boolean
   },
 ) {
   const hostWindow = useHostWindow()
+  const paneNavigation = usePaneNavigation()
 
   // Alt+Right / Alt+Left (the app's tab Back / Forward, useAppTitleBarShortcuts): first back and
   // forward through this document's jumps (links, outline, bookmarks, search), while there are any.
@@ -125,18 +141,30 @@ export function usePdfReaderShortcuts(
 
   useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
     const active = hostWindow.document.activeElement
-    if (!root.value || !active || !root.value.contains(active)) return
+    if (!root.value || !active || !root.value.isConnected) return
+    // Focus in the viewer, or nowhere (the body, after a click on a non-focusable spot).
+    const inside = root.value.contains(active) || active === hostWindow.document.body
+    // Elsewhere in the window (the title bar, the address bar) while this tab shows: the Ctrl
+    // commands only, never inside a dialog or another view's search field.
+    const pageWide = inside || (paneNavigation.activeTab.route === '/pdf-view'
+      && !active.closest('[role="dialog"], dialog, [data-ctrlf-enabled]'))
+    if (!pageWide) return
     const ctrl = e.ctrlKey || e.metaKey
     const typing = isTyping(active)
     let handled = true
 
-    if (!ctrl && e.altKey && !e.shiftKey) {
+    if (!inside && !(ctrl && /^Key[FKPSDG]$/.test(e.code)) && e.code !== 'F3' && !(ctrl && !e.shiftKey && !e.altKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight'))) {
+      return
+    } else if (ctrl && !e.altKey && !typing && (e.code === 'KeyZ' || (e.code === 'KeyY' && !e.shiftKey))) {
+      // Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z (PDF.js's keys)
+      handled = actions.undoRedo(e.code === 'KeyY' || e.shiftKey)
+    } else if (!ctrl && e.altKey && !e.shiftKey) {
       // Alt+letter / Alt+digit: also while typing (the search box, a text box on the page).
       const side = SIDE_KEYS[e.code]
       const tool = EDIT_KEYS[e.code]
       const find = FIND_KEYS[e.code]
       if (side) actions.showSideMode(side)
-      else if (tool && actions.editVisible()) actions.editTool(tool)
+      else if (tool && (tool === 'note' || actions.editVisible())) actions.editTool(tool)
       else if (find && actions.searchVisible()) actions.toggleFindOption(find)
       else if (e.code === 'KeyS' && actions.ocrActive()) actions.cycleOcrScript()
       else if (e.code === 'KeyF' && actions.ocrActive()) actions.toggleOcrForce()
@@ -159,6 +187,9 @@ export function usePdfReaderShortcuts(
         case 'KeyP': actions.print(); break
         case 'KeyS': actions.save(); break
         case 'KeyD': actions.properties(); break
+        // RTL, as the book view: Left = next section, Right = previous. Fields keep word moves.
+        case 'ArrowLeft': if (typing) handled = false; else actions.adjacentSection('next'); break
+        case 'ArrowRight': if (typing) handled = false; else actions.adjacentSection('previous'); break
         case 'ArrowUp': if (typing) handled = false; else pdf.jumpToPage(1); break
         case 'ArrowDown': if (typing) handled = false; else pdf.jumpToPage(pdf.pageCount.value); break
         // Copy into Word, as in the book view and documents (only with text selected in the pages).

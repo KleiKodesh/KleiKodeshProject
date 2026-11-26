@@ -1,5 +1,5 @@
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { computed, type ComputedRef, type Ref } from 'vue'
-import { useElementSize } from '@vueuse/core'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { APP_NAV_UPDATE_KEY } from './appNavUpdateItem'
 
@@ -48,7 +48,7 @@ export function useAppNavSidebarOverflow(
   // button is not in the flyout either, because the arithmetic still counts it as fitting.
   // Reading the box the seed already speaks and subtracting the chrome ourselves makes the
   // first frame agree with every frame after it.
-  const { height: navPanelBorderBoxHeight } = useElementSize(navPanelEl, undefined, {
+  const { height: navPanelBorderBoxHeight } = useHostElementSize(navPanelEl, undefined, {
     box: 'border-box',
   })
 

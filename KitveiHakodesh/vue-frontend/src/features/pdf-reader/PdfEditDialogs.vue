@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
-  IconDismiss16Regular,
   IconEdit16Regular,
   IconDelete16Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { CSSConstants } from 'pdfjs-dist'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
@@ -152,27 +152,181 @@ async function addSignature() {
 const descText = ref('')
 watch(m.descriptionDialog, (d) => d && (descText.value = d.editor.description ?? ''))
 
-// ---------------- comment dialog ----------------
+// ---------------- comment dialog (PDF.js's CommentDialog) ----------------
 const commentText = ref('')
+const commentDialogEl = ref<HTMLDialogElement | null>(null)
 const commentInput = ref<HTMLTextAreaElement | null>(null)
+/** The dialog's place: fractions of the window (PDF.js's #setPosition), moved by dragging its title. */
+const dialogPos = ref({ x: 0, y: 0 })
+const dialogDragging = ref(false)
+/** The editors' comment buttons point at the dialog (aria-controls): PDF.js needs the element. */
+watch(commentDialogEl, (el) => m.setDialogElement(el), { immediate: true })
+onBeforeUnmount(() => m.setDialogElement(null))
+/** The page's direction: PDF.js places the dialog and popup on the comment button's inner side. */
+const isLtr = () => hostWindow.getComputedStyle(props.scroller ?? hostWindow.document.body).direction !== 'rtl'
+/** Text on an annotation-coloured comment: PDF.js's comment foreground. */
+const tintedForeground = () => {
+  const c = (CSSConstants as any).commentForegroundColor as number[] | undefined
+  return c ? `rgb(${c.join(',')})` : ''
+}
+const commentDialogStyle = computed(() => {
+  const d = m.commentDialog.value
+  return {
+    left: `${100 * dialogPos.value.x}%`,
+    top: `${100 * dialogPos.value.y}%`,
+    ...(d?.background ? { backgroundColor: d.background, borderColor: d.border ?? undefined, color: tintedForeground() } : {}),
+  }
+})
 watch(m.commentDialog, async (d) => {
-  if (!d) return
+  const el = commentDialogEl.value
+  if (!d) {
+    if (el?.open) el.close()
+    return
+  }
   commentText.value = d.text
+  if (!el) return
+  if (commentInput.value) commentInput.value.style.height = d.height ? `${d.height}px` : ''
+  // Measured hidden, then placed as PDF.js's CommentDialog.open: beside the comment button, inside the window.
+  el.style.visibility = 'hidden'
+  if (!el.open) el.showModal()
   await nextTick()
+  const { width, height } = el.getBoundingClientRect()
+  const { innerWidth, innerHeight } = hostWindow
+  let x = d.x
+  let y = d.y
+  if (d.defaultPosition) {
+    const pd = d.parent
+    let buttonWidth = 0
+    try { buttonWidth = (d.editor.commentButtonWidth ?? 0) * (pd?.width ?? 0) } catch { /* no comment button */ }
+    if (pd) {
+      if (isLtr() && x + width > Math.min(pd.x + pd.width, innerWidth)) x -= width - buttonWidth
+      else if (!isLtr()) x = x - width < Math.max(0, pd.x) ? Math.max(0, x) : x - width + buttonWidth
+    } else if (!isLtr()) x -= width
+    const h = Math.max(height, d.height ?? 0)
+    if (y + h > innerHeight) y = innerHeight - h
+    if (y < 0) y = 0
+  }
+  x = Math.min(Math.max(0, x), Math.max(0, innerWidth - width))
+  dialogPos.value = { x: Math.min(Math.max(x / innerWidth, 0), 1), y: Math.min(Math.max(y / innerHeight, 0), 1) }
+  el.style.visibility = ''
   commentInput.value?.focus()
 })
+const commentSaveDisabled = computed(() => !m.commentDialog.value || commentText.value === m.commentDialog.value.text)
+function saveComment() {
+  if (!commentSaveDisabled.value) m.closeCommentDialog(commentText.value)
+}
+/** Drag the dialog by its title (PDF.js's toolbar drag). */
+function startDialogDrag(e: PointerEvent) {
+  const { innerWidth, innerHeight } = hostWindow
+  let prevX = e.clientX
+  let prevY = e.clientY
+  e.preventDefault()
+  dialogDragging.value = true
+  const move = (ev: PointerEvent) => {
+    dialogPos.value = { x: dialogPos.value.x + (ev.clientX - prevX) / innerWidth, y: dialogPos.value.y + (ev.clientY - prevY) / innerHeight }
+    prevX = ev.clientX
+    prevY = ev.clientY
+  }
+  const stop = () => {
+    dialogDragging.value = false
+    hostWindow.removeEventListener('pointermove', move)
+    hostWindow.removeEventListener('pointerup', stop)
+    hostWindow.removeEventListener('blur', stop)
+  }
+  hostWindow.addEventListener('pointermove', move)
+  hostWindow.addEventListener('pointerup', stop)
+  hostWindow.addEventListener('blur', stop)
+}
 
-// ---------------- comment popup ----------------
+// ---------------- comment popup (PDF.js's CommentPopup) ----------------
+/** Drawn inside the page after the annotation (so it scrolls with it), placed in fractions of the page. */
 const popupEl = ref<HTMLElement | null>(null)
-const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }))
+const popupTextEl = ref<HTMLElement | null>(null)
+const popupDragging = ref(false)
+/** Comment dates as PDF.js's comment manager: a long date, in the app's language. */
+const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateStyle: 'long' }))
+/** PDF.js's popup width (its stylesheet: 360px, at most the page). */
+const POPUP_WIDTH = 360
 const popupStyle = computed(() => {
-  const w = 240
-  const x = Math.min(Math.max(4, m.popup.x), hostWindow.innerWidth - w - 4)
-  const y = Math.min(Math.max(4, m.popup.y), hostWindow.innerHeight - 60)
-  return { left: `${x}px`, top: `${y}px`, width: `${w}px` }
+  let { x } = m.popup
+  const { y } = m.popup
+  const editor = m.popup.editor
+  if (m.popup.correct && editor) {
+    // PDF.js's CommentPopup.#setPosition with a default position: inside the page and the window.
+    const parentRect: DOMRect = editor.parentBoundingClientRect
+    const widthRatio = Math.min(POPUP_WIDTH, parentRect.width) / parentRect.width
+    const ltr = isLtr()
+    if ((ltr && x + widthRatio > 1) || (!ltr && x - widthRatio >= 0)) {
+      let buttonWidth = 0
+      try { buttonWidth = editor.commentButtonWidth ?? 0 } catch { /* none */ }
+      x -= widthRatio - buttonWidth
+    }
+    const margin = 0.01
+    x = ltr ? Math.max(x, -parentRect.x / parentRect.width + margin) : Math.min(x, (hostWindow.innerWidth - parentRect.x) / parentRect.width - widthRatio - margin)
+  }
+  return {
+    left: `${100 * x}%`,
+    top: `${100 * y}%`,
+    ...(m.popup.background ? { backgroundColor: m.popup.background, '--comment-fg-color': tintedForeground(), '--comment-date-fg-color': tintedForeground() } : {}),
+  }
 })
-onClickOutside(popupEl, () => m.popup.selected && m.hidePopup(), { window: hostWindow, ignore: ['.annotationCommentButton'] })
-useEventListener(() => props.scroller, 'scroll', () => m.popup.editor && m.hidePopup(), { passive: true })
+// A clicked (pinned) popup takes the focus, as PDF.js's.
+watch(() => [m.popup.editor, m.popup.selected], async () => {
+  if (!m.popup.selected) return
+  await nextTick()
+  popupEl.value?.focus()
+})
+function onPopupKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  m.hidePopup()
+  e.preventDefault()
+  e.stopPropagation()
+}
+function editFromPopup() {
+  const height = popupTextEl.value ? parseFloat(hostWindow.getComputedStyle(popupTextEl.value).height) : undefined
+  m.editPopupComment(height)
+}
+/** Drag the popup by its top (PDF.js's): its new place is kept on the annotation. */
+function startPopupDrag(e: PointerEvent) {
+  const editor = m.popup.editor
+  if (!editor || (e.target as HTMLElement).closest('.commentPopupButtons')) return
+  const { width, height } = editor.parentBoundingClientRect as DOMRect
+  let prevX = e.clientX
+  let prevY = e.clientY
+  e.preventDefault()
+  e.stopPropagation()
+  popupDragging.value = true
+  const move = (ev: PointerEvent) => {
+    if (m.popup.correct) {
+      // Leave the default place: start from where it is drawn now.
+      const el = popupEl.value
+      const host = m.popup.host
+      if (el && host) {
+        const r = el.getBoundingClientRect()
+        const h = host.getBoundingClientRect()
+        m.popup.x = (r.x - h.x) / h.width
+        m.popup.y = (r.y - h.y - 2) / h.height
+      }
+      m.popup.correct = false
+    }
+    m.popup.x += (ev.clientX - prevX) / width
+    m.popup.y += (ev.clientY - prevY) / height
+    editor.commentPopupPosition = [m.popup.x, m.popup.y]
+    prevX = ev.clientX
+    prevY = ev.clientY
+    ev.stopPropagation()
+  }
+  const stop = () => {
+    popupDragging.value = false
+    hostWindow.removeEventListener('pointermove', move, true)
+    hostWindow.removeEventListener('pointerup', stop, true)
+    hostWindow.removeEventListener('blur', stop)
+  }
+  hostWindow.addEventListener('pointermove', move, true)
+  hostWindow.addEventListener('pointerup', stop, true)
+  hostWindow.addEventListener('blur', stop)
+}
+onClickOutside(popupEl, () => m.popup.selected && m.hidePopup(), { window: hostWindow, ignore: ['.annotationCommentButton', '.comment'] })
 
 // Escape closes the top dialog (or the popup).
 useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
@@ -283,45 +437,66 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
       </div>
     </div>
 
-    <!-- A comment's text (new note, or edit) -->
-    <div v-if="m.commentDialog.value" class="kk-backdrop" @click.self="m.closeCommentDialog()">
-      <div class="kk-dialog" role="dialog" aria-modal="true" :aria-label="$t('pdfReader.edit.comment.title')">
-        <h3 class="kk-title">{{ m.commentDialog.value.text ? $t('pdfReader.edit.comment.editTitle') : $t('pdfReader.edit.comment.title') }}</h3>
+    <!-- A comment's text, add or edit (PDF.js's comment dialog): beside the comment button, dragged by its title -->
+    <dialog
+      ref="commentDialogEl"
+      class="kk-comment-dialog"
+      :class="{ dragging: dialogDragging }"
+      aria-labelledby="kkCommentDialogTitle"
+      :style="commentDialogStyle"
+      @cancel.prevent="m.closeCommentDialog()"
+      @contextmenu="(e) => e.target !== commentInput && e.preventDefault()"
+    >
+      <template v-if="m.commentDialog.value">
+        <div class="comment-dialog-title" @pointerdown="startDialogDrag">
+          <span id="kkCommentDialogTitle" role="sectionhead">{{ m.commentDialog.value.text ? $t('pdfReader.edit.comment.editTitle') : $t('pdfReader.edit.comment.title') }}</span>
+        </div>
         <textarea
           ref="commentInput"
           v-model="commentText"
           class="kk-input comment-input"
           dir="auto"
           :placeholder="$t('pdfReader.edit.comment.placeholder')"
-          @keydown.ctrl.enter.prevent="m.closeCommentDialog(commentText)"
+          @keydown.ctrl.enter.prevent="saveComment"
+          @keydown.meta.enter.prevent="saveComment"
         />
-        <div class="kk-actions">
-          <button class="kk-btn primary" :disabled="!commentText.trim() && !m.commentDialog.value.text" @click="m.closeCommentDialog(commentText)">{{ $t('pdfReader.edit.comment.save') }}</button>
-          <button class="kk-btn" @click="m.closeCommentDialog()">{{ $t('pdfReader.cancel') }}</button>
+        <div class="comment-dialog-buttons">
+          <button type="button" class="kk-btn" @click="m.closeCommentDialog()">{{ $t('pdfReader.cancel') }}</button>
+          <button type="button" class="kk-btn primary" :disabled="commentSaveDisabled" @click="saveComment">
+            {{ m.commentDialog.value.text ? $t('pdfReader.edit.comment.update') : $t('pdfReader.edit.comment.add') }}
+          </button>
+        </div>
+      </template>
+    </dialog>
+  </Teleport>
+
+  <!-- The comment popup (PDF.js's): inside the page, after the annotation - it scrolls with the page -->
+  <Teleport v-if="m.popup.editor && m.popup.host" :to="m.popup.host">
+    <div
+      ref="popupEl"
+      class="commentPopup"
+      :class="{ selected: m.popup.selected, dragging: popupDragging }"
+      tabindex="-1"
+      role="dialog"
+      aria-modal="false"
+      :style="popupStyle"
+      @contextmenu.prevent
+      @keydown="onPopupKeydown"
+      @click="popupEl?.focus()"
+    >
+      <div class="commentPopupTop" @pointerdown="startPopupDrag">
+        <time class="commentPopupTime">{{ m.popup.date ? dateFormat.format(m.popup.date) : '' }}</time>
+        <div class="commentPopupButtons" :class="{ hidden: !m.popup.editable }">
+          <button type="button" class="commentPopupEdit" aria-haspopup="dialog" :title="$t('pdfReader.edit.comment.edit')" :aria-label="$t('pdfReader.edit.comment.edit')" @click="editFromPopup" @contextmenu.prevent>
+            <IconEdit16Regular />
+          </button>
+          <button type="button" class="commentPopupDelete" :title="$t('pdfReader.edit.comment.delete')" :aria-label="$t('pdfReader.edit.comment.delete')" @click="m.deletePopupComment()" @contextmenu.prevent>
+            <IconDelete16Regular />
+          </button>
         </div>
       </div>
-    </div>
-
-    <!-- The comment popup over the page -->
-    <div
-      v-if="m.popup.editor"
-      ref="popupEl"
-      class="kk-comment-popup"
-      :class="{ selected: m.popup.selected }"
-      role="dialog"
-      :style="popupStyle"
-    >
-      <div class="popup-top">
-        <time v-if="m.popup.date" class="popup-date">{{ dateFormat.format(m.popup.date) }}</time>
-        <span class="popup-buttons">
-          <template v-if="m.popup.editable && m.popup.selected">
-            <button :title="$t('pdfReader.edit.comment.edit')" @click="m.editPopupComment()"><IconEdit16Regular /></button>
-            <button :title="$t('pdfReader.edit.comment.delete')" @click="m.deletePopupComment()"><IconDelete16Regular /></button>
-          </template>
-          <button v-if="m.popup.selected" :title="$t('pdfViewer.closeEsc')" @click="m.hidePopup()"><IconDismiss16Regular /></button>
-        </span>
-      </div>
-      <div class="popup-text" dir="auto">{{ m.popup.text }}</div>
+      <hr>
+      <div ref="popupTextEl" class="commentPopupText"><p dir="auto">{{ m.popup.text }}</p></div>
     </div>
   </Teleport>
 </template>
@@ -373,12 +548,60 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   height: 64px;
   font-size: 32px;
 }
+/* The comment dialog: PDF.js's (360px, beside the comment button, coloured as the annotation), in the app's look. */
+.kk-comment-dialog {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 360px;
+  max-width: 100%;
+  min-width: 200px;
+  box-sizing: border-box;
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 0.5px 2px rgb(0 0 0 / 0.1), 0 4px 16px rgb(0 0 0 / 0.2);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.kk-comment-dialog:not([open]) {
+  display: none;
+}
+.kk-comment-dialog::backdrop {
+  background: transparent;
+}
+.kk-comment-dialog.dragging,
+.kk-comment-dialog.dragging * {
+  cursor: move !important;
+}
+.comment-dialog-title {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: move;
+  user-select: none;
+}
 .comment-input {
-  height: 120px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 132px;
+  margin-bottom: 12px;
   padding: 6px 8px;
   resize: vertical;
   scrollbar-width: thin;
   font-family: inherit;
+}
+.comment-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .kk-actions {
   display: flex;
@@ -486,59 +709,33 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
   color: var(--error-color, #c42b1c);
 }
 
-.kk-comment-popup {
-  position: fixed;
-  z-index: 9500;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  font-size: 12px;
-  color: var(--text-primary);
-  pointer-events: none;
+/* The comment popup: PDF.js's stylesheet (pdf_viewer.css .commentPopup) in the app's colours; Fluent icons. */
+.commentPopup {
+  --comment-bg-color: var(--bg-secondary);
+  --comment-fg-color: var(--text-primary);
+  --comment-border-color: var(--border-color);
+  --comment-date-fg-color: var(--text-secondary);
+  --divider-color: var(--border-color);
+  --button-comment-color: var(--text-primary);
+  --button-comment-hover-bg: var(--hover-bg);
+  --button-comment-active-bg: var(--hover-bg);
+  --comment-focus-outline-color: var(--accent-color, currentColor);
 }
-.kk-comment-popup.selected {
-  pointer-events: auto;
+.commentPopup .commentPopupButtons.hidden {
+  display: none;
 }
-.popup-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-height: 22px;
-}
-.popup-date {
-  font-size: 10.5px;
-  color: var(--text-secondary);
-}
-.popup-buttons {
-  display: flex;
-  gap: 2px;
-  margin-inline-start: auto;
-}
-.popup-buttons button {
+.commentPopup .commentPopupButtons > button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 3px;
-  border-radius: 4px;
-  background: none;
 }
-.popup-buttons button:hover {
-  background: var(--hover-bg);
+.commentPopup .commentPopupButtons > button::before {
+  display: none;
 }
-.popup-text {
-  max-height: 200px;
+.commentPopup .commentPopupText {
+  max-height: 50vh;
   overflow-y: auto;
   scrollbar-width: thin;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.4;
 }
 </style>

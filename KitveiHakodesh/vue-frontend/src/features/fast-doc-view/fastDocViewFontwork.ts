@@ -298,7 +298,7 @@ function schedule(element: HTMLElement) {
 function watch(element: HTMLElement) {
   const relayout = () => { if (element.isConnected && element.querySelector('text[data-fontwork="pair"]')) relayoutChangedResolution(element) }
   // zoom changes the block's laid-out size; a pixel-ratio change (browser zoom, another screen) fires the media query
-  const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(relayout)
+  const observer = typeof ResizeObserver === 'undefined' ? undefined : new (element.ownerDocument.defaultView ?? window).ResizeObserver(relayout) // the element's own window: an app window is a popup
   observer?.observe(element)
   let query: MediaQueryList | undefined
   const listenRatio = () => {

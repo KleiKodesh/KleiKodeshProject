@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useElementBounding } from '@vueuse/core'
+import { useHostBoundingUpdates } from '@/composables/useHostResizeObserver'
 import PageCard from '@/components/PageCard.vue'
 
 /**
@@ -26,12 +27,15 @@ const cardBarSlotId = `fts-card-bar-${props.instanceKey.replace(/[^\w-]/g, '_')}
 
 // The options and filter dropdowns fill the whole height under the bar, i.e. the results area's.
 const resultsAreaRef = ref<HTMLElement | null>(null)
-const { height: resultsAreaHeight, bottom: resultsAreaBottom } = useElementBounding(resultsAreaRef)
+const { height: resultsAreaHeight, bottom: resultsAreaBottom, update: updateResultsArea } = useElementBounding(resultsAreaRef)
+// VueUse's own observer is the page window's; this one is the app window's (useHostResizeObserver)
+useHostBoundingUpdates(resultsAreaRef, updateResultsArea)
 
 // Inside the clean-page card the filter dropdown starts under the bar wherever the card
 // puts it, so its height is what is left from there to the bottom of the results area.
 const cardBarSlotRef = ref<HTMLElement | null>(null)
-const { bottom: cardBarSlotBottom } = useElementBounding(cardBarSlotRef)
+const { bottom: cardBarSlotBottom, update: updateCardBarSlot } = useElementBounding(cardBarSlotRef)
+useHostBoundingUpdates(cardBarSlotRef, updateCardBarSlot)
 const CARD_BAR_SLOT_PADDING = 4
 const FILTER_BOTTOM_GAP = 8
 const cardFilterHeight = computed(() =>

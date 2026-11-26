@@ -1,8 +1,15 @@
 import { computed, ref, shallowRef, watch, type Ref } from 'vue'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { disposeThumbnailEngine } from '@/features/pdf-reader/pdfThumbnailEngine'
 import { PRIMARY_SOURCE, assemblePdf, type OrganizerPage, type OrganizerSource } from './pdfPageAssembly'
 
 const UNDO_LIMIT = 100
+
+/** Another PDF's pages are gone from the organizer: its thumbnails and the file are freed. */
+function closeSource(doc: PDFDocumentProxy) {
+  disposeThumbnailEngine(doc)
+  void doc.loadingTask.destroy()
+}
 
 /**
  * The organizer's state: the pages in their new order (with turns, copies, blanks and pages
@@ -28,7 +35,7 @@ export function usePdfOrganizer(document: Ref<PDFDocumentProxy | null>) {
 
   /** Start over from the document as it is (on open, and after it was saved and reloaded). */
   function reset(doc: PDFDocumentProxy | null) {
-    for (const [id, s] of sources.value) if (id !== PRIMARY_SOURCE) void s.doc.loadingTask.destroy()
+    for (const [id, s] of sources.value) if (id !== PRIMARY_SOURCE) closeSource(s.doc)
     const map = new Map<number, OrganizerSource>()
     pages.value = []
     if (doc) {
@@ -168,7 +175,7 @@ export function usePdfOrganizer(document: Ref<PDFDocumentProxy | null>) {
   }
 
   function dispose() {
-    for (const [id, s] of sources.value) if (id !== PRIMARY_SOURCE) void s.doc.loadingTask.destroy()
+    for (const [id, s] of sources.value) if (id !== PRIMARY_SOURCE) closeSource(s.doc)
   }
 
   return {

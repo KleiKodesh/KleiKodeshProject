@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import IconPdfThumbnails from './icons/IconPdfThumbnails.vue'
 import type { Component } from 'vue'
 import {
   IconTextBulletListTree16Regular,
   IconBookmark16Regular,
   IconComment16Regular,
-  IconDocumentMultiple16Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { PDF_KEYS, withKey } from './usePdfReaderShortcuts'
 
@@ -17,7 +17,7 @@ const MODES: { id: PdfSideMode; icon: Component; label: string }[] = [
   { id: 'outline', icon: IconTextBulletListTree16Regular, label: 'pdfReader.panel.outline' },
   { id: 'bookmarks', icon: IconBookmark16Regular, label: 'pdfReader.panel.bookmarks' },
   { id: 'comments', icon: IconComment16Regular, label: 'pdfReader.panel.comments' },
-  { id: 'thumbnails', icon: IconDocumentMultiple16Regular, label: 'pdfReader.panel.thumbnails' },
+  { id: 'thumbnails', icon: IconPdfThumbnails, label: 'pdfReader.panel.thumbnails' },
 ]
 </script>
 

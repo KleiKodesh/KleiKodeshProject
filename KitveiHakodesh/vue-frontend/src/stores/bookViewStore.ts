@@ -31,7 +31,7 @@ export interface TocBridge {
 
 /**
  * A single entry in the PDF outline, shaped for breadcrumb navigation.
- * Derived from the flat OutlineEntry list in usePdfViewPageTracking.
+ * Derived from the PDF reader's flat outline (features/pdf-reader/usePdfOutline.ts).
  */
 export interface PdfOutlineEntry {
   id: number        // index in the flat outline list — stable unique key

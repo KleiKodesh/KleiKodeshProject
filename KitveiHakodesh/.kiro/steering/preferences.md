@@ -112,7 +112,7 @@ Components (hard limit 350):
 | `features/full-text-search/FullTextSearchResultsList.vue` | 535 |
 | `features/home/HomeSearchDropdown.vue` | 525 |
 | `features/book-view/lines/BookViewLinesContent.vue` | 510 |
-| `features/pdf-viewer/PdfViewPage.vue` | 499 |
+| `features/pdf-reader/PdfReaderView.vue` | 731 |
 | `features/local-file-search/LocalFileSearchPage.vue` | 493 |
 | `features/full-text-search/FullTextSearchPage.vue` | 460 |
 | `features/full-text-search/FullTextSearchFilterPanel.vue` | 456 |
@@ -121,7 +121,7 @@ Components (hard limit 350):
 | `features/book-catalog/BookCatalogPage.vue` | 397 |
 | `features/dictionary/DictionaryWordPage.vue` | 388 |
 | `features/book-view/BookViewToolbar.vue` | 386 |
-| `features/pdf-viewer/PdfOcrResultPopup.vue` | 383 |
+| `features/pdf-reader/PdfOcrResultPopup.vue` | 392 |
 | `features/hebrew-calendar/DayRow.vue` | 365 |
 | `features/full-text-search/FullTextSearchBar.vue` | 354 |
 | `features/home/HomePageTile.vue` | 352 |
@@ -148,7 +148,7 @@ Composables, stores and other feature modules (hard limit 300):
 | `features/html-view/useOtzariaAddinBridge.ts` | 372 |
 | `webview-host/seforimApi.ts` | 369 |
 | `webview-host/dictionarySeforimDb.ts` | 339 |
-| `features/pdf-viewer/usePdfViewPageTracking.ts` | 322 |
+| `features/pdf-reader/usePdfScroller.ts` | 332 |
 
 Utilities (hard limit 250):
 

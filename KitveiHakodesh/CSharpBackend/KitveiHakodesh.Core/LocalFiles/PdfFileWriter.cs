@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Globalization;
 using System.IO;
 
 namespace KitveiHakodesh.Core.LocalFiles;
@@ -15,20 +16,26 @@ namespace KitveiHakodesh.Core.LocalFiles;
 ///
 /// When the swap is refused because another reader holds the file without delete sharing
 /// (e.g. the browser engine still streaming it), the temp file's bytes are copied over the
-/// target in place instead - the same in-place write the outline autosave always did.
+/// target in place instead - the same in-place write the outline autosave always did. If that
+/// in-place write fails midway (the original may now be damaged), the complete temp copy is
+/// kept under a visible "(unsaved ...)" name beside the target and the error names it.
 ///
-/// Guards: a drive-letter path, a .pdf name, bytes that start with "%PDF-", and - for an
+/// Guards: a drive-letter or UNC path, a .pdf name, bytes that start with "%PDF-", and - for an
 /// in-place save - a file that already exists. Callers (host / service) add their own
 /// "this file was opened or picked by the user" check.
 /// </summary>
 public static class PdfFileWriter
 {
-    /// <summary>Returns null on success, else an error message (the target is left as it was).</summary>
+    /// <summary>Returns null on success, else an error message.</summary>
     public static string? Write(string? path, byte[]? bytes, bool mustExist)
     {
-        // A drive-letter path (also compiled into the net48 host, which has no IsPathFullyQualified).
-        if (string.IsNullOrWhiteSpace(path) || path!.Length < 3 || path[1] != ':' || (path[2] != '\\' && path[2] != '/'))
-            return "invalid path";
+        // A drive-letter (C:\x.pdf) or UNC (\\server\share\x.pdf) path; relative and device
+        // paths are refused. (No IsPathFullyQualified: this file is also compiled into the net48 host.)
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) return "invalid path";
+        try { path = Path.GetFullPath(path!); } catch { return "invalid path"; }
+        bool driveLetter = path.Length >= 3 && path[1] == ':' && path[2] == '\\';
+        bool unc = path.Length > 2 && path[0] == '\\' && path[1] == '\\' && path[2] != '?' && path[2] != '.';
+        if (!driveLetter && !unc) return "invalid path";
         if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase)) return "not a pdf";
         if (bytes is null || bytes.Length < 5 || bytes[0] != '%' || bytes[1] != 'P' || bytes[2] != 'D' || bytes[3] != 'F' || bytes[4] != '-')
             return "not a pdf";
@@ -38,6 +45,8 @@ public static class PdfFileWriter
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return "folder not found";
 
         string temp = Path.Combine(folder, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".saving");
+        // Deleted unless it became the only complete copy of the new bytes (failed in-place write).
+        bool deleteTemp = true;
         try
         {
             using (var fs = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -58,13 +67,19 @@ public static class PdfFileWriter
                 File.Replace(temp, path, null, ignoreMetadataErrors: true);
                 return null;
             }
-            catch (IOException) { return OverwriteInPlace(temp, path); }
-            catch (UnauthorizedAccessException) { return OverwriteInPlace(temp, path); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                string? error = OverwriteInPlace(temp, path);
+                if (error == null) return null;
+                deleteTemp = false;
+                return error + KeepRecoverableCopy(temp, path);
+            }
         }
         catch (Exception ex) { return ex.Message; }
         finally
         {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
+            if (deleteTemp)
+                try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
         }
     }
 
@@ -83,5 +98,24 @@ public static class PdfFileWriter
             return null;
         }
         catch (Exception ex) { return ex.Message; }
+    }
+
+    /// <summary>After a failed in-place write: give the complete temp copy a visible name next to
+    /// the target and return the note that tells the user where it is.</summary>
+    private static string KeepRecoverableCopy(string temp, string path)
+    {
+        try
+        {
+            string name = Path.GetFileNameWithoutExtension(path) + " (unsaved "
+                + DateTime.Now.ToString("yyyy-MM-dd HHmmss", CultureInfo.InvariantCulture) + ").pdf";
+            string kept = Path.Combine(Path.GetDirectoryName(path)!, name);
+            File.Move(temp, kept);
+            try { File.SetAttributes(kept, File.GetAttributes(kept) & ~FileAttributes.Hidden); } catch { /* cosmetic only */ }
+            return " - the new version is kept at: " + kept;
+        }
+        catch
+        {
+            return " - the new version is kept at: " + temp;
+        }
     }
 }

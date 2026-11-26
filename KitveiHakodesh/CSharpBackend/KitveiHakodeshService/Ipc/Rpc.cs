@@ -143,6 +143,8 @@ public sealed class WritePdfTailArgs
     public long Offset { get; set; }
     public byte[]? Tail { get; set; }
     public byte[]? Anchor { get; set; }
+    /// <summary>The file length the viewer loaded; the write is refused when the file is not that long now.</summary>
+    public long? Length { get; set; }
 }
 
 /// <summary>Args for <c>writePdfFile</c> - the PDF viewer's Save: the whole new file for

@@ -89,8 +89,8 @@ export interface Tab {
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   localFileDownloadProgress?: string // in-memory only — live HB download progress text (e.g. "6.2 / 13.2 MB · 47%")
   // Outline entry a /pdf-view tab opens at, as a book-view breadcrumb path - set when a
-  // HebrewBooks edition is opened from a text book. One-shot: PdfViewPage hands it to the
-  // viewer on the tab's first load and clears it. Deliberately NOT a position field: the
+  // HebrewBooks edition is opened from a text book. One-shot: meant for the PDF reader
+  // (features/pdf-reader) to open on the tab's first load and clear. Deliberately NOT a position field: the
   // download flow that follows changes the tab's identity, which would wipe it. Not persisted.
   pdfInitialOutlineTarget?: string
   // Kiwix ZIM state — removed; feature deferred to a later stage
@@ -772,11 +772,13 @@ export const useTabStore = defineStore('tabs', () => {
     // document it is leaving. Kept, the view went on showing that document while the tab
     // (and so the saved session) named the target - a reload then opened the other file.
     // Re-serve it, as the address bar's file rows do.
+    const isFileRoute = patch.route === '/pdf-view' || patch.route === '/html-view'
     const fileChanged =
-      tab.localFilePath !== patch.localFilePath || tab.localFileHbBookId !== patch.localFileHbBookId
+      isFileRoute &&
+      (tab.localFilePath !== patch.localFilePath || tab.localFileHbBookId !== patch.localFileHbBookId)
     if (fileChanged) patch.localFileVirtualUrl = undefined
     Object.assign(tab, patch)
-    if (fileChanged && (tab.route === '/pdf-view' || tab.route === '/html-view')) {
+    if (fileChanged) {
       void useLocalFileStore().restoreTab(tab.id, true)
     }
   }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, watch, nextTick, inject, onBeforeUnmount, shallowReactive } from 'vue'
-import { useResizeObserver, watchDebounced } from '@vueuse/core'
+import { watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -68,7 +69,7 @@ const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 // Track the shell's own width instead of the viewport width so that in split
 // view responds to its own size, not the full window size.
 const shellWidth = ref(hostWindow.innerWidth)
-useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
+useHostResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
 const isWideScreen = computed(() => shellWidth.value >= 650)
 /** Share of the split row the book text keeps when both side columns are open. */
 const MIN_LINES_FRACTION = 0.2

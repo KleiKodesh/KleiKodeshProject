@@ -10,9 +10,9 @@
  * and clamped to the viewport vertically. It hangs off the scrollbar's inner edge,
  * so it reads into the page rather than off the window edge.
  */
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed } from 'vue'
-import { useElementSize } from '@vueuse/core'
 import type { ScrollbarTocTooltipData } from './useBookViewScrollbarTocTooltip'
 
 const props = defineProps<{ data: ScrollbarTocTooltipData }>()
@@ -31,7 +31,7 @@ const hostWindow = useHostWindow()
 // the ResizeObserver first fires. Left at the content-box default, the label would
 // paint centred on the first frame, then drop by half its 12px of chrome on the next
 // and stay 6px low from then on. Same trap, same fix as useBookViewToolbarOverflow.
-const { height } = useElementSize(labelEl, undefined, { box: 'border-box', window: hostWindow })
+const { height } = useHostElementSize(labelEl, undefined, { box: 'border-box' })
 
 const GAP_PX = 8
 const VIEWPORT_MARGIN_PX = 4

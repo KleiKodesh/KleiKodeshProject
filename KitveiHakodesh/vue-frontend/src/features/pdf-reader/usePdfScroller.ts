@@ -9,6 +9,9 @@ import { HIGHLIGHT_COLORS_OPTION } from './usePdfEditing'
 import { createPdfEditManagers } from './pdfEditManagers'
 import { createPdfScriptingServices } from './pdfScripting'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { usePdfPixelSnap } from './usePdfPixelSnap'
+import { usePdfPageMemory } from './usePdfPageMemory'
+import { usePdfViewHistory } from './usePdfViewHistory'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = workerUrl
@@ -35,6 +38,9 @@ export interface ViewState {
   /** A preset name or a numeric scale as text (PDFViewer.currentScaleValue). */
   scaleValue: string
   rotation: number
+  /** PDFViewer.setDocument resets these to vertical / no spreads, so a reopen in place sets them again. */
+  scrollMode: number
+  spreadMode: number
 }
 
 /**
@@ -47,6 +53,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   // system browser); link / outline jumps keep the reader's zoom.
   const linkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK, ignoreDestinationZoom: true })
   const findController = new PDFFindController({ eventBus, linkService })
+  // Page canvases on whole screen pixels: no browser resampling, text as sharp as drawn.
+  usePdfPixelSnap(container, eventBus)
   /** Signature and comment managers for PDF.js's editors (dialogs: PdfEditDialogs.vue). */
   const editManagers = createPdfEditManagers(eventBus)
   /** Form-script alerts waiting to be shown (the view shows the first in the app's modal). */
@@ -92,7 +100,11 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   const findWrappedPrevious = ref(false)
   /** Back / forward between the places jumps left (pdfJumpHistory). */
   const jumpHistory = createPdfJumpHistory(eventBus, viewer)
+  // Drawn pages kept: 3; idle cleanup after 5 s; a jump cancels draws left behind (the old viewer's tuning).
+  const pageMemory = usePdfPageMemory(container, eventBus, viewer, pdfDocument)
   linkService.setHistory(jumpHistory.linkHistory as never)
+  /** Each PDF reopens at its last place, zoom, rotation, modes and side panel (PDF.js's ViewHistory). */
+  const viewHistory = usePdfViewHistory(container, eventBus, linkService)
   eventBus.on('pagerendered', () => (loading.value = false))
 
   eventBus.on('pagechanging', (e: { pageNumber: number }) => (pageNumber.value = e.pageNumber))
@@ -129,8 +141,10 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       annotationEditorHighlightColors: HIGHLIGHT_COLORS_OPTION,
       // Not in PDFViewerOptions' types; PDFViewer hands them to its AnnotationEditorUIManager.
       // PDF.js's floating "highlight" button stays off: it reads the global document's selection
-      // (never a detached window's); ours is PdfHighlightButton.
-      ...({ signatureManager: editManagers.signatureManager, commentManager: editManagers.commentManager } as object),
+      // (never a detached window's); ours: Highlight / Add note in the right-click menu (usePdfSelectionActions).
+      // Detail view ON on purpose (PDF.js's default; the old viewer had it off): past the canvas cap,
+      // the visible part of a zoomed page is drawn again at full sharpness. No canvas cap is set.
+      ...({ enableDetailCanvas: true, signatureManager: editManagers.signatureManager, commentManager: editManagers.commentManager } as object),
     })
     linkService.setViewer(v)
     scriptingManager.setViewer(v)
@@ -150,6 +164,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       left: viewTop?.left,
       scaleValue: preset.value ?? String(scale.value),
       rotation: rotation.value,
+      scrollMode: scrollMode.value,
+      spreadMode: spreadMode.value,
     }
   }
 
@@ -157,24 +173,30 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   let openGeneration = 0
   /**
    * Opens a PDF by URL, or from bytes (a just-saved file, reloaded without a cached read).
-   * `keep`: show the new document at this place and zoom (from viewState()) instead of page 1 at page width.
+   * `keep`: show the new document at this place and zoom (from viewState()) instead of its saved
+   * view (usePdfViewHistory). `placeElsewhere`: a jump (outline target) follows at 'documentinit';
+   * the saved zoom and modes apply but not the saved place.
    */
-  async function open(source: string | Uint8Array, keep?: ViewState) {
+  /** The password that opened the shown document: a reopen in place (keep, e.g. after a save) reuses it. */
+  let openedPassword: string | null = null
+  async function open(source: string | Uint8Array, keep?: ViewState, placeElsewhere = false) {
     viewTop = null
     const v = ensureViewer()
     const generation = ++openGeneration
     loadError.value = null
     loadFailure.value = null
-    lastOpen = { source, keep }
+    lastOpen = { source, keep, placeElsewhere }
     if (!keep) jumpHistory.reset()
     passwordRequest.value?.cancel()
     loading.value = true
     loadProgress.value = Number.NaN
     let passwordCancelled = false
+    let password = keep ? openedPassword : null
     try {
       void loadingTask?.destroy()
       loadingTask = getDocument({
         ...(typeof source === 'string' ? { url: source } : { data: source.slice() }),
+        ...(password ? { password } : {}),
         cMapUrl: `${RESOURCES}cmaps/`,
         cMapPacked: true,
         standardFontDataUrl: `${RESOURCES}standard_fonts/`,
@@ -198,7 +220,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
         }
         passwordRequest.value = {
           incorrect: reason === PasswordResponses.INCORRECT_PASSWORD,
-          submit: (password) => answer(password),
+          submit: (value) => { password = value; answer(value) },
           cancel: () => {
             passwordCancelled = true
             answer(new Error('Password prompt cancelled.'))
@@ -207,11 +229,17 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       }
       const doc = await loadingTask.promise
       if (generation !== openGeneration) return
+      openedPassword = password
       pdfDocument.value = doc
       pageCount.value = doc.numPages
       v.setDocument(doc)
+      // setDocument puts the viewer back to vertical scrolling without spreads, with no event.
+      scrollMode.value = v.scrollMode
+      spreadMode.value = v.spreadMode
       linkService.setDocument(doc)
       void scriptingManager.setDocument(doc)
+      const stored = keep ? null : viewHistory.begin(doc)
+      if (keep) void viewHistory.begin(doc)
       pageLabels.value = null
       void doc.getPageLabels().then((labels) => {
         if (generation !== openGeneration || pdfDocument.value !== doc) return
@@ -221,12 +249,26 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
         v.setPageLabels(labels)
       }).catch(() => {})
       eventBus.on('pagesinit', () => {
-        if (!keep) return void (v.currentScaleValue = 'page-width')
+        if (!keep) {
+          void stored!.then((view) => {
+            if (generation !== openGeneration) return
+            viewHistory.applyInitialView(v, view, 'page-width', placeElsewhere)
+            // As PDF.js's app after setInitialView: always update (draws, and the first save).
+            v.update()
+            eventBus.dispatch('documentinit', { source: null })
+          })
+          return
+        }
+        v.scrollMode = keep.scrollMode
+        v.spreadMode = keep.spreadMode
         v.pagesRotation = keep.rotation
         v.currentScaleValue = keep.scaleValue
         const page = Math.min(Math.max(1, keep.pageNumber), doc.numPages)
         if (keep.top == null) v.currentPageNumber = page
         else v.scrollPageIntoView({ pageNumber: page, destArray: [null, { name: 'XYZ' }, keep.left ?? null, keep.top, null], allowNegativeOffset: true })
+        viewHistory.markInitialViewSet()
+        v.update()
+        eventBus.dispatch('documentinit', { source: null })
       }, { once: true })
     } catch (err) {
       if (generation !== openGeneration) return
@@ -238,8 +280,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     }
   }
   /** The last open's arguments, for Retry. */
-  let lastOpen: { source: string | Uint8Array; keep?: ViewState } | null = null
-  const retryOpen = () => lastOpen && open(lastOpen.source, lastOpen.keep)
+  let lastOpen: { source: string | Uint8Array; keep?: ViewState; placeElsewhere: boolean } | null = null
+  const retryOpen = () => lastOpen && open(lastOpen.source, lastOpen.keep, lastOpen.placeElsewhere)
 
   const goToPage = (n: number) => {
     if (viewer.value && n >= 1 && n <= pageCount.value) viewer.value.currentPageNumber = n
@@ -314,12 +356,13 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
 
   onBeforeUnmount(() => {
     void scriptingManager.setDocument(null)
+    pageMemory.dispose()
     viewer.value?.cleanup()
     void loadingTask?.destroy()
   })
 
   return {
-    eventBus, viewer, pdfDocument, open, viewState, loadError, editManagers,
+    eventBus, viewer, pdfDocument, open, viewHistory, viewState, loadError, editManagers,
     loadFailure, retryOpen, loading, loadProgress, passwordRequest, jumpHistory, findState, findWrappedPrevious,
     pageNumber, pageCount, goToPage, jumpToPage, goToDestination, pageLabels, pageLabel, goToPageLabel, scriptAlerts,
     scale, zoomIn, zoomOut, zoomBy, setScale, fitWidth, preset, setPreset,

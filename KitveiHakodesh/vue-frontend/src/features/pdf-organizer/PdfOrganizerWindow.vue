@@ -10,6 +10,8 @@ import DetachedWindow from '@/components/DetachedWindow.vue'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import PdfOrganizerView from './PdfOrganizerView.vue'
+// Page thumbnails follow the PDF page filter of the theme.
+import '../pdf-reader/pdfReaderTheme.css'
 
 const props = defineProps<{
   document: PDFDocumentProxy

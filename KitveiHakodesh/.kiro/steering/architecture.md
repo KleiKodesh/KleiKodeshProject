@@ -177,7 +177,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/fas
 | `/file-search`     | `LocalFileSearchPage.vue`  | singleton                                |
 | `/settings`        | `SettingsPage.vue`         | singleton                                |
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                                |
-| `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                           |
+| `/pdf-view`        | `PdfReaderPage.vue`        | multi-instance                           |
 | `/html-view`       | `HtmlViewPage.vue`         | multi-instance                           |
 | `/fast-doc-view`   | `FastDocViewPage.vue`      | multi-instance (keyed by tabId + file)   |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                                |
@@ -185,7 +185,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/fas
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                                |
 | `/midot`           | `HalachicUnitsPage.vue`    | singleton                                |
 
-The PDF route is `/pdf-view`, not `/pdf-viewer` — the feature *folder* is `pdf-viewer/` but the route string is `/pdf-view`. Do not conflate them.
+The PDF route is `/pdf-view`, not `/pdf-viewer` — the feature *folder* is `pdf-reader/` but the route string is `/pdf-view`. Do not conflate them.
 
 ## Feature Folders (`src/features/`)
 
@@ -347,36 +347,27 @@ Halachic unit converter. Singleton route `/midot`. Converts between biblical, Ta
 - `halachicUnits.ts` — all conversion logic (`convert`, `toMetric`, `explainConversion`)
 - `units/` — unit definitions per measurement system; `types.ts` for shared types
 
-### pdf-viewer/
+### pdf-reader/
 
-PDF viewer with OCR support. Embeds a PDF.js iframe and provides OCR text extraction.
+PDF viewer drawn in the page itself (no iframe), built on `pdfjs-dist`'s headless `PDFViewer` (`pdfjs-dist/web/pdf_viewer.mjs`) with the app's own Vue toolbar, search bar, side panel and editing UI. Route is `/pdf-view`; folder is `features/pdf-reader/`.
 
-Route is `/pdf-view`; folder is `pdf-viewer/`.
+- `PdfReaderPage.vue` / `PdfReaderView.vue` — the page and the viewer (scroller, layers, side panel)
+- `usePdfScroller.ts` — creates the PDF.js `PDFViewer`, loads the document, zoom/scroll state
+- `PdfReaderToolbar.vue`, `usePdfReaderShortcuts.ts` — toolbar, search and keyboard shortcuts
+- `PdfReaderToc.vue` / `usePdfOutline.ts` / `usePdfOutlineEdit.ts` — outline (breadcrumb, editing)
+- `PdfReaderThumbnails.vue`, `PdfReaderBookmarks.vue`, `PdfReaderComments.vue` — side panel modes
+- `PdfEditToolbar.vue`, `PdfEditDialogs.vue`, `usePdfEditing.ts`, `pdfEditManagers.ts` — annotation editing (highlight, text, draw, image, signature, note)
+- `usePdfReaderOcr.ts`, `PdfOcrResultPopup.vue` — OCR
+- `usePdfSave.ts`, `PdfPrintChoiceDialog.vue` — save / save as (whole-file write: host `writePdfFile` / `savePdfAs`, Core `PdfFileWriter`) and printing (host `printPdfFile`)
+- Theme: page colour filter and PDF.js colour variables follow the app theme (`theme/themes.ts` `calcPdfFilter`, setting `settingsStore.pdfPageFilters`)
 
-- `PdfViewPage.vue` — main PDF viewer page
-- `PdfOcrResultPopup.vue` — OCR result display popup
-- `usePdfOcrSelection.ts` — OCR selection and text extraction
-- `pdfOcrInjectedScript.ts` — script injected into PDF.js iframe
-- `usePdfContextMenu.ts` — right-click menu inside the viewer
-- `usePdfViewPageTracking.ts` — tracks the current page for the breadcrumb and session restore
-- `pdfViewerTypes.ts` — TypeScript types
+The page organizer window lives in `features/pdf-organizer/`.
 
-## PDF.js Viewer
+## PDF.js
 
-The PDF.js viewer files live at `vue-frontend/public/pdfjs/`. This is a static folder served as-is; it is not processed by Vite.
+PDF.js comes from the `pdfjs-dist` npm package (bundled by Vite like any dependency). The PDF.js source fork is the submodule `vue-frontend/pdf.js`. Viewer behaviour is changed in our Vue code around `PDFViewer`, never by patching files in `node_modules`.
 
-Key files:
-
-- `web/viewer.html` — the iframe document loaded by `PdfViewPage.vue`
-- `web/viewer.mjs` — the main PDF.js application bundle; all viewer behaviour patches go here
-- `web/viewer.css` — PDF.js default styles
-- `web/viewer-custom.css` — custom theme variable hooks and page filter support (added file, not in vanilla PDF.js)
-- `web/pixel-ratio-override.js` — forces minimum `devicePixelRatio` of 1.5 for sharp rendering (added file)
-- `build/pdf.worker.mjs` — the PDF.js Web Worker bundle; polyfills for old WebView2 go here
-- `web/locale/he/viewer.ftl` — Hebrew translation overrides
-- `CUSTOMIZATIONS.md` — the authoritative record of every patch applied to this PDF.js build; read this before touching any file in `public/pdfjs/`
-
-When modifying PDF.js behaviour — adding a feature, fixing a bug, adjusting presentation mode — always edit the files in `vue-frontend/public/pdfjs/web/` or `vue-frontend/public/pdfjs/build/` directly. After making any patch, document it in `CUSTOMIZATIONS.md` following the same format as the existing entries.
+The old iframe viewer (patched PDF.js build in `public/pdfjs/`, `PdfViewPage.vue`) is archived in `vue-frontend/legacy-pdf/` — not built, not served, reference only.
 
 ### html-view/
 

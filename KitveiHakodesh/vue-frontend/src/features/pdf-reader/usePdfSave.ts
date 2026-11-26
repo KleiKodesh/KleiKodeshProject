@@ -3,28 +3,42 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { t } from '@/i18n'
 import { showToast, dismissToast } from '@/composables/useToast'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
-import { savePdfAs, writePdfFile } from '@/webview-host/bridge'
+import { savePdfAs, writePdfTail } from '@/webview-host/bridge'
 import type { PdfScroller } from './usePdfScroller'
 import type { PdfOutlineEdit } from './usePdfOutlineEdit'
+import type { PdfNotes } from './usePdfNotes'
+
+/** saveDocument({ sectionOnly }) in our PDF.js fork (KleiKodesh/pdf.js): the update section only. */
+interface SaveSection { data: Uint8Array; start: number; length: number; anchor: Uint8Array }
+interface ForkSaveParams { outline?: unknown; mergeIntoLastUpdate?: boolean; sectionOnly?: boolean }
+type ForkSave = {
+  (p: ForkSaveParams & { sectionOnly: true }): Promise<SaveSection>
+  (p: ForkSaveParams): Promise<Uint8Array>
+}
 
 /**
  * Save (in place) and Save As for the PDF view, with the document's dirty state.
  *
- * Dirty = annotation edits (PDF.js's annotationStorage "modified" signal) or outline edits.
- * A save writes PDF.js's saveDocument() bytes (the whole file, atomically, through the host /
- * service), then reopens those bytes at the same page and zoom; the reopened document starts
- * clean, so dirty clears only after a completed write.
+ * Dirty = annotation edits (PDF.js's annotationStorage "modified" signal), notes (usePdfNotes,
+ * staged into annotationStorage so PDF.js writes them as sticky notes) or outline edits
+ * (saveDocument({ outline })) - all written by PDF.js's own save, in one update section.
  *
- * Outline edits: stock pdfjs-dist's saveDocument() cannot write an edited outline. When the
- * engine supports saveDocument({ outline }) (our fork, KleiKodesh/pdf.js) it is passed;
- * otherwise the save tells the reader the outline changes were not kept.
+ * Save in place: PDF.js returns only its update section (sectionOnly), merged into the file's
+ * last update section (mergeIntoLastUpdate: repeated saves rewrite the app's own section instead
+ * of adding one each time). Only that section travels to the host / service, which writes it at
+ * its offset after checking the bytes before it (writePdfTail); the whole file is never held
+ * twice. The view then reopens the file from disk at the same page and zoom.
+ * Save As writes the whole file.
  */
 export function usePdfSave(
   pdf: PdfScroller,
   outlineEdit: PdfOutlineEdit,
+  notes: Pick<PdfNotes, 'dirty' | 'stage'>,
   file: {
     filePath: () => string | null
     fileName: () => string | null
+    /** The URL the view reads the open file from (reopened after a save in place). */
+    url: () => string | null
     /** Save As wrote a new file: point the tab at it (before the view reopens the bytes). */
     onSavedAs: (filePath: string, fileName: string) => Promise<void> | void
   },
@@ -43,26 +57,20 @@ export function usePdfSave(
     storage.onResetModified = () => { annotationsDirty.value = false; prevReset?.() }
   }, { immediate: true })
 
-  const dirty = computed(() => annotationsDirty.value || outlineEdit.dirty.value)
+  const dirty = computed(() => annotationsDirty.value || notes.dirty.value || outlineEdit.dirty.value)
   const canSave = computed(() => !!pdf.pdfDocument.value && !!file.filePath() && dirty.value && !busy.value)
   const canSaveAs = computed(() => !!pdf.pdfDocument.value && !busy.value)
 
-  /** True when this engine's saveDocument takes ({ outline }) - our fork; stock 6.5 takes (printToPDF). */
-  function engineSavesOutline(doc: PDFDocumentProxy): boolean {
-    const transport = (doc as unknown as { _transport?: { saveDocument?: unknown } })._transport
-    return /\boutline\b/.test(String(transport?.saveDocument ?? ''))
-  }
-
-  /** The bytes to write, and whether pending outline edits are left out of them. */
-  async function buildBytes(doc: PDFDocumentProxy): Promise<{ bytes: Uint8Array; outlineDropped: boolean }> {
-    const outline = outlineEdit.buildSaveOutline()
-    if (outline && engineSavesOutline(doc)) {
-      // TODO(pdf.js fork): once the app runs the fork build (vue-frontend/pdf.js) instead of
-      // pdfjs-dist, also pass mergeIntoLastUpdate: true (one incremental section per session).
-      const save = doc.saveDocument as unknown as (p: { outline: unknown }) => Promise<Uint8Array>
-      return { bytes: await save.call(doc, { outline }), outlineDropped: false }
+  /** PDF.js's save, with the notes staged in only for it (the notes list stays their source). */
+  async function engineSave<T>(doc: PDFDocumentProxy, params: ForkSaveParams): Promise<T> {
+    const unstage = notes.stage(doc)
+    try {
+      const outline = outlineEdit.buildSaveOutline()
+      const save = doc.saveDocument as unknown as ForkSave
+      return (await save.call(doc, { ...params, mergeIntoLastUpdate: true, ...(outline ? { outline } : {}) })) as T
+    } finally {
+      unstage()
     }
-    return { bytes: await doc.saveDocument(), outlineDropped: !!outline }
   }
 
   function baseDir(path: string | null): string | undefined {
@@ -80,6 +88,11 @@ export function usePdfSave(
   async function reopen(bytes: Uint8Array) {
     await pdf.open(bytes, pdf.viewState())
   }
+  /** Reopen the file from disk where the reader was (a fresh URL: no cached read of the old bytes). */
+  async function reopenFromDisk(url: string) {
+    const fresh = `${url}${url.includes('?') ? '&' : '?'}kk-saved=${Date.now()}`
+    await pdf.open(fresh, pdf.viewState())
+  }
 
   async function run(work: () => Promise<boolean>): Promise<boolean> {
     if (busy.value) return false
@@ -96,28 +109,22 @@ export function usePdfSave(
     }
   }
 
-  function savedToast(outlineDropped: boolean) {
-    showToast(outlineDropped ? t('pdfReader.saveDoc.savedOutlineNotSaved') : t('pdfReader.saveDoc.saved'))
-  }
-
   /** Save into the open file. No file (a downloaded or embedded document): Save As. True once written. */
   async function save(): Promise<boolean> {
     const doc = pdf.pdfDocument.value
     const path = file.filePath()
+    const url = file.url()
     if (!doc) return false
-    if (!path) return saveAs()
+    if (!path || !url) return saveAs()
     if (!dirty.value) return true
-    // Only outline edits, and the engine cannot write them: nothing would change in the file.
-    if (!annotationsDirty.value && outlineEdit.dirty.value && !engineSavesOutline(doc)) {
-      showToast(t('pdfReader.saveDoc.outlineNotSaved'))
-      return false
-    }
     return run(async () => {
-      const { bytes, outlineDropped } = await buildBytes(doc)
-      const error = await writePdfFile(path, bytes)
-      if (error) throw new Error(error)
-      await reopen(bytes)
-      savedToast(outlineDropped)
+      const section = await engineSave<SaveSection>(doc, { sectionOnly: true })
+      if (section.data.length) {
+        const error = await writePdfTail(path, section.start, section.data, section.anchor, section.length)
+        if (error) throw new Error(error)
+      }
+      await reopenFromDisk(url)
+      showToast(t('pdfReader.saveDoc.saved'))
       return true
     })
   }
@@ -127,19 +134,19 @@ export function usePdfSave(
     const doc = pdf.pdfDocument.value
     if (!doc) return false
     return run(async () => {
-      const { bytes, outlineDropped } = await buildBytes(doc)
+      const bytes = await engineSave<Uint8Array>(doc, {})
       const result = await savePdfAs(bytes, suggestedName(), baseDir(file.filePath()))
       if (result.kind === 'cancelled') return dismissToast(), false
       if (result.kind === 'error') throw new Error(result.error)
       if (result.kind === 'unsupported') {
         // No host dialog (dev browser): the browser's own save. The tab keeps its file.
         if (!(await browserSaveAs(bytes))) return dismissToast(), false
-        savedToast(outlineDropped)
+        showToast(t('pdfReader.saveDoc.saved'))
         return true
       }
       await file.onSavedAs(result.filePath, result.fileName)
       await reopen(bytes)
-      savedToast(outlineDropped)
+      showToast(t('pdfReader.saveDoc.saved'))
       return true
     })
   }

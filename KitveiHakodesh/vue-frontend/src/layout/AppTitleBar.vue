@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { ref, computed, defineAsyncComponent, watch, nextTick } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
-import { useResizeObserver } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
@@ -217,7 +217,7 @@ function measureTitleCramped() {
 // loop completed with undelivered notifications") for a size change nothing
 // outside this component made. The border box only moves when the BAR really
 // resizes, which is the only thing worth re-measuring for.
-useResizeObserver(barTitleRef, measureTitleCramped, { box: 'border-box' })
+useHostResizeObserver(barTitleRef, measureTitleCramped, { box: 'border-box' })
 
 // ---- Discoverability hint -----------------------------------------------------
 //

@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { useHostElementSize } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useBookCatalogCategoryNavigation } from '@/features/book-catalog/useBookCatalogCategoryNavigation'
 import { ref, computed, onMounted } from 'vue'
-import { useEventListener, useElementSize } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
 import { loadWebsites, matchWebsites, websiteName, type Website } from '@/features/websites/websitesList'
@@ -39,7 +40,7 @@ const searchBarRef = ref<HTMLElement | null>(null)
 // Cards keep a fixed width; the search bar and the grid both take the width of
 // the whole columns that fit, instead of the cards stretching to fill the pane.
 const homeInnerRef = ref<HTMLElement | null>(null)
-const { width: homeInnerWidth } = useElementSize(homeInnerRef)
+const { width: homeInnerWidth } = useHostElementSize(homeInnerRef)
 const contentLayout = useCardGridLayout(homeInnerWidth, () => settingsStore.homeView, 720)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)

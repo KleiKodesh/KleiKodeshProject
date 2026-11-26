@@ -1,6 +1,6 @@
+import { useHostResizeObserver } from '@/composables/useHostResizeObserver'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref, type Ref } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
 
 /** Below this page width the side panel (TOC) floats over the text instead of taking a column. */
 export const SIDE_PANEL_INLINE_MIN_WIDTH = 520
@@ -30,7 +30,7 @@ export function useSidePanelLayout(options: {
 }) {
   const hostWindow = useHostWindow()
   const pageWidth = ref(hostWindow.innerWidth)
-  useResizeObserver(options.pageElement, ([entry]) => {
+  useHostResizeObserver(options.pageElement, ([entry]) => {
     pageWidth.value = entry!.contentRect.width
   })
   const fraction = options.fraction ?? ref<number | null>(null)

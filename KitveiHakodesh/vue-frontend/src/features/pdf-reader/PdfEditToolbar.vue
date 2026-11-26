@@ -5,7 +5,6 @@ import {
   IconPen20Regular,
   IconImage20Regular,
   IconSignature20Regular,
-  IconNoteAdd20Regular,
   IconAdd16Regular,
   IconArrowUndo20Regular,
   IconArrowRedo20Regular,
@@ -24,8 +23,6 @@ import { PDF_KEYS, withKey } from './usePdfReaderShortcuts'
 const props = defineProps<{ editing: PdfEditing }>()
 const emit = defineEmits<{ close: [] }>()
 const T = AnnotationEditorType
-/** Not a PDF.js editor type: the notes tool's button. */
-const NOTE_TOOL = -100
 const e = props.editing
 
 // Drag: anywhere in the app window (shared with the OCR bar: useFloatingBar).
@@ -40,25 +37,16 @@ const TOOLS: { mode: number; icon: Component; title: string; key: string }[] = [
   { mode: T.INK, icon: IconPen20Regular, title: 'pdfReader.edit.draw', key: PDF_KEYS.editTool.draw },
   { mode: T.STAMP, icon: IconImage20Regular, title: 'pdfReader.edit.addImage', key: PDF_KEYS.editTool.image },
   { mode: T.SIGNATURE, icon: IconSignature20Regular, title: 'pdfReader.edit.signature.tool', key: PDF_KEYS.editTool.signature },
-  // The notes tool: PDF.js's image editor underneath (usePdfEditing.noteMode); NOTE_TOOL marks its button.
-  { mode: NOTE_TOOL, icon: IconNoteAdd20Regular, title: 'pdfReader.edit.comment.tool', key: PDF_KEYS.editTool.note },
 ]
-/** Whether a tool's button shows as on (the image and notes tools share PDF.js's image editor). */
-const isOn = (mode: number) =>
-  mode === NOTE_TOOL ? e.noteMode.value : mode === T.STAMP ? e.mode.value === T.STAMP && !e.noteMode.value : e.mode.value === mode
+/** Whether a tool's button shows as on. */
+const isOn = (mode: number) => e.mode.value === mode
 // Picking a tool opens its panel; picking it again closes both (as PDF.js).
 const panelOpen = ref(false)
 function pickTool(mode: number) {
   // The image tool has no settings: its button picks a picture and places it straight away.
   if (mode === T.STAMP) {
     panelOpen.value = false
-    e.noteMode.value = false
     return e.addImage()
-  }
-  // The notes tool has no settings: on, a click on a page adds a note.
-  if (mode === NOTE_TOOL) {
-    panelOpen.value = false
-    return e.toggleNoteMode()
   }
   // The signature panel (new / saved signatures) lists what is saved.
   if (mode === T.SIGNATURE) void e.managers.loadSignatures()
