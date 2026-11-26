@@ -197,18 +197,19 @@ namespace KitveiHakodeshDesktopApp
         }
 
 
+        // The exe's icon file, embedded with all its sizes, so the title bar, taskbar and Alt+Tab
+        // each get a size drawn for them. (ExtractAssociatedIcon gave only 32px, blurry when
+        // scaled.) Every other window takes its icon from this one.
         private static Icon CreateWindowIcon()
         {
             try
             {
-                using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))
-                    return executableIcon == null ? null : (Icon)executableIcon.Clone();
+                using (var stream = typeof(MainForm).Assembly.GetManifestResourceStream("KitveiHakodesh.WindowIcon.ico"))
+                    return stream == null ? null : new Icon(stream);
             }
             catch
             {
-                // ExtractAssociatedIcon throws on UNC paths (documented limitation) —
-                // running from a network share must not crash startup. Default icon.
-                return null;
+                return null; // default icon rather than a failed startup
             }
         }
 
