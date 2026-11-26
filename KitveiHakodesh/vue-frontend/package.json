@@ -24,7 +24,7 @@
     "@iconify-prerendered/vue-fluent-color": "latest",
     "@msgpack/msgpack": "^3.1.3",
     "@vueuse/core": "^10.0.0",
-    "pdfjs-dist": "https://github.com/KleiKodesh/pdf.js/releases/download/kh-dist-7.0.263-de7c5fe93/pdfjs-dist.tgz",
+    "pdfjs-dist": "https://github.com/KleiKodesh/pdf.js/releases/download/kh-dist-7.0.296-72498864c/pdfjs-dist.tgz",
     "pinia": "^3.0.3",
     "tesseract.js": "^7.0.0",
     "vue": "^3.5.22",

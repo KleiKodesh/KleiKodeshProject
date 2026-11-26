@@ -34,14 +34,14 @@ import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import { pickLocalFilePath, restoreLocalFile, writePdfFile } from '@/webview-host/bridge'
 import { usePdfOrganizer } from './usePdfOrganizer'
-import { loadPdfBytes, type OrganizerPage } from './pdfPageAssembly'
+import { PRIMARY_SOURCE, openPdfSource, type OrganizerPage } from './pdfPageAssembly'
 import { baseName, pdfBlob, pickOutputFolder, saveBlobAs } from './organizerFiles'
 import { pageImage } from './pageImages'
 import PdfOrganizerThumb from './PdfOrganizerThumb.vue'
 import PdfOrganizerOptionsDialog, { type ImagesOptions, type SplitOptions } from './PdfOrganizerOptionsDialog.vue'
 
 const props = defineProps<{ document: PDFDocumentProxy; fileName: string | null; filePath: string | null }>()
-const emit = defineEmits<{ close: []; saved: [bytes: Uint8Array] }>()
+const emit = defineEmits<{ close: []; saved: [] }>()
 
 const hostWindow = useHostWindow()
 const organizer = usePdfOrganizer(toRef(props, 'document'))
@@ -107,7 +107,7 @@ watch(perRow, (now, before) => {
 function pageLabel(page: OrganizerPage): string {
   if (page.pageIndex < 0) return t('pdfOrganizer.blankPage')
   const source = organizer.sources.value.get(page.source)
-  return source?.bytes ? `${source.name} - ${page.pageIndex + 1}` : String(page.pageIndex + 1)
+  return source && source.id !== PRIMARY_SOURCE ? `${source.name} - ${page.pageIndex + 1}` : String(page.pageIndex + 1)
 }
 function blankRatio(page: OrganizerPage): number {
   const s = page.blankSize ?? { width: 612, height: 792 }
@@ -183,7 +183,7 @@ async function save(): Promise<boolean> {
       const error = await writePdfFile(props.filePath!, bytes)
       if (error) throw new Error(error)
       organizer.markSaved()
-      emit('saved', bytes)
+      emit('saved')
       showToast(t('pdfOrganizer.saved'))
       ok = true
     } catch (err) {
@@ -268,11 +268,10 @@ async function insertFromFile() {
     try {
       const served = await restoreLocalFile(picked.filePath)
       if (!served?.url) throw new Error('file could not be opened')
-      const response = await fetch(served.url)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      const doc = await loadPdfBytes(bytes)
-      organizer.insertDocument(doc, bytes, baseName(picked.fileName))
+      if (!props.document) throw new Error('no document')
+      // Read by random access in the viewer's worker: only the pages shown or copied are read.
+      const doc = await openPdfSource({ url: served.url }, props.document)
+      organizer.insertDocument(doc, baseName(picked.fileName))
     } catch (err) {
       fail(err, 'pdfOrganizer.insertFailed')
     }
@@ -413,7 +412,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
               />
               <div class="card-label">
                 <span class="card-pos">{{ i + 1 }}</span>
-                <span v-if="page.pageIndex < 0 || organizer.sources.value.get(page.source)?.bytes || page.pageIndex !== i" class="card-origin">{{ pageLabel(page) }}</span>
+                <span v-if="page.pageIndex < 0 || (organizer.sources.value.get(page.source)?.id ?? PRIMARY_SOURCE) !== PRIMARY_SOURCE || page.pageIndex !== i" class="card-origin">{{ pageLabel(page) }}</span>
               </div>
             </div>
           </div>

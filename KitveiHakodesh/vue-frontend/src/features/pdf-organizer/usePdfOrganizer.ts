@@ -39,7 +39,7 @@ export function usePdfOrganizer(document: Ref<PDFDocumentProxy | null>) {
     const map = new Map<number, OrganizerSource>()
     pages.value = []
     if (doc) {
-      map.set(PRIMARY_SOURCE, { id: PRIMARY_SOURCE, doc, bytes: null, name: '' })
+      map.set(PRIMARY_SOURCE, { id: PRIMARY_SOURCE, doc, name: '' })
       pages.value = Array.from({ length: doc.numPages }, (_, i) => ({ key: nextKey++, source: PRIMARY_SOURCE, pageIndex: i, rotation: 0 }))
     }
     sources.value = map
@@ -154,9 +154,9 @@ export function usePdfOrganizer(document: Ref<PDFDocumentProxy | null>) {
     anchorKey = page.key
   }
   /** Adds another PDF as a source and inserts all its pages after the selection (or at the end). */
-  function insertDocument(doc: PDFDocumentProxy, bytes: Uint8Array, name: string) {
+  function insertDocument(doc: PDFDocumentProxy, name: string) {
     const id = nextSource++
-    sources.value = new Map(sources.value).set(id, { id, doc, bytes, name })
+    sources.value = new Map(sources.value).set(id, { id, doc, name })
     const added = Array.from({ length: doc.numPages }, (_, i): OrganizerPage => ({ key: nextKey++, source: id, pageIndex: i, rotation: 0 }))
     const at = insertionIndex()
     change([...pages.value.slice(0, at), ...added, ...pages.value.slice(at)])

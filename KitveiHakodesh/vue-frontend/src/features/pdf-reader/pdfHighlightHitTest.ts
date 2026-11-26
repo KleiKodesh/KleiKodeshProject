@@ -16,11 +16,11 @@ export function highlightBoxes(quadPoints: ArrayLike<number> | null | undefined,
   const out: Box[] = []
   if (quadPoints && quadPoints.length >= 8) {
     for (let i = 0; i + 8 <= quadPoints.length; i += 8) {
-      const xs = [quadPoints[i], quadPoints[i + 2], quadPoints[i + 4], quadPoints[i + 6]]
-      const ys = [quadPoints[i + 1], quadPoints[i + 3], quadPoints[i + 5], quadPoints[i + 7]]
+      const xs = [quadPoints[i]!, quadPoints[i + 2]!, quadPoints[i + 4]!, quadPoints[i + 6]!]
+      const ys = [quadPoints[i + 1]!, quadPoints[i + 3]!, quadPoints[i + 5]!, quadPoints[i + 7]!]
       out.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)])
     }
-  } else if (rect && rect.length >= 4) out.push(norm([rect[0], rect[1], rect[2], rect[3]]))
+  } else if (rect && rect.length >= 4) out.push(norm([rect[0]!, rect[1]!, rect[2]!, rect[3]!]))
   return out
 }
 

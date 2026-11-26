@@ -12,6 +12,8 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { usePdfPixelSnap } from './usePdfPixelSnap'
 import { usePdfPageMemory } from './usePdfPageMemory'
 import { usePdfViewHistory } from './usePdfViewHistory'
+import { RANGE_CHUNK_BYTES, rangeTransportFor, type PdfRangeTransport } from './pdfRangeTransport'
+import { linkPdfSearchIndex } from './pdfSearchIndexLink'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = workerUrl
@@ -32,6 +34,14 @@ function acquirePdfWorker(): PDFWorker {
   pdfWorkerUsers++
   if (!sharedPdfWorker || sharedPdfWorker.destroyed) sharedPdfWorker = new PDFWorker()
   return sharedPdfWorker
+}
+/**
+ * The PDF.js worker the viewers share (null when none is running). The page editor copies pages
+ * only between documents of one worker, so documents opened as page sources (openPdfSource) run
+ * in this one too. (PDF.js keeps no reference to a worker it was given.)
+ */
+export function sharedPdfWorkerInUse(): PDFWorker | null {
+  return sharedPdfWorker && !sharedPdfWorker.destroyed ? sharedPdfWorker : null
 }
 function releasePdfWorker() {
   pdfWorkerUsers = Math.max(0, pdfWorkerUsers - 1)
@@ -202,6 +212,10 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
 
   /** Bumped by each open: a late result or failure of an earlier open is ignored. */
   let openGeneration = 0
+  /** Detaches the open document's search index (pdfSearchIndexLink.ts). */
+  let unlinkSearchIndex: (() => void) | null = null
+  /** The open document's range transport (file size, byte ranges); null when opened by url or bytes. */
+  const rangeTransport = shallowRef<PdfRangeTransport | null>(null)
   /**
    * Opens a PDF by URL, or from bytes (a just-saved file, reloaded without a cached read).
    * `keep`: show the new document at this place and zoom (from viewState()) instead of its saved
@@ -226,9 +240,15 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     try {
       void loadingTask?.destroy()
       if (!pdfWorker) pdfWorker = acquirePdfWorker()
+      // Random access: only the parts the shown pages need are read, never the whole file
+      // (pdfRangeTransport.ts). Hosts without Range answers: the file by url.
+      const range = typeof source === 'string' ? await rangeTransportFor(source) : null
+      if (generation !== openGeneration) return
       loadingTask = getDocument({
         worker: pdfWorker,
-        ...(typeof source === 'string' ? { url: source } : { data: source.slice() }),
+        ...(typeof source === 'string'
+          ? (range ? { range, rangeChunkSize: RANGE_CHUNK_BYTES, disableAutoFetch: true, disableStream: true } : { url: source })
+          : { data: source.slice() }),
         ...(password ? { password } : {}),
         cMapUrl: `${RESOURCES}cmaps/`,
         cMapPacked: true,
@@ -262,6 +282,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       }
       const doc = await loadingTask.promise
       if (generation !== openGeneration) return
+      rangeTransport.value = range
       openedPassword = password
       pdfDocument.value = doc
       pageCount.value = doc.numPages
@@ -270,6 +291,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
       scrollMode.value = v.scrollMode
       spreadMode.value = v.spreadMode
       linkService.setDocument(doc)
+      unlinkSearchIndex?.()
+      unlinkSearchIndex = linkPdfSearchIndex(doc, findController, () => generation === openGeneration && pdfDocument.value === doc)
       void scriptingManager.setDocument(doc)
       const stored = keep ? null : viewHistory.begin(doc)
       if (keep) void viewHistory.begin(doc)
@@ -388,6 +411,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   }
 
   onBeforeUnmount(() => {
+    unlinkSearchIndex?.()
+    unlinkSearchIndex = null
     void scriptingManager.setDocument(null)
     pageMemory.dispose()
     viewer.value?.cleanup()
@@ -406,7 +431,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     scale, zoomIn, zoomOut, zoomBy, setScale, fitWidth, preset, setPreset,
     rotation, rotate,
     scrollMode, setScrollMode, spreadMode, setSpreadMode,
-    find, findOptions, clearFind, matchCount, currentMatch, findController,
+    find, findOptions, clearFind, matchCount, currentMatch, findController, rangeTransport,
   }
 }
 

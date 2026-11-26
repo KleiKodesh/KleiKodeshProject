@@ -1,4 +1,6 @@
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist'
+import { getDocument, type PDFDocumentProxy, type PDFWorker } from 'pdfjs-dist'
+import { RANGE_CHUNK_BYTES, rangeTransportFor } from '@/features/pdf-reader/pdfRangeTransport'
+import { sharedPdfWorkerInUse } from '@/features/pdf-reader/usePdfScroller'
 import { setPageRotations } from './pdfRotationUpdate'
 
 /**
@@ -14,10 +16,13 @@ export const PRIMARY_SOURCE = 0
 
 export interface OrganizerSource {
   id: number
-  /** For rendering thumbnails and counting pages. */
+  /**
+   * For rendering thumbnails, counting pages and as the page editor's source. Another file's
+   * document is open in the same PDF.js worker as the open one (openPdfSource), so the page
+   * editor reads only the pages it copies from it (KleiKodesh/pdf.js: extractPages with a
+   * document source).
+   */
   doc: PDFDocumentProxy
-  /** The file's bytes for the page editor; null = the open document itself. */
-  bytes: Uint8Array | null
   name: string
 }
 
@@ -72,7 +77,8 @@ function pageInfosFor(pages: OrganizerPage[], sources: Map<number, OrganizerSour
     for (const layer of list) {
       const indices = [...layer.keys()].sort((a, b) => a - b)
       infos.push({
-        document: source.bytes,
+        // null = the open document itself (its unsaved marks come along).
+        document: sourceId === PRIMARY_SOURCE ? null : (source.doc as unknown as Uint8Array),
         includePages: indices,
         pageIndices: indices.map((i) => layer.get(i)!),
       })
@@ -81,27 +87,48 @@ function pageInfosFor(pages: OrganizerPage[], sources: Map<number, OrganizerSour
   return { infos, blanks }
 }
 
-/** The bytes of a new PDF holding `pages`, in order. The open document is `primary`. */
-export async function assemblePdf(primary: PDFDocumentProxy, pages: OrganizerPage[], sources: Map<number, OrganizerSource>): Promise<Uint8Array> {
+/**
+ * The bytes of a new PDF holding `pages`, in order. The open document is `primary`; its unsaved
+ * marks come along (PDF.js's annotationStorage), `options.outline` replaces its outline.
+ */
+export async function assemblePdf(
+  primary: PDFDocumentProxy,
+  pages: OrganizerPage[],
+  sources: Map<number, OrganizerSource>,
+  options: { outline?: unknown } = {},
+): Promise<Uint8Array> {
   if (!pages.length) throw new Error('no pages')
   const { infos, blanks } = pageInfosFor(pages, sources)
   for (const { pos, page } of blanks) {
     infos.push({ image: await blankImage(page.blankSize ?? { width: 612, height: 792 }), pageIndices: [pos] })
   }
-  const bytes = await primary.extractPages(infos)
+  const extract = primary.extractPages as unknown as (infos: PageInfo[], copyLevels?: null, o?: { outline?: unknown }) => Promise<Uint8Array | null>
+  const bytes = await extract.call(primary, infos, null, options.outline ? { outline: options.outline } : {})
   if (!bytes) throw new Error('page editor returned nothing')
   const turns = new Map<number, number>()
   pages.forEach((p, i) => { if (p.rotation % 360) turns.set(i, p.rotation) })
   return turns.size ? setPageRotations(bytes, turns) : bytes
 }
 
-/** Opens PDF bytes (another file to insert pages from, or a check of our own output). */
-export function loadPdfBytes(bytes: Uint8Array): Promise<PDFDocumentProxy> {
-  // A copy: the loader hands the buffer to the worker, the caller keeps its bytes.
+/**
+ * Opens another PDF as a page source, in the same PDF.js worker as `sameWorkerAs` (the page
+ * editor copies pages only between documents of one worker). A URL is read by random access
+ * (pdfRangeTransport) where the host answers byte ranges: only what is shown or copied is read.
+ * Bytes (a document built here, e.g. cut pages) are handed to the worker, not copied.
+ */
+export async function openPdfSource(source: { url: string } | { bytes: Uint8Array }, sameWorkerAs: PDFDocumentProxy): Promise<PDFDocumentProxy> {
+  // The worker `sameWorkerAs` runs in (our fork records it as _usedWorker; older engines only
+  // the one PDF.js created itself, else the viewers' shared one - usePdfScroller).
+  const task = sameWorkerAs.loadingTask as unknown as { _usedWorker?: PDFWorker | null; _worker: PDFWorker | null }
+  const worker = task._usedWorker ?? task._worker ?? sharedPdfWorkerInUse() ?? undefined
   // Same decoder files as the viewer (usePdfScroller): scanned pages and Hebrew fonts render blank without them.
   const resources = `${import.meta.env.BASE_URL}pdfjs-dist-res/`
+  const range = 'url' in source ? await rangeTransportFor(source.url) : null
   return getDocument({
-    data: bytes.slice(),
+    worker,
+    ...('url' in source
+      ? (range ? { range, rangeChunkSize: RANGE_CHUNK_BYTES, disableAutoFetch: true, disableStream: true } : { url: source.url })
+      : { data: source.bytes }),
     cMapUrl: `${resources}cmaps/`,
     cMapPacked: true,
     standardFontDataUrl: `${resources}standard_fonts/`,

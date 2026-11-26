@@ -390,23 +390,56 @@ export type SavePdfAsResult =
   /** No host Save As dialog here (dev browser): the caller uses the browser's own save. */
   | { kind: 'unsupported' }
 
+/** What Save As writes: whole bytes, or the open file copied on disk by the host plus PDF.js's
+ *  update section (no `tail` = an unchanged copy) - the file's bytes never cross the bridge. */
+export type SavePdfAsContent =
+  | { bytes: Uint8Array }
+  | { sourcePath: string; tail?: { offset: number; data: Uint8Array; anchor: Uint8Array; length: number } }
+
 /**
  * PDF viewer Save As: the host shows its Save dialog and writes the PDF where the user picked
  * (C# `savePdfAs`). Dev has no host dialog: 'unsupported'.
  */
-export async function savePdfAs(bytes: Uint8Array, suggestedName: string, initialDir?: string): Promise<SavePdfAsResult> {
+export async function savePdfAs(content: SavePdfAsContent, suggestedName: string, initialDir?: string): Promise<SavePdfAsResult> {
   if (typeof window.__webviewAction !== 'function') return { kind: 'unsupported' }
   try {
+    const body =
+      'bytes' in content
+        ? { bytes: bytesToBase64(content.bytes) }
+        : {
+            sourcePath: content.sourcePath,
+            ...(content.tail
+              ? { offset: content.tail.offset, tail: bytesToBase64(content.tail.data), anchor: bytesToBase64(content.tail.anchor), length: content.tail.length }
+              : {}),
+          }
     const r = await action<{ filePath?: string; fileName?: string; cancelled?: boolean; error?: string }>('savePdfAs', {
       suggestedName,
       initialDir: initialDir ?? '',
-      bytes: bytesToBase64(bytes),
+      ...body,
     })
     if (r?.cancelled) return { kind: 'cancelled' }
     if (r?.filePath) return { kind: 'saved', filePath: r.filePath, fileName: r.fileName || r.filePath.replace(/^.*[\\/]/, '') }
     return { kind: 'error', error: r?.error || 'write failed' }
   } catch (e) {
     return { kind: 'error', error: String(e) }
+  }
+}
+
+export type PrintPdfResult = 'printed' | 'cancelled' | 'unsupported' | { error: string }
+
+/**
+ * PDF viewer Print: the host shows the system print dialog and prints the file from disk (or a
+ * downloaded document from its http(s) address) in its own PDF engine - the page never sends
+ * the bytes (C# `printPdfFile`). Dev has no host: 'unsupported'.
+ */
+export async function printPdfFile(target: { filePath: string } | { url: string }, pageCount: number): Promise<PrintPdfResult> {
+  if (typeof window.__webviewAction !== 'function') return 'unsupported'
+  try {
+    const r = await action<{ ok?: boolean; cancelled?: boolean; error?: string }>('printPdfFile', { ...target, pageCount })
+    if (r?.cancelled) return 'cancelled'
+    return r?.ok ? 'printed' : { error: r?.error || 'print failed' }
+  } catch (e) {
+    return { error: String(e) }
   }
 }
 

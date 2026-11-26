@@ -3,7 +3,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { t } from '@/i18n'
 import { showToast, dismissToast } from '@/composables/useToast'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
-import { savePdfAs, writePdfFile, writePdfTail } from '@/webview-host/bridge'
+import { savePdfAs, writePdfFile, writePdfTail, type SavePdfAsContent } from '@/webview-host/bridge'
 import type { PdfScroller } from './usePdfScroller'
 import type { PdfOutlineEdit } from './usePdfOutlineEdit'
 import type { PdfNotes } from './usePdfNotes'
@@ -28,7 +28,9 @@ type ForkSave = {
  * of adding one each time). Only that section travels to the host / service, which writes it at
  * its offset after checking the bytes before it (writePdfTail); the whole file is never held
  * twice. The view then reopens the file from disk at the same page and zoom.
- * Save As writes the whole file.
+ * Save As of the open file: the host copies the file on disk to the picked place and writes the
+ * same update section into the copy - the file's bytes never pass through the page. Only a
+ * document built by page edits, or one with no file on disk, sends its whole bytes.
  *
  * Page edits from the thumbnails panel (usePdfPageEdits) open a new document built from the old
  * one's pages: that document is dirty as a whole, and Save writes the whole file (writePdfFile).
@@ -42,8 +44,9 @@ export function usePdfSave(
     fileName: () => string | null
     /** The URL the view reads the open file from (reopened after a save in place). */
     url: () => string | null
-    /** Save As wrote a new file: point the tab at it (before the view reopens the bytes). */
-    onSavedAs: (filePath: string, fileName: string) => Promise<void> | void
+    /** Save As wrote a new file: point the tab at it. Returns the URL the view reads it from
+     *  (the view reopens it from there), or null when it cannot be served. */
+    onSavedAs: (filePath: string, fileName: string) => Promise<string | null> | string | null
   },
 ) {
   const hostWindow = useHostWindow()
@@ -151,21 +154,33 @@ export function usePdfSave(
     const doc = pdf.pdfDocument.value
     if (!doc) return false
     return run(async () => {
-      const bytes = await engineSave<Uint8Array>(doc, {})
-      const result = await savePdfAs(bytes, suggestedName(), baseDir(file.filePath()))
+      const path = file.filePath()
+      // From the file on disk: only PDF.js's update section (if anything changed) travels.
+      const fromDisk = !!path && !pagesEdited.value
+      let bytes: Uint8Array | null = null
+      const content: SavePdfAsContent = fromDisk
+        ? { sourcePath: path!, ...(contentDirty.value ? { tail: toTail(await engineSave<SaveSection>(doc, { sectionOnly: true })) } : {}) }
+        : { bytes: (bytes = await engineSave<Uint8Array>(doc, {})) }
+      const result = await savePdfAs(content, suggestedName(), baseDir(path))
       if (result.kind === 'cancelled') return dismissToast(), false
       if (result.kind === 'error') throw new Error(result.error)
       if (result.kind === 'unsupported') {
-        // No host dialog (dev browser): the browser's own save. The tab keeps its file.
-        if (!(await browserSaveAs(bytes))) return dismissToast(), false
+        // No host dialog (dev browser only): the browser's own save needs the whole bytes. The tab keeps its file.
+        if (!(await browserSaveAs(bytes ?? (await engineSave<Uint8Array>(doc, {}))))) return dismissToast(), false
         showToast(t('pdfReader.saveDoc.saved'))
         return true
       }
-      await file.onSavedAs(result.filePath, result.fileName)
-      await reopen(bytes)
+      const newUrl = await file.onSavedAs(result.filePath, result.fileName)
+      if (newUrl) await reopenFromDisk(newUrl)
+      else await reopen(bytes ?? (await engineSave<Uint8Array>(doc, {})))
       showToast(t('pdfReader.saveDoc.saved'))
       return true
     })
+  }
+
+  /** The update section as Save As's tail; an empty section (nothing new) = a plain copy. */
+  function toTail(section: SaveSection) {
+    return section.data.length ? { offset: section.start, data: section.data, anchor: section.anchor, length: section.length } : undefined
   }
 
   async function browserSaveAs(bytes: Uint8Array): Promise<boolean> {
@@ -194,11 +209,19 @@ export function usePdfSave(
     return true
   }
 
-  /** The open document's bytes as they now are, unsaved marks, notes and outline included. */
-  async function currentBytes(): Promise<Uint8Array> {
-    const doc = pdf.pdfDocument.value
-    if (!doc) throw new Error('no document')
-    return contentDirty.value ? engineSave<Uint8Array>(doc, {}) : doc.getData()
+  /**
+   * Run PDF.js's page editor on the open document with what its save would write: the notes
+   * staged into annotationStorage (marks are there already) and the edited outline - so a
+   * document built from its pages keeps them. The file's bytes are never read whole.
+   */
+  async function withEditsStaged<T>(doc: PDFDocumentProxy, work: (options: { outline?: unknown }) => Promise<T>): Promise<T> {
+    const unstage = notes.stage(doc)
+    try {
+      const outline = outlineEdit.buildSaveOutline()
+      return await work(outline ? { outline } : {})
+    } finally {
+      unstage()
+    }
   }
   /** Show a document built by page edits where the reader was; `edited` = it differs from the file. */
   async function showEditedPages(bytes: Uint8Array, edited = true, keep = pdf.viewState()) {
@@ -206,7 +229,7 @@ export function usePdfSave(
     pagesEditedDoc.value = edited ? pdf.pdfDocument.value : null
   }
 
-  return { dirty, contentDirty, busy, canSave, canSaveAs, save, saveAs, currentBytes, showEditedPages }
+  return { dirty, contentDirty, busy, canSave, canSaveAs, save, saveAs, withEditsStaged, showEditedPages }
 }
 
 export type PdfSave = ReturnType<typeof usePdfSave>

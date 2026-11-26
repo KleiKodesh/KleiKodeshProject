@@ -395,15 +395,36 @@ namespace KitveiHakodeshLib.LocalFile
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
-        /// <summary>PDF viewer Save As: the user picks the place in the save dialog, then the whole
-        /// PDF is written there (Core PdfFileWriter). Replies { filePath, fileName } | { cancelled } | { error }.</summary>
+        /// <summary>PDF viewer Save As: the user picks the place in the save dialog, then the PDF is
+        /// written there: the open file copied on disk plus its update section, or whole bytes (Core PdfFileWriter). Replies { filePath, fileName } | { cancelled } | { error }.</summary>
         public void HandleSavePdfAs(JsonElement root, string id, Control owner)
         {
             // Read out of `root` before BeginInvoke: its JsonDocument is disposed when this returns.
             string suggested = root.TryGetProperty("suggestedName", out var sn) && sn.ValueKind == JsonValueKind.String ? sn.GetString() : null;
             string initialDir = root.TryGetProperty("initialDir", out var idr) && idr.ValueKind == JsonValueKind.String ? idr.GetString() : null;
-            byte[] bytes;
-            try { bytes = Convert.FromBase64String(root.GetProperty("bytes").GetString() ?? ""); }
+            // Either the whole PDF ("bytes"), or "sourcePath" = the open file, copied on disk by the
+            // host, plus PDF.js's update section ("tail" at "offset", checked by "anchor"/"length";
+            // no tail = an unchanged copy). The second way never sends the file's bytes over the bridge.
+            byte[] bytes = null, tail = null, anchor = null;
+            string sourcePath = null;
+            long offset = 0;
+            long? length = null;
+            try
+            {
+                if (root.TryGetProperty("sourcePath", out var sp) && sp.ValueKind == JsonValueKind.String)
+                {
+                    sourcePath = sp.GetString();
+                    if (!IsOpenedPdf(sourcePath)) { _bridge.Reply(id, new { error = "file is not open" }); return; }
+                    if (root.TryGetProperty("tail", out var tl) && tl.ValueKind == JsonValueKind.String)
+                    {
+                        tail = Convert.FromBase64String(tl.GetString() ?? "");
+                        anchor = Convert.FromBase64String(root.GetProperty("anchor").GetString() ?? "");
+                        offset = root.GetProperty("offset").GetInt64();
+                        if (root.TryGetProperty("length", out var len) && len.ValueKind == JsonValueKind.Number) length = len.GetInt64();
+                    }
+                }
+                else bytes = Convert.FromBase64String(root.GetProperty("bytes").GetString() ?? "");
+            }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
             owner.BeginInvoke(new Action(() =>
             {
@@ -422,13 +443,42 @@ namespace KitveiHakodeshLib.LocalFile
                         if (dlg.ShowDialog(owner) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
                         filePath = dlg.FileName;
                     }
-                    string error = PdfFileWriter.Write(filePath, bytes, mustExist: false);
+                    string error = sourcePath != null
+                        ? PdfFileWriter.CopyWithTail(sourcePath, filePath, offset, tail, anchor, length)
+                        : PdfFileWriter.Write(filePath, bytes, mustExist: false);
                     // The saved copy becomes the tab's file: later in-place saves to it must pass IsOpenedPdf.
                     string savedFull = error == null ? FullPathOrNull(filePath) : null;
                     if (savedFull != null && !_openedFiles.ContainsKey(savedFull)) _openedFiles[savedFull] = 1;
                     _bridge.Reply(id, error == null
                         ? (object)new { filePath, fileName = Path.GetFileName(filePath) }
                         : new { error });
+                }
+                catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+            }));
+        }
+
+        /// <summary>PDF viewer Print: print a PDF a tab has open, from disk (PdfFilePrinter) - the
+        /// page never sends its bytes. Replies { ok } | { cancelled } | { error }.</summary>
+        public void HandlePrintPdfFile(JsonElement root, string id, Control owner)
+        {
+            string filePath = root.TryGetProperty("filePath", out var fp) && fp.ValueKind == JsonValueKind.String ? fp.GetString() : null;
+            int pageCount = root.TryGetProperty("pageCount", out var pc) && pc.ValueKind == JsonValueKind.Number && pc.TryGetInt32(out int n) && n > 0 ? n : 1;
+            // No file on disk (a downloaded document): its http(s) address, printed the same way.
+            string url = root.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null;
+            Uri address;
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                if (!IsOpenedPdf(filePath)) { _bridge.Reply(id, new { error = "file is not open" }); return; }
+                address = new Uri(Path.GetFullPath(filePath));
+            }
+            else if (Uri.TryCreate(url, UriKind.Absolute, out address) && (address.Scheme == Uri.UriSchemeHttps || address.Scheme == Uri.UriSchemeHttp)) { }
+            else { _bridge.Reply(id, new { error = "nothing to print" }); return; }
+            owner.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    var outcome = await PdfFilePrinter.PrintAsync(owner, _webView.CoreWebView2.Environment, address, pageCount);
+                    _bridge.Reply(id, outcome == PdfFilePrinter.Outcome.Cancelled ? (object)new { cancelled = true } : new { ok = true });
                 }
                 catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
             }));

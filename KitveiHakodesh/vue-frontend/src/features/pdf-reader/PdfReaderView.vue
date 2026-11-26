@@ -25,7 +25,7 @@ import { usePdfNotes } from './usePdfNotes'
 import PdfNotesOverlay from './PdfNotesOverlay.vue'
 import SidePanel from '@/components/SidePanel.vue'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
-import { disposeLocalFileHost, openUrlInSystemBrowser, restoreLocalFile } from '@/webview-host/bridge'
+import { disposeLocalFileHost, openUrlInSystemBrowser, printPdfFile, restoreLocalFile } from '@/webview-host/bridge'
 import { useTabStore } from '@/stores/tabStore'
 import type { PdfOutlineEntry as BridgeOutlineEntry } from '@/stores/bookViewStore'
 import { usePdfSave } from './usePdfSave'
@@ -337,8 +337,10 @@ function toggleOrganizer() {
   if (organizerOpen.value) organizerWindow.value?.requestClose()
   else organizerOpen.value = true
 }
-function onOrganizerSaved(bytes: Uint8Array) {
-  void pdf.open(bytes, pdf.viewState())
+// The organizer wrote the file: show it from disk (a fresh URL: no cached read of the old bytes).
+function onOrganizerSaved() {
+  const url = props.url
+  if (url) void pdf.open(`${url}${url.includes('?') ? '&' : '?'}kk-saved=${Date.now()}`, pdf.viewState())
 }
 
 // Search: the book view's ReadingSearchBar, driving PDF.js's find controller.
@@ -403,7 +405,7 @@ const saving = usePdfSave(pdf, outlineEdit, notes, {
   fileName: () => props.fileName ?? null,
   url: () => props.url ?? null,
   onSavedAs: async (filePath, fileName) => {
-    if (!props.tabId) return
+    if (!props.tabId) return null
     const old = props.filePath
     const restored = await restoreLocalFile(filePath)
     adoptedUrl = restored?.url ?? null
@@ -416,6 +418,7 @@ const saving = usePdfSave(pdf, outlineEdit, notes, {
       ...(restored?.url ? { localFileVirtualUrl: restored.url } : {}),
     })
     if (old && old !== filePath) disposeLocalFileHost(old)
+    return restored?.url ?? null
   },
 })
 
@@ -462,42 +465,27 @@ if (props.tabId) {
   onBeforeUnmount(() => bookViewStore.unregisterPdfBridge(tabId))
 }
 
-// Print: only the file on disk, through the app host's built-in PDF print (system dialog, full quality).
-// Edits not saved in the file: the user saves first or prints the file as it is on disk.
-// No host (dev browser) or no file on disk: a message - there is no in-page print.
+// Print: the file as it is on disk (no unsaved marks), printed by the app host from disk in its
+// own PDF engine with the system print dialog - the page never holds the file's bytes. A document
+// with no file on disk (downloaded) prints from its address. Unsaved edits: the print choice dialog
+// (save, then print the saved file - or print the file as it is).
+// Dev browser (no host): the file opens in a new browser tab, printed from the browser's viewer.
 const printChoiceOpen = ref(false)
-// Print the FILE natively, the same way in the app (WebView2) and in the dev browser: the file's
-// bytes (as loaded / last saved - no unsaved marks) in a hidden frame, printed by the browser's own
-// PDF engine with its print dialog. A blob address is same-origin, so the page may tell it to print
-// (the file's own served address is another origin in the app).
 const canPrintFile = () => !!pdf.pdfDocument.value
-// Captured during setup: the window this viewer is drawn in (a detached window prints there).
+// Captured during setup: the window this viewer is drawn in (a detached window opens its tab there).
 const printHostWindow = useHostWindow()
 async function printFile() {
   const doc = pdf.pdfDocument.value
-  if (!doc) return showToast(t('pdfReader.printNoFile'))
-  const win = printHostWindow
-  const bytes = await doc.getData()
-  const blobUrl = win.URL.createObjectURL(new win.Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }))
-  const frame = win.document.createElement('iframe')
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden'
-  frame.src = blobUrl
-  const cleanup = () => {
-    frame.remove()
-    win.URL.revokeObjectURL(blobUrl)
+  const url = props.url ?? null
+  if (!doc || (!props.filePath && !url)) return showToast(t('pdfReader.printNoFile'))
+  const result = await printPdfFile(props.filePath ? { filePath: props.filePath } : { url: url! }, doc.numPages)
+  if (result === 'unsupported') {
+    if (url) printHostWindow.open(url, '_blank', 'noopener')
+    else showToast(t('pdfReader.printNoFile'))
+  } else if (typeof result === 'object') {
+    console.error('[PdfReader] print failed', result.error)
+    showToast(t('pdfReader.printFailed'))
   }
-  frame.addEventListener('load', () => {
-    try {
-      frame.contentWindow?.focus()
-      frame.contentWindow?.print()
-    } catch {
-      showToast(t('pdfReader.printFailed'))
-      return cleanup()
-    }
-    // Removed once the reader is back (the print dialog blocks until then).
-    win.addEventListener('focus', cleanup, { once: true })
-  }, { once: true })
-  win.document.body.appendChild(frame)
 }
 async function printDocument() {
   const doc = pdf.pdfDocument.value

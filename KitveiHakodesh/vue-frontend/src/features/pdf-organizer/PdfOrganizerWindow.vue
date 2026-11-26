@@ -21,7 +21,7 @@ const props = defineProps<{
   /** Bumped by the toolbar toggle to bring an open organizer to the front. */
   focusRequest?: number
 }>()
-const emit = defineEmits<{ close: []; saved: [bytes: Uint8Array] }>()
+const emit = defineEmits<{ close: []; saved: [] }>()
 
 const ORGANIZER_SIZE = { width: 980, height: 720 }
 const detachedWindow = ref<InstanceType<typeof DetachedWindow> | null>(null)
@@ -58,7 +58,7 @@ function onBlocked() {
       :file-name="fileName"
       :file-path="filePath"
       @close="emit('close')"
-      @saved="emit('saved', $event)"
+      @saved="emit('saved')"
     />
   </DetachedWindow>
 </template>

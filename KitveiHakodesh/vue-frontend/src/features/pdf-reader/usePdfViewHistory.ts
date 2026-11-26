@@ -3,6 +3,7 @@ import { onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { EventBus, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs'
+import { PDFSearchIndexStore } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import { ViewHistory } from './pdfjs/view_history.js'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 
@@ -38,7 +39,13 @@ export interface StoredView {
  * sidecar code must share this instance / lifecycle: hook it here.
  */
 export function createViewHistory(fingerprint: string) {
-  return new ViewHistory(fingerprint)
+  const history = new ViewHistory(fingerprint)
+  // A file's search index (pdfSearchIndexLink.ts) lives as long as its view history entry.
+  void history._initializedPromise.then(() => {
+    const files = (history.database as { files?: { fingerprint: string }[] }).files ?? []
+    return PDFSearchIndexStore.retainOnly(files.map((f) => f.fingerprint))
+  }).catch(() => {})
+  return history
 }
 
 const isValidRotation = (a: unknown) => Number.isInteger(a) && (a as number) % 90 === 0

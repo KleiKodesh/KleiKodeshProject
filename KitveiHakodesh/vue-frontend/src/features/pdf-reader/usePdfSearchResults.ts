@@ -1,6 +1,7 @@
 import { shallowReactive, shallowRef, ref, watch } from 'vue'
 import { useThrottleFn } from '@vueuse/core'
 import { FindState, type PdfScroller } from './usePdfScroller'
+import type { PDFPageProxy } from 'pdfjs-dist'
 
 /** One match of the current search: its page and its place in PDF.js's find controller. */
 export interface PdfSearchHit {
@@ -188,8 +189,11 @@ export function usePdfSearchResults(pdf: PdfScroller) {
     pending.add(pageIndex)
     const generation = textGeneration
     try {
-      const page = await doc.getPage(pageIndex + 1)
-      const content = await page.getTextContent({ disableNormalization: true })
+      // The find controller already read this page's text for its hits (our PDF.js fork keeps the
+      // last pages' text): reuse it instead of reading the page a second time.
+      const kept = (pdf.findController as unknown as { getPageTextContent?: (i: number) => Awaited<ReturnType<PDFPageProxy['getTextContent']>> | null })
+        .getPageTextContent?.(pageIndex)
+      const content = kept ?? (await (await doc.getPage(pageIndex + 1)).getTextContent({ disableNormalization: true }))
       if (generation !== textGeneration) return
       const out: PageText = { text: '', eols: [], starts: [], items: [] }
       for (const item of content.items) {

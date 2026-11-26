@@ -29,22 +29,13 @@ public static class PdfFileWriter
     /// <summary>Returns null on success, else an error message.</summary>
     public static string? Write(string? path, byte[]? bytes, bool mustExist)
     {
-        // A drive-letter (C:\x.pdf) or UNC (\\server\share\x.pdf) path; relative and device
-        // paths are refused. (No IsPathFullyQualified: this file is also compiled into the net48 host.)
-        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) return "invalid path";
-        try { path = Path.GetFullPath(path!); } catch { return "invalid path"; }
-        bool driveLetter = path.Length >= 3 && path[1] == ':' && path[2] == '\\';
-        bool unc = path.Length > 2 && path[0] == '\\' && path[1] == '\\' && path[2] != '?' && path[2] != '.';
-        if (!driveLetter && !unc) return "invalid path";
-        if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase)) return "not a pdf";
+        string? error = CheckTarget(ref path);
+        if (error != null) return error;
         if (bytes is null || bytes.Length < 5 || bytes[0] != '%' || bytes[1] != 'P' || bytes[2] != 'D' || bytes[3] != 'F' || bytes[4] != '-')
             return "not a pdf";
         bool exists = File.Exists(path);
         if (mustExist && !exists) return "file not found";
-        string? folder = Path.GetDirectoryName(path);
-        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return "folder not found";
-
-        string temp = Path.Combine(folder, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".saving");
+        string temp = TempBeside(path!);
         // Deleted unless it became the only complete copy of the new bytes (failed in-place write).
         bool deleteTemp = true;
         try
@@ -54,32 +45,97 @@ public static class PdfFileWriter
                 fs.Write(bytes, 0, bytes.Length);
                 fs.Flush(flushToDisk: true);
             }
-            try { File.SetAttributes(temp, FileAttributes.Hidden); } catch { /* cosmetic only */ }
-
-            if (!exists)
-            {
-                File.Move(temp, path);
-                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.Hidden);
-                return null;
-            }
-            try
-            {
-                File.Replace(temp, path, null, ignoreMetadataErrors: true);
-                return null;
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
-                string? error = OverwriteInPlace(temp, path);
-                if (error == null) return null;
-                deleteTemp = false;
-                return error + KeepRecoverableCopy(temp, path);
-            }
+            return SwapIn(temp, path!, exists, ref deleteTemp);
         }
         catch (Exception ex) { return ex.Message; }
         finally
         {
             if (deleteTemp)
                 try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>
+    /// Save As without the PDF's bytes travelling through the page: copy the open file
+    /// (<paramref name="source"/>) on disk to <paramref name="path"/>, then write PDF.js's update
+    /// section into the copy at <paramref name="offset"/> (PdfIncrementalSaveWriter rules; no tail =
+    /// a plain copy). Atomic as <see cref="Write"/>: the copy is built in a temp file beside the
+    /// target, then swapped in. Returns null on success, else an error message.
+    /// </summary>
+    public static string? CopyWithTail(string? source, string? path, long offset, byte[]? tail, byte[]? anchor, long? expectedLength)
+    {
+        string? error = CheckTarget(ref path);
+        if (error != null) return error;
+        string fullSource;
+        try { fullSource = Path.GetFullPath(source ?? ""); } catch { return "invalid path"; }
+        if (!File.Exists(fullSource)) return "file not found";
+        bool hasTail = tail != null && tail.Length > 0;
+        if (string.Equals(fullSource, path, StringComparison.OrdinalIgnoreCase))
+            return hasTail ? PdfIncrementalSaveWriter.WriteTail(path, offset, tail, anchor, expectedLength) : null;
+        bool exists = File.Exists(path);
+        // Ends in .pdf: PdfIncrementalSaveWriter writes only into .pdf files.
+        string temp = TempBeside(path!) + ".pdf";
+        bool deleteTemp = true;
+        try
+        {
+            File.Copy(fullSource, temp);
+            if (hasTail)
+            {
+                string? tailError = PdfIncrementalSaveWriter.WriteTail(temp, offset, tail, anchor, expectedLength);
+                if (tailError != null) return tailError;
+            }
+            return SwapIn(temp, path!, exists, ref deleteTemp);
+        }
+        catch (Exception ex) { return ex.Message; }
+        finally
+        {
+            if (deleteTemp)
+                try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>The target guards (a drive-letter or UNC path, a .pdf name, an existing folder);
+    /// <paramref name="path"/> comes back in full form.</summary>
+    private static string? CheckTarget(ref string? path)
+    {
+        // A drive-letter (C:\x.pdf) or UNC (\\server\share\x.pdf) path; relative and device
+        // paths are refused. (No IsPathFullyQualified: this file is also compiled into the net48 host.)
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) return "invalid path";
+        try { path = Path.GetFullPath(path!); } catch { return "invalid path"; }
+        bool driveLetter = path.Length >= 3 && path[1] == ':' && path[2] == '\\';
+        bool unc = path.Length > 2 && path[0] == '\\' && path[1] == '\\' && path[2] != '?' && path[2] != '.';
+        if (!driveLetter && !unc) return "invalid path";
+        if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase)) return "not a pdf";
+        string? folder = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return "folder not found";
+        return null;
+    }
+
+    /// <summary>A hidden temp name BESIDE the target (same folder: the swap is a rename on one volume).</summary>
+    private static string TempBeside(string path) =>
+        Path.Combine(Path.GetDirectoryName(path)!, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".saving");
+
+    /// <summary>Swap the complete, flushed temp file in over (or as) the target.</summary>
+    private static string? SwapIn(string temp, string path, bool exists, ref bool deleteTemp)
+    {
+        try { File.SetAttributes(temp, FileAttributes.Hidden); } catch { /* cosmetic only */ }
+        if (!exists)
+        {
+            File.Move(temp, path);
+            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.Hidden);
+            return null;
+        }
+        try
+        {
+            File.Replace(temp, path, null, ignoreMetadataErrors: true);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            string? error = OverwriteInPlace(temp, path);
+            if (error == null) return null;
+            deleteTemp = false;
+            return error + KeepRecoverableCopy(temp, path);
         }
     }
 
