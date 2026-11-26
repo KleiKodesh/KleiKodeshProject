@@ -92,3 +92,34 @@
   border-inline-end-width: 1px;
 }
 
+
+/* ── Zones (useGroupedToolbar) ── */
+/* The shared toolbar shell reserves the "more" button's room at BOTH ends (to centre a single
+   row). On a zoned toolbar (useGroupedToolbar: PDF, book view) the zones place the groups, so only the end that holds "more" keeps that room. */
+.reading-toolbar.has-zones.toolbar-top,
+.reading-toolbar.has-zones.toolbar-bottom {
+  padding-inline-start: var(--toolbar-edge-inset);
+}
+/* Zones: start and end take the free room equally, so the centre group sits in the middle. */
+.reading-toolbar .tb-zone {
+  display: flex;
+  align-items: center;
+  flex-direction: inherit;
+  min-width: 0;
+  min-height: 0;
+}
+.reading-toolbar .tb-zone-start,
+.reading-toolbar .tb-zone-end {
+  flex: 1 1 0;
+  /* Never below its own buttons: with equal halves, the fuller side overran the centre while
+     the whole row still fit (so nothing collapsed). Now that side takes what it needs and the
+     centre shifts over; the overflow arithmetic (the sum of all controls) holds again. */
+  min-width: max-content;
+  min-height: max-content;
+}
+.reading-toolbar .tb-zone-end {
+  justify-content: flex-end;
+}
+.reading-toolbar .tb-zone-center {
+  flex: 0 0 auto;
+}

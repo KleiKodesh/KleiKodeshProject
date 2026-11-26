@@ -12,7 +12,7 @@ That rule is enforced, not aspirational. A composable that becomes single-featur
 
 **useToolbarOverflow.ts** — the page toolbar's fit arithmetic: which collapsible controls (generic string keys, each with a width in button-widths) collapse into the "more" flyout, worst-first, with hysteresis. `keysToCollapse` is pure and tested through the book view's wrapper (`features/book-view/useBookViewToolbarOverflow.ts`, which owns that toolbar's keys and widths).
 
-**useToolbarOverflowSubmenu.ts** — a toolbar dropdown's panel while its control sits in the "more" flyout: a fixed side submenu beside its flyout row, clamped to the viewport.
+**useToolbarMoreMenu.ts** — a reading toolbar's "more" menu on the shared ContextMenu: open beside the toolbar, `choiceItems` (ticked choices that apply and close), `submenuRow` (a collapsed dropdown as a row with a submenu).
 
 **useToolbarDrag.ts** — drag a page toolbar by its empty background to any edge of its page (`pageSelector` names the page root); previews the edge and commits the `ToolbarPosition` on release.
 

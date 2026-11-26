@@ -44,5 +44,17 @@
     "not-found": "The file was not found. It may have been moved, renamed or deleted.",
     "unsupported": "This file type or version is not supported.",
     "access-denied": "You do not have permission to read this file."
+  },
+  "details": "Document details",
+  "detail": {
+    "fileName": "File name",
+    "location": "Location",
+    "title": "Title",
+    "direction": "Text direction",
+    "rtl": "Right to left",
+    "ltr": "Left to right",
+    "headings": "Headings",
+    "footnotes": "Footnotes",
+    "endnotes": "Endnotes"
   }
 }

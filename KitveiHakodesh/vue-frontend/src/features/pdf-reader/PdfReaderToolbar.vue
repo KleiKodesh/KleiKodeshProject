@@ -46,7 +46,9 @@ import IconPdfDocumentProperties from './icons/IconPdfDocumentProperties.vue'
 import IconPdfSelectTool from './icons/IconPdfSelectTool.vue'
 import IconPdfHandTool from './icons/IconPdfHandTool.vue'
 import ContextMenu, { type ContextMenuItem, type ContextMenuLeafItem } from '@/components/ContextMenu.vue'
-import { useToolbarOverflow, TOOLBAR_BUTTON_SIZE } from '@/composables/useToolbarOverflow'
+import { choiceItems } from '@/composables/useToolbarMoreMenu'
+import { TOOLBAR_BUTTON_SIZE } from '@/composables/useToolbarOverflow'
+import { useGroupedToolbar, type GroupedToolbarItem } from '@/composables/useGroupedToolbar'
 import PdfIconDropdown, { type IconDropdownOption } from './PdfIconDropdown.vue'
 import { PDF_KEYS as K, withKey } from './usePdfReaderShortcuts'
 import { MAX_SCALE, MIN_SCALE, ScrollMode, SpreadMode, type ScalePreset } from './usePdfScroller'
@@ -139,20 +141,27 @@ const OVERFLOW_ORDER = [
   'bookmark', 'note', 'edit', 'ocr', 'hand', 'zoom', 'first-last', 'search', 'save', 'toc', 'pages',
 ] as const
 type OverflowKey = (typeof OVERFLOW_ORDER)[number]
-/** The controls in the order the toolbar shows them. */
-const TOOLBAR_ORDER: OverflowKey[] = [
-  'toc', 'preset', 'scroll', 'spread', 'rotate', 'presentation',
-  'first-last', 'pages', 'search', 'hand', 'zoom',
-  'bookmark', 'note', 'edit', 'ocr', 'organize', 'save', 'print',
+/** The controls in the order the toolbar shows them, with their group, zone and width. */
+const TOOLBAR_ITEMS: GroupedToolbarItem<OverflowKey>[] = [
+  { key: 'toc', group: 'panels', zone: 'start' },
+  { key: 'preset', group: 'layout', zone: 'start' },
+  { key: 'scroll', group: 'layout', zone: 'start' },
+  { key: 'spread', group: 'layout', zone: 'start' },
+  { key: 'rotate', group: 'layout', zone: 'start', width: 2 },
+  { key: 'presentation', group: 'document', zone: 'start' },
+  { key: 'first-last', group: 'pages', zone: 'center', width: 2 },
+  { key: 'pages', group: 'pages', zone: 'center', width: () => boxWidth('pages') },
+  { key: 'search', group: 'panels', zone: 'center' },
+  { key: 'hand', group: 'tools', zone: 'center' },
+  { key: 'zoom', group: 'zoom', zone: 'center', width: () => boxWidth('zoom') },
+  { key: 'bookmark', group: 'tools', zone: 'end' },
+  { key: 'note', group: 'tools', zone: 'end' },
+  { key: 'edit', group: 'tools', zone: 'end' },
+  { key: 'ocr', group: 'tools', zone: 'end' },
+  { key: 'organize', group: 'document', zone: 'end' },
+  { key: 'save', group: 'document', zone: 'end' },
+  { key: 'print', group: 'document', zone: 'end' },
 ]
-const OVERFLOW_GROUP: Record<OverflowKey, string> = {
-  print: 'document', organize: 'document', presentation: 'document', save: 'document',
-  rotate: 'layout', spread: 'layout', scroll: 'layout', preset: 'layout',
-  ocr: 'tools', edit: 'tools', note: 'tools', bookmark: 'tools', hand: 'tools',
-  zoom: 'zoom',
-  'first-last': 'pages', pages: 'pages',
-  search: 'panels', toc: 'panels',
-}
 // The page box ("1 / 364") and zoom box are measured, not guessed: a guess too wide collapses
 // controls while there is still room. The last width is kept while a box sits in the menu.
 const isVertical = computed(() => toolbarPosition.value === 'left' || toolbarPosition.value === 'right')
@@ -174,31 +183,28 @@ const zoomBoxW = computed(() => (isVertical.value ? zoomBoxSize.height.value : z
 let lastPageBoxW = 78
 let lastZoomBoxW = 46
 let lastAxisVertical = false
-/** Room each control takes, in button-widths. */
-function widthOf(key: OverflowKey): number {
+/** The page / zoom box's room in button-widths: two buttons plus the measured box. */
+function boxWidth(key: 'pages' | 'zoom'): number {
   // A switch of axis drops the other axis's remembered sizes.
   if (lastAxisVertical !== isVertical.value) {
     lastAxisVertical = isVertical.value
     lastPageBoxW = isVertical.value ? 40 : 78
     lastZoomBoxW = isVertical.value ? 24 : 46
   }
-  if (key === 'rotate' || key === 'first-last') return 2
   if (key === 'zoom') {
     if (zoomBoxW.value > 0) lastZoomBoxW = zoomBoxW.value
     return 2 + lastZoomBoxW / TOOLBAR_BUTTON_SIZE
   }
-  if (key === 'pages') {
-    if (pageBoxW.value > 0) lastPageBoxW = pageBoxW.value
-    return 2 + lastPageBoxW / TOOLBAR_BUTTON_SIZE
-  }
-  return 1
+  if (pageBoxW.value > 0) lastPageBoxW = pageBoxW.value
+  return 2 + lastPageBoxW / TOOLBAR_BUTTON_SIZE
 }
-const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible: shown } = useToolbarOverflow(
+const { hasToolbarOverflow, overflowedInToolbarOrder, overflowGroupStarts, toolbarButtonVisible: shown } = useGroupedToolbar(
   toolbarEl,
+  TOOLBAR_ITEMS,
+  OVERFLOW_ORDER,
   // Save only while there is something to save: no room is kept for a button not drawn.
-  computed(() => OVERFLOW_ORDER.filter((k) => k !== 'save' || props.canSave)),
+  (k) => k !== 'save' || !!props.canSave,
   isVertical,
-  widthOf,
 )
 // "Navigation: table of contents, bookmarks, comments, thumbnails, search results" - what the side panel holds.
 const sidePanelTitle = computed(() =>
@@ -210,19 +216,15 @@ function openMore() {
   if (r) void moreMenu.value?.showAtPosition(r.left, r.bottom)
 }
 function radio<V>(options: IconDropdownOption<V>[], value: V | null, pick: (v: V) => void): ContextMenuLeafItem[] {
-  return options.map((o) => ({ type: 'checkbox' as const, label: o.label, icon: o.icon, checked: o.value === value, onChange: () => { pick(o.value); moreMenu.value?.hide() } }))
+  return choiceItems(options, value, pick, () => moreMenu.value?.hide())
 }
 /** One face per collapsed control, in collapse order; each runs the same emit as its toolbar button. */
 const moreItems = computed<ContextMenuItem[]>(() => {
   const items: ContextMenuItem[] = []
-  let lastGroup = ''
   // in the toolbar's own order (the collapse order only decides WHAT goes)
-  const keys = [...overflowedKeys.value].sort((x, y) => TOOLBAR_ORDER.indexOf(x) - TOOLBAR_ORDER.indexOf(y))
-  for (const key of keys) {
+  for (const key of overflowedInToolbarOrder.value) {
     // a separator between the toolbar's groups (document, layout, tools, zoom, pages, panels)
-    const group = OVERFLOW_GROUP[key]
-    if (items.length && group !== lastGroup) items.push({ type: 'separator' })
-    lastGroup = group
+    if (items.length && overflowGroupStarts.value.has(key)) items.push({ type: 'separator' })
     if (key === 'save') {
       if (props.canSave) items.push({ icon: IconSave20Regular, label: t('pdfReader.saveDoc.save'), shortcut: K.save, action: () => emit('save') })
     } else if (key === 'print') items.push({ icon: IconPrint20Regular, label: t('pdfReader.print'), shortcut: K.print, action: () => emit('print') })
@@ -291,7 +293,7 @@ function discardZoom(event: KeyboardEvent) {
 <template>
   <div
     ref="toolbarEl"
-    class="pdf-reader-toolbar reading-toolbar"
+    class="pdf-reader-toolbar reading-toolbar has-zones"
     dir="rtl"
     :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'has-overflow': hasToolbarOverflow }]"
     :title="isOverBackground ? $t('bookView.toolbar.dragHint') : undefined"
@@ -479,7 +481,7 @@ function discardZoom(event: KeyboardEvent) {
     >
       <IconMoreHorizontal24Regular />
     </button>
-    <ContextMenu ref="moreMenu" :items="moreItems" />
+    <ContextMenu ref="moreMenu" :items="moreItems" drill-in />
   </div>
 </template>
 
@@ -580,35 +582,6 @@ button:disabled {
   height: 7px;
   border-radius: 50%;
   background: var(--accent-color);
-}
-/* The shared toolbar shell reserves the "more" button's room at BOTH ends (to centre the book view's
-   row). Here the zones place the groups, so only the end that holds "more" keeps that room. */
-.pdf-reader-toolbar.toolbar-top,
-.pdf-reader-toolbar.toolbar-bottom {
-  padding-inline-start: var(--toolbar-edge-inset);
-}
-/* Zones: start and end take the free room equally, so the centre group sits in the middle. */
-.tb-zone {
-  display: flex;
-  align-items: center;
-  flex-direction: inherit;
-  min-width: 0;
-  min-height: 0;
-}
-.tb-zone-start,
-.tb-zone-end {
-  flex: 1 1 0;
-  /* Never below its own buttons: with equal halves, the fuller side overran the centre while
-     the whole row still fit (so nothing collapsed). Now that side takes what it needs and the
-     centre shifts over; the overflow arithmetic (the sum of all controls) holds again. */
-  min-width: max-content;
-  min-height: max-content;
-}
-.tb-zone-end {
-  justify-content: flex-end;
-}
-.tb-zone-center {
-  flex: 0 0 auto;
 }
 .page-count {
   opacity: 0.75;

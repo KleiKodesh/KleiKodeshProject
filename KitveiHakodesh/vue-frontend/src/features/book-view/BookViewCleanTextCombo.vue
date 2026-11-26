@@ -9,16 +9,15 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconEraser20Regular, IconEraser20Filled } from '@iconify-prerendered/vue-fluent'
+import { submenuRow } from '@/composables/useToolbarMoreMenu'
+import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
+import { useI18n } from 'vue-i18n'
 import ToolbarSplitDropdown from '@/components/ToolbarSplitDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { CLEAN_TEXT } from '@/utils/hebrewTextProcessing'
 import { ALL_PUNCTUATION, MODERN_PUNCTUATION, PUNCTUATION_MASK, QUOTES_MASK, QUOTES_REMOVED } from '@/utils/punctuationModes'
 
-defineProps<{
-  /** Renders as a row of the toolbar's "more" flyout. */
-  inOverflow?: boolean
-}>()
-
+const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const { cleanTextFlags, cleanTextOptions } = storeToRefs(settingsStore)
 
@@ -51,13 +50,30 @@ function toggleModern() {
 function toggleQuotes() {
   cleanTextOptions.value ^= QUOTES_REMOVED
 }
+
+/**
+ * This control as a row of the toolbar's "more" menu: the on/off switch (Ctrl+D) first, then the
+ * five options. They are independent toggles, so the menu stays open while you flip several.
+ */
+function moreMenuRow() {
+  const items: ContextMenuLeafItem[] = [
+    { type: 'checkbox', label: t('bookView.toolbar.cleanText'), title: `${t('bookView.toolbar.cleanText')} (Ctrl+D)`, icon: IconEraser20Regular, checked: cleanTextFlags.value !== 0, onChange: () => settingsStore.toggleCleanText() },
+    { type: 'separator' },
+    { type: 'checkbox', label: t('bookView.toolbar.cleanNikkud'), checked: (cleanTextOptions.value & CLEAN_TEXT.NIKKUD) !== 0, onChange: () => toggleFlag(CLEAN_TEXT.NIKKUD) },
+    { type: 'checkbox', label: t('bookView.toolbar.cleanTeamim'), checked: (cleanTextOptions.value & CLEAN_TEXT.TEAMIM) !== 0, onChange: () => toggleFlag(CLEAN_TEXT.TEAMIM) },
+    { type: 'checkbox', label: t('bookView.toolbar.cleanAllPunctuation'), checked: removeAll.value, onChange: toggleAll },
+    { type: 'checkbox', label: t('bookView.toolbar.cleanModernPunctuation'), checked: removeModern.value, onChange: toggleModern },
+    { type: 'checkbox', label: t('bookView.toolbar.cleanQuotes'), checked: removeAll.value || removeQuotes.value, disabled: removeAll.value, onChange: toggleQuotes },
+  ]
+  return submenuRow(t('bookView.toolbar.cleanText'), cleanTextFlags.value !== 0 ? IconEraser20Filled : IconEraser20Regular, items)
+}
+defineExpose({ moreMenuRow })
 </script>
 
 <template>
   <ToolbarSplitDropdown
     class="clean-text-combo"
     :active="cleanTextFlags !== 0"
-    :in-overflow="inOverflow"
     :main-title="`${$t('bookView.toolbar.cleanText')} (Ctrl+D)`"
     :options-title="$t('bookView.toolbar.cleanTextOptions')"
     @toggle="settingsStore.toggleCleanText()"

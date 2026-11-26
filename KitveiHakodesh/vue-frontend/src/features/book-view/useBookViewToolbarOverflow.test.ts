@@ -31,7 +31,6 @@ function widthsOf(keys: readonly ToolbarOverflowKey[]) {
 describe('collapse order', () => {
   it('is the order the product fixed, worst-first', () => {
     expect(ALL).toEqual([
-      'book-info',
       'hebrewbooks-editions',
       'versions',
       'word-link-markers',
@@ -46,6 +45,7 @@ describe('collapse order', () => {
       'bottom-commentary',
       'bookmarks',
       'search',
+      'first-last',
       'section-nav',
       'toc',
     ])
@@ -53,7 +53,7 @@ describe('collapse order', () => {
 })
 
 describe('widthOf', () => {
-  const PAIRS: ToolbarOverflowKey[] = ['zoom', 'side-commentaries', 'section-nav']
+  const PAIRS: ToolbarOverflowKey[] = ['zoom', 'side-commentaries', 'section-nav', 'first-last']
 
   it('charges each pair for both buttons', () => {
     for (const key of PAIRS) expect(widthOf(key)).toBe(2)
@@ -92,32 +92,32 @@ describe('keysToCollapse', () => {
   // control went with it.
   it('collapses exactly one control when the toolbar is one button short', () => {
     const room = roomForEverything(PINNED) - BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['hebrewbooks-editions'])
   })
 
   it('collapses one control for a toolbar barely short of fitting', () => {
     const room = roomForEverything(PINNED) - 1
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['hebrewbooks-editions'])
   })
 
   it('takes the next control only when one is no longer enough', () => {
     const room = roomForEverything(PINNED) - 2 * BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info', 'hebrewbooks-editions'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['hebrewbooks-editions', 'versions'])
   })
 
   it('adds one control per button of deficit', () => {
     const full = roomForEverything(PINNED)
     expect(keysToCollapse(full - 3 * BUTTON, PINNED, ALL)).toEqual([
-      'book-info',
       'hebrewbooks-editions',
       'versions',
+      'word-link-markers',
     ])
   })
 
   it('counts zoom as the two buttons it is', () => {
-    // Book info, editions, export and sync free one each, and zoom's two clear the rest.
+    // Editions, versions, export and sync free one each, and zoom's two clear the rest.
     // Were zoom counted as one, the toolbar would still be a button over.
-    const present: ToolbarOverflowKey[] = ['book-info', 'hebrewbooks-editions', 'export-to-word', 'sync-commentaries', 'zoom']
+    const present: ToolbarOverflowKey[] = ['hebrewbooks-editions', 'versions', 'export-to-word', 'sync-commentaries', 'zoom']
     const room = (PINNED + widthsOf(present)) * BUTTON - 6 * BUTTON
     expect(keysToCollapse(room, PINNED, present)).toEqual(present)
   })
@@ -127,21 +127,21 @@ describe('keysToCollapse', () => {
     // until the surplus clears the hysteresis margin, so a pane parked on the boundary does
     // not flip it in and out.
     const barelyBack = roomForEverything(PINNED)
-    expect(keysToCollapse(barelyBack, PINNED, ALL, ['book-info'])).toEqual([
-      'book-info',
+    expect(keysToCollapse(barelyBack, PINNED, ALL, ['hebrewbooks-editions'])).toEqual([
+      'hebrewbooks-editions',
     ])
   })
 
   it('lets a collapsed control back once the room clears the margin', () => {
     const clearlyBack = roomForEverything(PINNED) + BUTTON
-    expect(keysToCollapse(clearlyBack, PINNED, ALL, ['book-info'])).toEqual([])
+    expect(keysToCollapse(clearlyBack, PINNED, ALL, ['hebrewbooks-editions'])).toEqual([])
   })
 
   it('collapses without delay in the other direction', () => {
     // Only coming back is damped. A control that no longer fits goes now - a button left
     // overflowing the pane for a few pixels of resize would be the bug, not the fix.
     const short = roomForEverything(PINNED) - BUTTON
-    expect(keysToCollapse(short, PINNED, ALL, [])).toEqual(['book-info'])
+    expect(keysToCollapse(short, PINNED, ALL, [])).toEqual(['hebrewbooks-editions'])
   })
 
   it('never collapses more than what is present', () => {
@@ -152,8 +152,8 @@ describe('keysToCollapse', () => {
   it('leaves a book without the sync control unaffected by its absence', () => {
     // A book with no commentaries renders no sync button, so the control after it in the
     // order is the second concession rather than the third.
-    const present: ToolbarOverflowKey[] = ['book-info', 'export-to-word', 'zoom']
+    const present: ToolbarOverflowKey[] = ['hebrewbooks-editions', 'export-to-word', 'zoom']
     const room = (PINNED + widthsOf(present)) * BUTTON - 2 * BUTTON
-    expect(keysToCollapse(room, PINNED, present)).toEqual(['book-info', 'export-to-word'])
+    expect(keysToCollapse(room, PINNED, present)).toEqual(['hebrewbooks-editions', 'export-to-word'])
   })
 })

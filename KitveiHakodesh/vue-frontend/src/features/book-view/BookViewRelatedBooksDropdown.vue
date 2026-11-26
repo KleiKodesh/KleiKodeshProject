@@ -16,7 +16,8 @@ import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
+import { submenuRow } from '@/composables/useToolbarMoreMenu'
+import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
 import { getRelatedBooks, resolveRelatedTarget } from '@/webview-host/seforimApi'
 import type { RelatedBook, RelatedBooksSection } from '@/webview-host/queries.types'
 import { displayCommentaryLabel } from './commentary/commentaryLabelDisplay'
@@ -27,8 +28,6 @@ const { t } = useI18n()
 const props = defineProps<{
   bookId: number | undefined
   currentScrollLineIndex: number
-  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
-  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
@@ -58,7 +57,6 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── The list: fetched while open, dropped on close ──────────────────────────────
 
@@ -66,14 +64,21 @@ const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen,
 const sections = ref<RelatedBooksSection[] | null>(null)
 let loadToken = 0
 
+async function fetchSections() {
+  const token = ++loadToken
+  sections.value = null
+  const bookId = props.bookId
+  if (bookId == null) return
+  const list = await getRelatedBooks(bookId).catch(() => ({ sections: [] }))
+  if (token === loadToken) sections.value = list.sections
+}
+
 watch(
   [isOpen, () => props.bookId],
-  async ([open, bookId]) => {
-    const token = ++loadToken
+  ([open]) => {
+    loadToken++
     sections.value = null
-    if (!open || bookId == null) return
-    const list = await getRelatedBooks(bookId).catch(() => ({ sections: [] }))
-    if (token === loadToken) sections.value = list.sections
+    if (open) void fetchSections()
   },
 )
 
@@ -86,6 +91,24 @@ function sectionCaption(section: RelatedBooksSection): string {
     ? t('bookView.related.commentariesOf', { title: section.commentariesOfTitle ?? '' })
     : displayCommentaryLabel(section.label ?? '')
 }
+
+/**
+ * This control as a row of the toolbar's "more" menu: the same list as a submenu - a caption per
+ * section, one row per book. The list is fetched when the submenu opens.
+ */
+function moreMenuRow(): ReturnType<typeof submenuRow> {
+  const items: ContextMenuLeafItem[] = []
+  if (sections.value == null) items.push({ label: t('bookView.related.scanning'), disabled: true, action: () => {} })
+  else if (sections.value.length === 0) items.push({ label: t('bookView.related.empty'), disabled: true, action: () => {} })
+  else {
+    for (const section of sections.value) {
+      items.push({ type: 'heading', label: sectionCaption(section) })
+      for (const book of section.books) items.push({ label: book.title, title: book.title, action: () => void onBookClick(book) })
+    }
+  }
+  return submenuRow(t('bookView.related.title'), IconLibrary16Regular, items, { onOpen: () => void fetchSections() })
+}
+defineExpose({ moreMenuRow })
 
 // ── Opening a book ────────────────────────────────────────────────────────────
 
@@ -113,19 +136,17 @@ async function onBookClick(book: RelatedBook) {
 </script>
 
 <template>
-  <div class="related-books-wrapper" :class="{ 'overflow-host': inOverflow }">
+  <div class="related-books-wrapper">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen, 'overflow-row': inOverflow }"
-      :role="inOverflow ? 'menuitem' : undefined"
+      :class="{ active: isOpen }"
       :title="$t('bookView.related.title')"
       @click="toggleOpen"
     >
       <IconLibrary16Regular />
-      <span v-if="inOverflow">{{ $t('bookView.related.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="dropdownPositionClass">
       <div v-if="sections == null" class="loading-message">{{ $t('bookView.related.scanning') }}</div>
       <div v-else-if="sections.length === 0" class="empty-message">{{ $t('bookView.related.empty') }}</div>
       <template v-else v-for="section in sections" :key="sectionKey(section)">

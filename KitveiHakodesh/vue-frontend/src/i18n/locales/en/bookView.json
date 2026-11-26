@@ -237,6 +237,8 @@
     "readAloud": "Read aloud",
     "readAloudHint": "With text selected: reads the selected text.\nWith nothing selected: reads from the start of the top line in view.",
     "more": "More items",
+    "goToEnd": "Go to end",
+    "goToStart": "Go to start",
     "nextSection": "Next section (Ctrl+Left)",
     "open_bottom": "Bottom commentary panel (Ctrl+J)",
     "open_left": "Left commentary panel (Ctrl+Alt+J)",

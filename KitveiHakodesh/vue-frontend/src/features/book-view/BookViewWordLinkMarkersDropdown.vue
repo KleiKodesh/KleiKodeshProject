@@ -18,16 +18,17 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
+import { submenuRow } from '@/composables/useToolbarMoreMenu'
+import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
+import { useI18n } from 'vue-i18n'
 import { wordLinkAnchorsSupported } from '@/webview-host/seforimApi'
 import { injectBookWordLinkTargets } from './lines/bookWordLinkTargets'
 
 const props = defineProps<{
   bookId: number | undefined
-  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
-  inOverflow?: boolean
 }>()
 
+const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const wordLinkTargets = injectBookWordLinkTargets()
 const booksDataStore = useBooksDataStore()
@@ -43,7 +44,6 @@ const toggleButtonRef = ref<HTMLElement | null>(null)
 const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
 })
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return
@@ -185,26 +185,40 @@ function toggleAll() {
   // Shared with the Ctrl+Shift+U shortcut — all visible → hide all listed; else show all.
   settingsStore.toggleWordLinkMarkers(commentaries.value.map((c) => c.bookId))
 }
+
+/**
+ * This control as a row of the toolbar's "more" menu: "all" and one tick per marker commentary.
+ * The ticks are independent toggles, so the menu stays open while you flip several.
+ */
+function moreMenuRow() {
+  const items: ContextMenuLeafItem[] = loaded.value
+    ? [
+        { type: 'checkbox', label: t('bookView.selectAll'), checked: allChecked.value, onChange: toggleAll },
+        { type: 'separator' },
+        ...commentaries.value.map((c): ContextMenuLeafItem => ({ type: 'checkbox', label: c.title, checked: !hiddenSet.value.has(c.bookId), onChange: () => toggleOne(c) })),
+      ]
+    : [{ label: t('bookView.loading'), disabled: true, action: () => {} }]
+  return submenuRow(t('bookView.markers.title'), anyHiddenGlobally.value ? IconLinkDismiss20Regular : IconLink20Regular, items)
+}
+defineExpose({ moreMenuRow })
 </script>
 
 <template>
   <!-- Absent entirely (not just disabled) unless this book actually has marker
        citations to filter: schema-v1 users never see a control for a subsystem they
        don't have, and neither does anyone reading a book that cites nothing. -->
-  <div v-if="isPresent" class="wl-markers-wrapper" :class="{ 'overflow-host': inOverflow }">
+  <div v-if="isPresent" class="wl-markers-wrapper">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen || anyHiddenGlobally, 'overflow-row': inOverflow }"
-      :role="inOverflow ? 'menuitem' : undefined"
+      :class="{ active: isOpen || anyHiddenGlobally }"
       :title="$t('bookView.markers.title')"
       @click="toggleOpen"
     >
       <IconLinkDismiss20Regular v-if="anyHiddenGlobally" />
       <IconLink20Regular v-else />
-      <span v-if="inOverflow">{{ $t('bookView.markers.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="inOverflow ? 'overflow-submenu' : `dropdown-${toolbarPosition}`" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="`dropdown-${toolbarPosition}`">
       <!-- Only reachable while a retry after a failed load is in flight — the button
            itself does not exist until the list has arrived and is non-empty. -->
       <div v-if="!loaded" class="state-message">{{ $t('bookView.loading') }}</div>

@@ -328,6 +328,13 @@ export function useBookView(
     content.scrollToLine(target, { force: true })
   }
 
+  /** The toolbar's go-to-start / go-to-end: the first / last line at the top. */
+  function goToBookEdge(edge: 'start' | 'end') {
+    const count = lines.value.length
+    if (count === 0) return
+    linesContentRef()?.scrollToLine(edge === 'start' ? 0 : count - 1, { force: true })
+  }
+
   /**
    * Enter (caret browsing): selects the line the caret is in, as a click would.
    * Only with a commentary open and a collapsed caret inside the lines pane.
@@ -853,7 +860,7 @@ export function useBookView(
     contentSearch,
     // handlers
     onLinesScrolled, onLinesMoveEnd, onTocSelect, onAltTocSelect,
-    onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
+    onLineSelected, onNavigateSection, navigateToAdjacentTocSection, goToBookEdge,
     openBookTarget,
     openContentSearch: searchPanel.openContentSearch,
     openCommentarySearch: searchPanel.openCommentarySearch,

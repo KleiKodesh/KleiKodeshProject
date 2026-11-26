@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, nextTick } from 'vue'
-import { IconChevronLeft16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconChevronLeft16Regular, IconChevronRight16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
 export interface ContextMenuTextItem {
@@ -17,6 +17,16 @@ export interface ContextMenuTextItem {
   icon?: import('vue').Component
   /** Not offered as a button on the selection toolbar (it stays in the menu). */
   hideInToolbar?: boolean
+  /** A step you repeat (zoom): the menu stays open after the action. */
+  keepOpen?: boolean
+  /** A small button at the row's end (delete, rename); runs on its own, the menu stays open. */
+  endAction?: { icon: import('vue').Component; title: string; action: () => void }
+}
+
+/** A caption over the rows below it; not clickable. */
+export interface ContextMenuHeadingItem {
+  type: 'heading'
+  label: string
 }
 
 export interface ContextMenuSeparatorItem {
@@ -27,6 +37,8 @@ export interface ContextMenuCheckboxItem {
   type: 'checkbox'
   label: string
   checked: boolean
+  /** Shown greyed out; a click does nothing. */
+  disabled?: boolean
   /** Tooltip: the longer explanation, so the label itself stays short. */
   title?: string
   onChange: (checked: boolean) => void
@@ -51,6 +63,7 @@ export interface ContextMenuComponentItem {
 export type ContextMenuLeafItem =
   | ContextMenuTextItem
   | ContextMenuSeparatorItem
+  | ContextMenuHeadingItem
   | ContextMenuCheckboxItem
 
 export interface ContextMenuSubmenuItem {
@@ -58,6 +71,10 @@ export interface ContextMenuSubmenuItem {
   label: string
   /** Optional icon shown before the label. */
   icon?: import('vue').Component
+  /** Shown greyed out; it does not open. */
+  disabled?: boolean
+  /** The submenu is opening: fetch its list here (its items may be rebuilt as the list arrives). */
+  onOpen?: () => void
   items: ContextMenuLeafItem[]
 }
 
@@ -66,7 +83,14 @@ export type ContextMenuItem =
   | ContextMenuComponentItem
   | ContextMenuSubmenuItem
 
-const props = defineProps<{ items: ContextMenuItem[] }>()
+const props = defineProps<{
+  items: ContextMenuItem[]
+  /**
+   * A toolbar's "more" menu: a submenu row opens IN PLACE (the menu shows only its items, under a
+   * back row naming it), like pressing that dropdown on the toolbar. Otherwise a side flyout.
+   */
+  drillIn?: boolean
+}>()
 
 const visible = ref(false)
 const x = ref(0)
@@ -150,8 +174,41 @@ function closeSubmenu(): void {
   openSubmenuIndex.value = null
 }
 
+// ── Drill-in (drillIn): one submenu shown in place of the list, with a back row ──
+const drilledIndex = ref<number | null>(null)
+const drilledItem = computed(() =>
+  drilledIndex.value == null ? null : ((props.items[drilledIndex.value] as ContextMenuSubmenuItem | undefined) ?? null))
+// Where the menu was asked to open: re-placed from here when its size changes on drilling.
+let anchorX = 0
+let anchorY = 0
+async function refit(): Promise<void> {
+  await nextTick()
+  if (!menuRef.value) return
+  const rect = menuRef.value.getBoundingClientRect()
+  x.value = placeAlong(anchorX, anchorX, rect.width, hostWindow.innerWidth)
+  y.value = placeAlong(anchorY, anchorY, rect.height, hostWindow.innerHeight)
+}
+function drillInto(index: number): void {
+  const item = props.items[index] as ContextMenuSubmenuItem
+  if (item.disabled) return
+  item.onOpen?.()
+  drilledIndex.value = index
+  void refit()
+}
+function drillBack(): void {
+  drilledIndex.value = null
+  void refit()
+}
+function onSubmenuRow(index: number, row: EventTarget | null): void {
+  if (props.drillIn) drillInto(index)
+  else void openSubmenu(index, row)
+}
+
 async function openSubmenu(index: number, row: EventTarget | null): Promise<void> {
   if (openSubmenuIndex.value === index) return
+  const item = props.items[index] as ContextMenuSubmenuItem
+  if (item.disabled) return
+  item.onOpen?.()
   openSubmenuIndex.value = index
   submenuPlaced.value = false
   await nextTick()
@@ -186,6 +243,9 @@ async function show(event: MouseEvent) {
 async function showAtPosition(clientX: number, clientY: number) {
   saveSelection()
   closeSubmenu()
+  drilledIndex.value = null
+  anchorX = clientX
+  anchorY = clientY
   x.value = clientX
   y.value = clientY
   visible.value = true
@@ -202,6 +262,7 @@ async function showAtPosition(clientX: number, clientY: number) {
 
 function hide() {
   closeSubmenu()
+  drilledIndex.value = null
   visible.value = false
 }
 
@@ -209,10 +270,11 @@ function runItem(item: ContextMenuTextItem) {
   if (item.disabled) return
   restoreSelection()
   item.action()
-  hide()
+  if (!item.keepOpen) hide()
 }
 
 function toggleCheckbox(item: ContextMenuCheckboxItem) {
+  if (item.disabled) return
   item.onChange(!item.checked)
   // Intentionally does NOT close the menu — checkbox is a persistent toggle
 }
@@ -222,9 +284,44 @@ defineExpose({ show, showAtPosition, hide })
 
 <template>
   <Teleport :to="hostWindow.document.body">
-    <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop @mousedown.prevent @scroll="closeSubmenu">
-      <template v-for="(item, index) in items" :key="index">
+    <div v-if="visible" ref="menuRef" class="context-menu" :class="{ 'drill-in': drillIn }" :style="menuStyle" @click.stop @mousedown.prevent @scroll="closeSubmenu">
+      <!-- Drilled into a submenu: a back row naming it, then its items in place of the list. -->
+      <template v-if="drilledItem">
+        <!-- Sticky: the way back stays in view however far the list scrolls. -->
+        <div class="context-menu-back-header">
+          <div class="context-menu-item context-menu-back" role="button" @click="drillBack">
+            <IconChevronRight16Regular class="dir-icon item-icon" />
+            <span class="item-label">{{ drilledItem.label }}</span>
+          </div>
+          <div class="context-menu-separator" />
+        </div>
+        <template v-for="(child, childIndex) in drilledItem.items" :key="childIndex">
+          <div v-if="child.type === 'separator'" class="context-menu-separator" />
+          <div v-else-if="child.type === 'heading'" class="context-menu-heading">{{ (child as ContextMenuHeadingItem).label }}</div>
+          <div
+            v-else-if="child.type === 'checkbox'"
+            class="context-menu-item context-menu-checkbox"
+            :title="(child as ContextMenuCheckboxItem).title"
+            :class="{ 'is-selected': (child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked, disabled: (child as ContextMenuCheckboxItem).disabled }"
+            @click="toggleCheckbox(child as ContextMenuCheckboxItem)"
+          >
+            <component :is="(child as ContextMenuCheckboxItem).icon" v-if="(child as ContextMenuCheckboxItem).icon" class="item-icon" />
+            <span v-else class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+            <span class="item-label">{{ (child as ContextMenuCheckboxItem).label }}</span>
+          </div>
+          <div v-else class="context-menu-item" :class="{ disabled: (child as ContextMenuTextItem).disabled }" :aria-disabled="(child as ContextMenuTextItem).disabled || undefined" :title="(child as ContextMenuTextItem).title" @click="runItem(child as ContextMenuTextItem)">
+            <component :is="(child as ContextMenuTextItem).icon" v-if="(child as ContextMenuTextItem).icon" class="item-icon" />
+            <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
+            <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
+            <button v-if="(child as ContextMenuTextItem).endAction" type="button" class="item-end-action" :title="(child as ContextMenuTextItem).endAction!.title" @click.stop="(child as ContextMenuTextItem).endAction!.action()">
+              <component :is="(child as ContextMenuTextItem).endAction!.icon" />
+            </button>
+          </div>
+        </template>
+      </template>
+      <template v-for="(item, index) in items" v-else :key="index">
         <div v-if="item.type === 'separator'" class="context-menu-separator" />
+        <div v-else-if="item.type === 'heading'" class="context-menu-heading">{{ (item as ContextMenuHeadingItem).label }}</div>
         <component
           :is="item.component"
           v-else-if="item.type === 'component'"
@@ -236,7 +333,7 @@ defineExpose({ show, showAtPosition, hide })
           v-else-if="item.type === 'checkbox'"
           class="context-menu-item context-menu-checkbox"
           :title="(item as ContextMenuCheckboxItem).title"
-          :class="{ 'is-selected': (item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked }"
+          :class="{ 'is-selected': (item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked, disabled: (item as ContextMenuCheckboxItem).disabled }"
           @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
           @mouseenter="closeSubmenu"
         >
@@ -252,9 +349,9 @@ defineExpose({ show, showAtPosition, hide })
         <div
           v-else-if="item.type === 'submenu'"
           class="context-menu-item context-menu-submenu-parent"
-          :class="{ open: openSubmenuIndex === index }"
-          @mouseenter="openSubmenu(index, $event.currentTarget)"
-          @click="openSubmenu(index, $event.currentTarget)"
+          :class="{ open: openSubmenuIndex === index, disabled: (item as ContextMenuSubmenuItem).disabled }"
+          @mouseenter="!drillIn && openSubmenu(index, $event.currentTarget)"
+          @click="onSubmenuRow(index, $event.currentTarget)"
         >
           <component :is="(item as ContextMenuSubmenuItem).icon" v-if="(item as ContextMenuSubmenuItem).icon" class="item-icon" />
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
@@ -264,6 +361,9 @@ defineExpose({ show, showAtPosition, hide })
           <component :is="(item as ContextMenuTextItem).icon" v-if="(item as ContextMenuTextItem).icon" class="item-icon" />
           <span class="item-label">{{ (item as ContextMenuTextItem).label }}</span>
           <span v-if="(item as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (item as ContextMenuTextItem).shortcut }}</span>
+          <button v-if="(item as ContextMenuTextItem).endAction" type="button" class="item-end-action" :title="(item as ContextMenuTextItem).endAction!.title" @click.stop="(item as ContextMenuTextItem).endAction!.action()">
+            <component :is="(item as ContextMenuTextItem).endAction!.icon" />
+          </button>
         </div>
       </template>
     </div>
@@ -279,11 +379,12 @@ defineExpose({ show, showAtPosition, hide })
         >
           <template v-for="(child, childIndex) in (item as ContextMenuSubmenuItem).items" :key="childIndex">
             <div v-if="child.type === 'separator'" class="context-menu-separator" />
+            <div v-else-if="child.type === 'heading'" class="context-menu-heading">{{ (child as ContextMenuHeadingItem).label }}</div>
             <div
               v-else-if="child.type === 'checkbox'"
               class="context-menu-item context-menu-checkbox"
               :title="(child as ContextMenuCheckboxItem).title"
-              :class="{ 'is-selected': (child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked }"
+              :class="{ 'is-selected': (child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked, disabled: (child as ContextMenuCheckboxItem).disabled }"
               @click.stop="toggleCheckbox(child as ContextMenuCheckboxItem)"
             >
               <component
@@ -294,10 +395,13 @@ defineExpose({ show, showAtPosition, hide })
               <span v-else class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
               <span class="item-label">{{ (child as ContextMenuCheckboxItem).label }}</span>
             </div>
-            <div v-else class="context-menu-item" :title="(child as ContextMenuTextItem).title" @click.stop="runItem(child as ContextMenuTextItem)">
+            <div v-else class="context-menu-item" :class="{ disabled: (child as ContextMenuTextItem).disabled }" :title="(child as ContextMenuTextItem).title" @click.stop="runItem(child as ContextMenuTextItem)">
               <component :is="(child as ContextMenuTextItem).icon" v-if="(child as ContextMenuTextItem).icon" class="item-icon" />
               <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
               <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
+              <button v-if="(child as ContextMenuTextItem).endAction" type="button" class="item-end-action" :title="(child as ContextMenuTextItem).endAction!.title" @click.stop="(child as ContextMenuTextItem).endAction!.action()">
+                <component :is="(child as ContextMenuTextItem).endAction!.icon" />
+              </button>
             </div>
           </template>
         </div>
@@ -385,6 +489,36 @@ defineExpose({ show, showAtPosition, hide })
 }
 .item-label {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A caption over a group of rows (a section of a list). */
+.context-menu-heading {
+  padding: 4px var(--context-menu-row-padding-inline) 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: default;
+}
+/* A small button at a row's end (delete, rename). */
+.item-end-action {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 3px;
+  opacity: 0.7;
+}
+.item-end-action:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+.item-end-action svg {
+  width: 14px;
+  height: 14px;
 }
 /* `unicode-bidi: plaintext`, NOT `direction: ltr`: the shortcut is a Latin string in
    an RTL row and must render left-to-right, but `direction: ltr` also reverses this
@@ -415,6 +549,19 @@ defineExpose({ show, showAtPosition, hide })
 .context-menu-checkbox {
   gap: 6px;
 }
+.context-menu-back {
+  font-weight: 600;
+}
+.context-menu-back-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+}
+/* A toolbar's "more" menu (drillIn), list and drilled submenu alike: at most two thirds of the window. */
+.context-menu.drill-in {
+  max-height: calc(100vh * 2 / 3);
+}
 .context-menu-submenu-parent {
   position: relative;
 }
@@ -436,6 +583,8 @@ defineExpose({ show, showAtPosition, hide })
 /* Submenu panel — the .context-menu chrome, placed by openSubmenu() beside its row. */
 .submenu-panel {
   z-index: 10000;
+  /* A long list (related books) scrolls; a long title is cut with an ellipsis. */
+  max-width: 360px;
 }
 .checkbox-mark {
   display: inline-block;

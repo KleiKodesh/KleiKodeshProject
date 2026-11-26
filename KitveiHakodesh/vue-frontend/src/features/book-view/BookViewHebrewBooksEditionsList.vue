@@ -1,36 +1,21 @@
 <script setup lang="ts">
 /**
- * The rows of a book's scanned editions, and what picking one does - ONE implementation
- * shared by the toolbar dropdown (BookViewHebrewBooksEditionsDropdown) and its collapsed row
- * in the toolbar's "more" flyout, so the two never drift apart. Top to bottom:
+ * The rows of a book's scanned editions in the toolbar dropdown (BookViewHebrewBooksEditionsDropdown).
+ * What the rows offer and what picking one does lives in useBookEditionsChoices, shared with the
+ * dropdown's row in the toolbar's "more" menu. Top to bottom:
  *
- *  - the reader's own items (userEditionsStore): PDFs from their computer and HebrewBooks
- *    books they added, each with a trash button on hover that drops it from the list
- *    (the file itself is never touched);
+ *  - the reader's own items: PDFs from their computer and HebrewBooks books they added, each with
+ *    a trash button on hover that drops it from the list (the file itself is never touched);
  *  - Otzaria's scanned tractate (Talmud Bavli), when it is on this computer;
- *  - the catalog suggestions: one already on the computer (HebrewBooks folder or cache)
- *    always, the rest only while online - they download into the HebrewBooks folder;
+ *  - the catalog suggestions: one already on the computer always, the rest only while online;
  *  - "add a PDF from the computer" and "add from HebrewBooks".
  *
- * Every pick opens at the outline entry for the section the reader is in now - read at
- * click time, so it is wherever they scrolled to; a PDF whose bookmarks do not match opens
- * at its start (useBookEditionOpen). "Add from HebrewBooks" is asked of the host
- * (`add-hebrew-book`): its search window must outlive this list, which closes with the
- * dropdown. The host only closes itself, on `picked`.
+ * "Add from HebrewBooks" is asked of the host (`add-hebrew-book`): its search window must outlive
+ * this list, which closes with the dropdown. The host only closes itself, on `picked`.
  */
-import { computed, inject, onMounted } from 'vue'
-import { useOnline } from '@vueuse/core'
 import { IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
-import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
-import { useUserEditionsStore } from '@/stores/userEditionsStore'
-import { pickLocalFilePath } from '@/webview-host/bridge'
-import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
-import { useBookEditionOpen, userItemAsEdition } from './useBookEditionOpen'
-import type { HebrewBooksEdition, UserEdition } from '@/webview-host/queries.types'
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useBookEditionsChoices } from './useBookEditionsChoices'
+import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 
 const props = defineProps<{
   editions: HebrewBooksEdition[]
@@ -39,83 +24,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{ picked: []; 'add-hebrew-book': [] }>()
 
-const paneNavigation = usePaneNavigation()
-const sideEditionStore = useHebrewBooksSideEditionStore()
-const userEditionsStore = useUserEditionsStore()
-const { isSideBySideAvailable, isToggleOn, side } = useHebrewBooksSideEditionMode()
-const editionOpen = useBookEditionOpen()
-const isOnline = useOnline()
-
-const bookId = computed(() => paneNavigation.activeTab.bookId ?? 0)
-const userEditions = computed(() => userEditionsStore.editionsOf(bookId.value))
-
-/** Suggestions the reader can open now: on the computer, or downloadable while online. */
-const visibleEditions = computed(() => props.editions.filter((e) => e.isOnDisk || isOnline.value))
-
-onMounted(() => {
-  void userEditionsStore.load(bookId.value)
-})
-
-function isShownSideBySide(edition: HebrewBooksEdition): boolean {
-  return sideEditionStore.getShownEditionId() === edition.id
-}
-
-/** Author, place, year and page count - whichever of them the catalogue has. */
-function detailsFor(edition: HebrewBooksEdition): string {
-  return [
-    edition.author,
-    edition.printingPlace,
-    edition.printingYear,
-    edition.pages ? t('bookView.hebrewBooks.pages', { n: edition.pages }) : '',
-  ]
-    .map((part) => (part ?? '').trim())
-    .filter(Boolean)
-    .join(' · ')
-}
-
-/** Why a user item cannot open now, or '' when it can. */
-function unavailableReason(item: UserEdition): string {
-  if (item.kind === 'file') return item.fileExists ? '' : t('bookView.hebrewBooks.fileMissing')
-  return item.isOnDisk || isOnline.value ? '' : t('bookView.hebrewBooks.notAvailableOffline')
-}
-
-function openHebrewBooksEdition(edition: HebrewBooksEdition) {
-  emit('picked')
-  editionOpen.openHebrewBooksEdition(edition)
-}
-
-function openLocalPdf(filePath: string, title: string) {
-  emit('picked')
-  editionOpen.openLocalPdf(filePath, title)
-}
-
-function onUserItem(item: UserEdition) {
-  if (unavailableReason(item)) return
-  if (item.kind === 'file' && item.filePath) openLocalPdf(item.filePath, item.title)
-  else if (item.kind === 'hb' && item.hbId) openHebrewBooksEdition(userItemAsEdition(item))
-}
-
-function onTalmud() {
-  if (props.talmudPdfPath) openLocalPdf(props.talmudPdfPath, paneNavigation.activeTab.title)
-}
-
-function onRemove(item: UserEdition) {
-  void userEditionsStore.remove(bookId.value, item.id)
-}
-
-function stripExtension(fileName: string): string {
-  const dot = fileName.lastIndexOf('.')
-  return dot > 0 ? fileName.substring(0, dot) : fileName
-}
-
-async function onAddFile() {
-  const picked = await pickLocalFilePath({ pdfOnly: true })
-  if (!picked) return
-  const title = stripExtension(picked.fileName)
-  await userEditionsStore.addFile(bookId.value, picked.filePath, title)
-  openLocalPdf(picked.filePath, title)
-}
-
+const {
+  sideBySide: { isSideBySideAvailable, isToggleOn, side },
+  userEditions,
+  visibleEditions,
+  isShownSideBySide,
+  detailsFor,
+  unavailableReason,
+  openHebrewBooksEdition,
+  openUserItem: onUserItem,
+  openTalmud: onTalmud,
+  removeUserItem: onRemove,
+  addPdfFromComputer: onAddFile,
+} = useBookEditionsChoices(() => props.editions, () => props.talmudPdfPath, () => emit('picked'))
 </script>
 
 <template>

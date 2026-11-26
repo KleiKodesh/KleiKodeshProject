@@ -27,6 +27,7 @@ import { useFastDocViewDocument } from './useFastDocViewDocument'
 import { useFastDocViewEmbeddedFonts, withoutEmbeddedFonts } from './useFastDocViewEmbeddedFonts'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
 import FastDocViewToolbar from './FastDocViewToolbar.vue'
+import FastDocViewDetailsDialog from './FastDocViewDetailsDialog.vue'
 import FastDocViewToc, { type FastDocViewTocState } from './FastDocViewToc.vue'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
 import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
@@ -52,6 +53,8 @@ import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocVi
 // The window this is drawn in (an extra app window draws its own, hostWindow.ts).
 const hostWindow = useHostWindow()
 
+/** The document details dialog (opened from the toolbar's "more" menu). */
+const detailsOpen = ref(false)
 const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
@@ -404,6 +407,13 @@ useFastDocViewCommands({
 // the last step landed on, until the reader moves the view), the previous one skipping headings
 // at the same block, landed like the book view (force: the heading at the top).
 let lastNavigatedHeadingId: number | null = null
+/** Toolbar go-to-start / go-to-end: the first / last block of the document. */
+function goToDocumentEdge(edge: 'start' | 'end') {
+  const count = fastDocument.blockCount.value
+  if (count === 0) return
+  lastNavigatedHeadingId = null
+  void windowedScroller.value?.scrollToIndex(edge === 'start' ? 0 : count - 1)
+}
 function navigateToAdjacentHeading(direction: 'next' | 'previous') {
   const nodes = outline.value
   if (nodes.length === 0) return
@@ -837,7 +847,11 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
       @toggle-search="searchVisible ? closeSearch() : openSearch()"
       @navigate-to-next-section="navigateToAdjacentHeading('next')"
       @navigate-to-previous-section="navigateToAdjacentHeading('previous')"
+      @show-details="detailsOpen = true"
+      @go-to-start="goToDocumentEdge('start')"
+      @go-to-end="goToDocumentEdge('end')"
     />
+    <FastDocViewDetailsDialog v-if="detailsOpen" :file-path="filePath" :summary="fastDocument.summary.value" @close="detailsOpen = false" />
     <div
       ref="sidePanelResizeArea"
       class="fast-doc-view-body"

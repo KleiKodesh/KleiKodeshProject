@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The export-to-Word glyph. Its own component only so the toolbar button and the row it
- * collapses into (BookViewToolbarOverflowMenu) draw the same glyph from one source.
+ * collapses into draw the same glyph from one source.
  *
  * Colour is inherited, not set: theme.css pins `svg { color }`, which otherwise cuts the
  * glyph off from its button's colour.

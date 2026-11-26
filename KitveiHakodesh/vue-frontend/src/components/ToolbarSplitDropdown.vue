@@ -11,16 +11,12 @@ import { IconChevronDown12Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 
-const props = defineProps<{
+defineProps<{
   active: boolean
   mainTitle: string
   optionsTitle: string
   disabled?: boolean
-  /** Renders as a row of the toolbar's "more" flyout: its body toggles, the chevron
-   *  at its end opens the options as a side submenu. */
-  inOverflow?: boolean
 }>()
 const emit = defineEmits<{ toggle: [] }>()
 
@@ -34,7 +30,6 @@ const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false
   toggleButton: toggleButtonRef,
 })
 useDropdownViewportFit(dropdownRef)
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return
@@ -47,38 +42,7 @@ defineExpose({ close })
 </script>
 
 <template>
-  <div v-if="inOverflow" role="group" class="overflow-host split-dropdown-overflow-row">
-    <button
-      role="menuitemcheckbox"
-      class="overflow-row"
-      :class="{ active }"
-      :aria-checked="active"
-      :disabled="disabled"
-      :title="mainTitle"
-      @click="emit('toggle')"
-    >
-      <slot name="icon" />
-      <span><slot name="label" /></span>
-    </button>
-    <button
-      ref="toggleButtonRef"
-      role="menuitem"
-      aria-haspopup="menu"
-      class="split-dropdown-overflow-chevron"
-      :class="{ open: isOpen }"
-      :disabled="disabled"
-      :title="optionsTitle"
-      @click="toggleOpen"
-    >
-      <IconChevronDown12Regular />
-    </button>
-
-    <div v-if="isOpen" ref="dropdownRef" class="split-dropdown-panel overflow-submenu" title="" :style="submenuStyle">
-      <slot />
-    </div>
-  </div>
   <div
-    v-else
     class="split-dropdown"
     :class="{ active, vertical: toolbarPosition === 'left' || toolbarPosition === 'right' }"
   >
@@ -145,15 +109,6 @@ button {
   width: var(--toolbar-button-size);
   height: 14px;
 }
-/* In the flyout: the row's body and the chevron side by side. */
-.split-dropdown-overflow-row {
-  display: flex;
-  align-items: center;
-}
-.split-dropdown-overflow-chevron {
-  width: var(--toolbar-button-size);
-}
-.split-dropdown-overflow-chevron.open,
 .split-dropdown-chevron.open {
   color: var(--accent-color);
 }

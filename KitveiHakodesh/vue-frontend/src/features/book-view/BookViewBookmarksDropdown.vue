@@ -15,12 +15,15 @@ import { storeToRefs } from 'pinia'
 import {
   IconBookmark16Regular,
   IconBookmark16Filled,
+  IconBookmarkAdd20Regular,
   IconEdit16Regular,
   IconDelete16Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
+import { submenuRow } from '@/composables/useToolbarMoreMenu'
+import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
+import { useI18n } from 'vue-i18n'
 import { loadBookBookmarks, loadedBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
@@ -34,12 +37,11 @@ const props = defineProps<{
   labelForLine?: (lineIndex: number) => string
   /** Where a bookmark made now points: the selection, or the top of the view. */
   readBookmarkPoint?: () => BookViewLinesBookmarkPoint | null
-  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
-  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ goToBookmark: [bookmark: BookBookmark]; presenceChange: [present: boolean] }>()
 
+const { t } = useI18n()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 
@@ -57,7 +59,6 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── The book's list ───────────────────────────────────────────────────────────
 //
@@ -170,26 +171,59 @@ async function createBookmark(point: BookViewLinesBookmarkPoint | null = props.r
   await startRename(bookmark)
 }
 
-defineExpose({ createBookmark })
+/**
+ * "Add a bookmark" from the toolbar's "more" menu (this control is collapsed): saves it with the
+ * suggested name (the TOC path) and opens nothing - a menu has no name field, so renaming is
+ * done from the bookmarks list on the bar.
+ */
+async function addBookmark(point: BookViewLinesBookmarkPoint | null = props.readBookmarkPoint?.() ?? null) {
+  const bookmark = bookmarkForPoint(point)
+  if (bookmark == null) {
+    emit('presenceChange', isPresent.value)
+    return
+  }
+  await update((stored) => [...stored, bookmark])
+}
+
+/**
+ * This control as a row of the toolbar's "more" menu: "add a bookmark" first, then the book's
+ * bookmarks in reading order - picking one scrolls there, the bin at its end deletes it.
+ */
+function moreMenuRow() {
+  const items: ContextMenuLeafItem[] = [
+    { icon: IconBookmarkAdd20Regular, label: t('bookView.bookmarks.add'), shortcut: 'Ctrl+Shift+D', disabled: props.bookId == null, action: () => void addBookmark() },
+  ]
+  if (bookmarks.value.length) items.push({ type: 'separator' })
+  for (const bookmark of bookmarks.value) {
+    items.push({
+      icon: bookmark.lineId === currentLine.value?.id ? IconBookmark16Filled : undefined,
+      label: bookmark.label,
+      title: [bookmark.label, bookmark.tocPath !== bookmark.label ? bookmark.tocPath : null, bookmark.snippet].filter(Boolean).join('\n'),
+      action: () => emit('goToBookmark', bookmark),
+      endAction: { icon: IconDelete16Regular, title: t('bookView.bookmarks.delete'), action: () => deleteBookmark(bookmark) },
+    })
+  }
+  return submenuRow(t('bookView.bookmarks.title'), currentLineBookmarked.value ? IconBookmark16Filled : IconBookmark16Regular, items, { disabled: props.bookId == null })
+}
+
+defineExpose({ createBookmark, addBookmark, moreMenuRow })
 </script>
 
 <template>
-  <div v-if="isPresent" class="bookmarks-wrapper" :class="{ 'overflow-host': inOverflow }">
+  <div v-if="isPresent" class="bookmarks-wrapper">
     <button
       ref="toggleButtonRef"
       class="toggle-button"
-      :class="{ active: isOpen, marked: currentLineBookmarked, 'overflow-row': inOverflow }"
-      :role="inOverflow ? 'menuitem' : undefined"
+      :class="{ active: isOpen, marked: currentLineBookmarked }"
       :title="`${$t('bookView.bookmarks.title')} (Ctrl+Shift+D)`"
       :disabled="bookId == null"
       @click="toggleOpen"
     >
       <IconBookmark16Filled v-if="currentLineBookmarked" />
       <IconBookmark16Regular v-else />
-      <span v-if="inOverflow">{{ $t('bookView.bookmarks.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="dropdownPositionClass">
       <div v-if="bookmarks.length === 0" class="empty-message">{{ $t('bookView.bookmarks.empty') }}</div>
       <div v-else class="bookmark-list">
         <div

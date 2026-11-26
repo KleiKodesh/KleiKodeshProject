@@ -113,7 +113,7 @@ const {
   flashOpenLine,
   activeMatchCount, activeMatchIdx, contentSearch,
   onLinesScrolled, onLinesMoveEnd, onTocSelect, onAltTocSelect,
-  onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
+  onLineSelected, onNavigateSection, navigateToAdjacentTocSection, goToBookEdge,
   openBookTarget,
   openContentSearch, openCommentarySearch, toggleSearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
@@ -636,6 +636,8 @@ function getSideEditionOutlineTarget(): string | undefined {
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+      @go-to-start="goToBookEdge('start')"
+      @go-to-end="goToBookEdge('end')"
       @select-version="selectVersion"
       @toggle-read-aloud="toggleReadAloud"
     />
@@ -657,6 +659,8 @@ function getSideEditionOutlineTarget(): string | undefined {
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
         @go-to-bookmark="goToBookmark"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+        @go-to-start="goToBookEdge('start')"
+        @go-to-end="goToBookEdge('end')"
         @select-version="selectVersion"
         @toggle-read-aloud="toggleReadAloud"
       />
@@ -922,6 +926,8 @@ function getSideEditionOutlineTarget(): string | undefined {
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+      @go-to-start="goToBookEdge('start')"
+      @go-to-end="goToBookEdge('end')"
       @select-version="selectVersion"
       @toggle-read-aloud="toggleReadAloud"
     />

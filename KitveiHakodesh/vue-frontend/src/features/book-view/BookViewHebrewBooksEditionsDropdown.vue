@@ -11,8 +11,8 @@
  *
  * The button shows in every book (see `hasHebrewBooksEditions` in the toolbar): with no
  * catalog suggestions it still lists the reader's own items and the add options. It hosts
- * the "add from HebrewBooks" search window, which outlives the closed panel. It is collapsible: in the toolbar's "more" flyout it is a
- * row whose list opens as a side submenu (useToolbarOverflowSubmenu).
+ * the "add from HebrewBooks" search window, which outlives the closed panel. It is collapsible: in
+ * the toolbar's "more" menu it is a row whose list opens as a submenu (moreMenuRow).
  */
 import { ref, computed, inject } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -21,22 +21,25 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
 import BookViewHebrewBooksAddDialog from './BookViewHebrewBooksAddDialog.vue'
-import { useBookEditionOpen, userItemAsEdition } from './useBookEditionOpen'
+import { userItemAsEdition } from './useBookEditionOpen'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useUserEditionsStore } from '@/stores/userEditionsStore'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
+import { submenuRow } from '@/composables/useToolbarMoreMenu'
+import type { ContextMenuLeafItem } from '@/components/ContextMenu.vue'
+import { useBookEditionsChoices } from './useBookEditionsChoices'
+import { useI18n } from 'vue-i18n'
+import { IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 
 const props = defineProps<{
   editions: HebrewBooksEdition[]
   talmudPdfPath: string | null
-  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
-  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
 
+const { t } = useI18n()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 
@@ -64,7 +67,6 @@ function toggleOpen() {
 
 const paneNavigation = usePaneNavigation()
 const userEditionsStore = useUserEditionsStore()
-const editionOpen = useBookEditionOpen()
 const isAddDialogOpen = ref(false)
 
 function openAddDialog() {
@@ -76,30 +78,86 @@ function openAddDialog() {
 async function onAddHebrewBook(book: HebrewBook) {
   isAddDialogOpen.value = false
   const row = await userEditionsStore.addHebrewBook(paneNavigation.activeTab.bookId ?? 0, String(book.id), book.title)
-  if (row) editionOpen.openHebrewBooksEdition(userItemAsEdition(row))
+  if (row) choices.openHebrewBooksEdition(userItemAsEdition(row))
 }
 
+const choices = useBookEditionsChoices(() => props.editions, () => props.talmudPdfPath, () => setOpen(false))
+
+/**
+ * This control as a row of the toolbar's "more" menu: the same list as a submenu - the side-panel
+ * options, the reader's own items (the bin at a row's end drops it), the tractate, the catalog
+ * suggestions, and the two add options.
+ */
+function moreMenuRow() {
+  const c = choices
+  const items: ContextMenuLeafItem[] = []
+  if (c.sideBySide.isSideBySideAvailable.value) {
+    items.push({ type: 'checkbox', label: t('bookView.hebrewBooks.showInSidePanel'), checked: c.sideBySide.isToggleOn.value, onChange: (on) => { c.sideBySide.isToggleOn.value = on } })
+    if (c.sideBySide.isToggleOn.value) {
+      for (const side of ['right', 'left'] as const) {
+        items.push({
+          type: 'checkbox',
+          label: `${t('bookView.hebrewBooks.sidePanelSide')}: ${t(side === 'right' ? 'bookView.hebrewBooks.sidePanelRight' : 'bookView.hebrewBooks.sidePanelLeft')}`,
+          checked: c.sideBySide.side.value === side,
+          onChange: () => { c.sideBySide.side.value = side },
+        })
+      }
+    }
+    items.push({ type: 'separator' })
+  }
+  if (c.userEditions.value.length) {
+    items.push({ type: 'heading', label: t('bookView.hebrewBooks.userItems') })
+    for (const item of c.userEditions.value) {
+      const reason = c.unavailableReason(item)
+      items.push({
+        label: reason ? `${item.title} (${reason})` : item.title,
+        title: reason || item.filePath || item.title,
+        disabled: !!reason,
+        action: () => c.openUserItem(item),
+        endAction: { icon: IconDelete16Regular, title: t('bookView.hebrewBooks.remove'), action: () => c.removeUserItem(item) },
+      })
+    }
+  }
+  if (props.talmudPdfPath) items.push({ label: t('bookView.hebrewBooks.otzariaTalmud'), title: props.talmudPdfPath, action: () => c.openTalmud() })
+  if (c.visibleEditions.value.length) {
+    if (c.userEditions.value.length || props.talmudPdfPath) items.push({ type: 'heading', label: t('bookView.hebrewBooks.suggestions') })
+    for (const edition of c.visibleEditions.value) {
+      const tags = [
+        edition.isBest ? t('bookView.hebrewBooks.recommended') : '',
+        edition.isCertain ? '' : t('bookView.hebrewBooks.possibleMatch'),
+      ].filter(Boolean)
+      items.push({
+        label: tags.length ? `${edition.title} (${tags.join(', ')})` : edition.title,
+        title: [edition.title, c.detailsFor(edition)].filter(Boolean).join('\n'),
+        action: () => c.openHebrewBooksEdition(edition),
+      })
+    }
+  }
+  items.push({ type: 'separator' })
+  items.push({ label: t('bookView.hebrewBooks.addFile'), action: () => void c.addPdfFromComputer() })
+  items.push({ label: t('bookView.hebrewBooks.addFromHebrewBooks'), action: openAddDialog })
+  return submenuRow(t('bookView.hebrewBooks.title'), IconDocumentPdf20Regular, items, { onOpen: c.loadUserEditions })
+}
+defineExpose({ moreMenuRow })
+
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 </script>
 
 <template>
-  <div class="editions-wrapper" :class="{ 'overflow-host': inOverflow }">
+  <div class="editions-wrapper">
     <button
       ref="toggleButtonRef"
       class="editions-toggle"
-      :class="{ active: isOpen, 'overflow-row': inOverflow }"
-      :role="inOverflow ? 'menuitem' : undefined"
+      :class="{ active: isOpen }"
       :title="$t('bookView.hebrewBooks.title')"
       :aria-label="$t('bookView.hebrewBooks.title')"
       @click="toggleOpen"
     >
       <IconDocumentPdf20Regular />
-      <span v-if="inOverflow">{{ $t('bookView.hebrewBooks.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="dropdownPositionClass">
       <BookViewHebrewBooksEditionsList :editions="editions" :talmud-pdf-path="talmudPdfPath" @picked="setOpen(false)" @add-hebrew-book="openAddDialog" />
     </div>
     <BookViewHebrewBooksAddDialog

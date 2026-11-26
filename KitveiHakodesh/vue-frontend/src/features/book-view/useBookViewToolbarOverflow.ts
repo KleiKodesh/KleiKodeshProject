@@ -1,9 +1,9 @@
 import type { ComputedRef, Ref } from 'vue'
 import {
   keysToCollapse as keysToCollapseGeneric,
-  useToolbarOverflow,
   TOOLBAR_BUTTON_SIZE,
 } from '@/composables/useToolbarOverflow'
+import { useGroupedToolbar, itemWidth, type GroupedToolbarItem } from '@/composables/useGroupedToolbar'
 
 /* The book-view toolbar's collapsible controls. The fit arithmetic itself is shared
    (composables/useToolbarOverflow.ts); this file names the controls and their widths. */
@@ -18,19 +18,20 @@ export const CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS = 1 + (14 + 2 * 1 + 2 * 2) / TOOL
  * to go. No control is pinned: a pane narrow enough loses all of them into the flyout, the
  * most essential last.
  *
- * Worst-first: reference panels about the book (info, scanned editions, versions, marker
+ * Book info is not here: it always lives in the flyout (BookViewToolbar), never on the bar.
+ *
+ * Worst-first: reference panels about the book (scanned editions, versions, marker
  * filter), then one-off actions and settings (export, sync, related books, clean text,
  * zoom), then the panel toggles, and last what reading itself runs on - bookmarks, search,
  * section navigation and the TOC.
  *
- * Every dropdown among them opens the same way in the flyout: its row opens the list as a
- * side submenu beside the flyout (useToolbarOverflowSubmenu), like a context menu's.
+ * Every dropdown among them becomes a row with a submenu arrow in the "more" menu (its
+ * moreMenuRow, useToolbarMoreMenu), like the PDF toolbar's.
  *
  * Keys are internal names rather than labels, because none of these are destinations - the
  * flyout renders each one's face and the toolbar dispatches its action.
  */
 export const TOOLBAR_OVERFLOW_ORDER = [
-  'book-info',
   'hebrewbooks-editions',
   'versions',
   'word-link-markers',
@@ -45,11 +46,38 @@ export const TOOLBAR_OVERFLOW_ORDER = [
   'bottom-commentary',
   'bookmarks',
   'search',
+  'first-last',
   'section-nav',
   'toc',
 ] as const
 
 export type ToolbarOverflowKey = (typeof TOOLBAR_OVERFLOW_ORDER)[number]
+
+/**
+ * The toolbar's controls in the order it shows them, grouped and placed in zones as the PDF
+ * toolbar's (useGroupedToolbar): reading navigation at the start (right, RTL); search, the
+ * text's display and the commentary panels in the centre; the book's references and tools at the end (left).
+ * The "more" flyout lists its rows in this order, a separator between groups.
+ */
+export const TOOLBAR_ITEMS: readonly GroupedToolbarItem<ToolbarOverflowKey>[] = [
+  { key: 'toc', group: 'navigation', zone: 'start' },
+  { key: 'section-nav', group: 'navigation', zone: 'start', width: 2 },
+  { key: 'first-last', group: 'navigation', zone: 'start', width: 2 },
+  { key: 'bookmarks', group: 'navigation', zone: 'start' },
+  { key: 'related-books', group: 'book', zone: 'start' },
+  { key: 'versions', group: 'book', zone: 'start' },
+  { key: 'hebrewbooks-editions', group: 'book', zone: 'start' },
+  { key: 'search', group: 'search', zone: 'center' },
+  { key: 'zoom', group: 'display', zone: 'center', width: 2 },
+  { key: 'side-commentaries', group: 'commentary', zone: 'center', width: 2 },
+  { key: 'bottom-commentary', group: 'commentary', zone: 'center' },
+  { key: 'sync-commentaries', group: 'commentary', zone: 'center' },
+  { key: 'clean-text', group: 'view', zone: 'end', width: CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS },
+  { key: 'lines-layout', group: 'view', zone: 'end' },
+  { key: 'word-link-markers', group: 'book', zone: 'end' },
+  { key: 'read-aloud', group: 'tools', zone: 'end' },
+  { key: 'export-to-word', group: 'tools', zone: 'end' },
+]
 
 /**
  * How much toolbar room a key is worth, in button-widths. The pairs - zoom out/in, the two
@@ -58,9 +86,7 @@ export type ToolbarOverflowKey = (typeof TOOLBAR_OVERFLOW_ORDER)[number]
  * the toolbar think collapsing it saved less than it does, and stop collapsing early.
  */
 export function widthOf(key: ToolbarOverflowKey): number {
-  if (key === 'zoom' || key === 'side-commentaries' || key === 'section-nav') return 2
-  if (key === 'clean-text') return CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS
-  return 1
+  return itemWidth(TOOLBAR_ITEMS.find((it) => it.key === key))
 }
 
 /** Which book-view controls have to collapse - the shared arithmetic over this toolbar's widths. */
@@ -73,11 +99,11 @@ export function keysToCollapse(
   return keysToCollapseGeneric(availableLengthPx, pinnedInButtons, present, widthOf, currentlyCollapsed)
 }
 
-/** The book-view toolbar's fit - see useToolbarOverflow. */
+/** The book-view toolbar's fit and groups - see useGroupedToolbar. */
 export function useBookViewToolbarOverflow(
   toolbarEl: Ref<HTMLElement | null>,
-  presentKeys: ComputedRef<ToolbarOverflowKey[]>,
+  isPresent: (key: ToolbarOverflowKey) => boolean,
   isVertical: ComputedRef<boolean>,
 ) {
-  return useToolbarOverflow(toolbarEl, presentKeys, isVertical, widthOf)
+  return useGroupedToolbar(toolbarEl, TOOLBAR_ITEMS, TOOLBAR_OVERFLOW_ORDER, isPresent, isVertical)
 }

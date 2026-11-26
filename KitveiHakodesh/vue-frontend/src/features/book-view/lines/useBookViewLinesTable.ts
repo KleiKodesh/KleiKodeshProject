@@ -136,10 +136,21 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
         // The prefetch can land before load() sizes the table.
         table.growTo(maxIndex + 1)
         for (const row of rows) table.setText(row.lineIndex, row.id, row.content ?? '')
+        // A library whose lines lost their text (damaged or half-written seforim.db) draws only
+        // the headings and fails nowhere else: say so in the console instead of failing silently.
+        if (rows.length === 0) {
+          console.error(`[book-view] book ${id}: lines ${start}-${end} came back with no rows - the seforim database may be damaged`)
+        } else if (rows.every((row) => !row.content)) {
+          console.error(`[book-view] book ${id}: lines ${start}-${end} came back with empty text (${rows.length} rows) - the seforim database may be damaged`)
+        }
         linesWritten()
         evictFarText()
       })
-      .catch(() => { /* the ensure's final check rejects; a later ask retries */ })
+      .catch((error) => {
+        // The ensure's final check rejects; a later ask retries. Logged so a failing service or
+        // database is visible rather than an empty pane.
+        console.error(`[book-view] book ${id}: reading lines ${start}-${end} failed`, error)
+      })
       .finally(() => { runs.splice(runs.indexOf(entry), 1) })
     runs.push(entry)
     return entry.done

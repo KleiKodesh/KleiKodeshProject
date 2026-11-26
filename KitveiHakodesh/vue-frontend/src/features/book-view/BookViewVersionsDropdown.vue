@@ -16,7 +16,7 @@ import { storeToRefs } from 'pinia'
 import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
+import { choiceItems, submenuRow, type MenuChoice } from '@/composables/useToolbarMoreMenu'
 import type { BookVersionRow } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -25,8 +25,6 @@ const { t } = useI18n()
 const props = defineProps<{
   versions: BookVersionRow[]
   activeVersionId: number | null
-  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
-  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean]; select: [versionId: number | null] }>()
@@ -55,7 +53,6 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 
@@ -78,22 +75,30 @@ function onSelect(versionId: number | null) {
   if (versionId === props.activeVersionId) return
   emit('select', versionId)
 }
+
+/** This control as a row of the toolbar's "more" menu: the merged text and each version, the active one ticked. */
+function moreMenuRow(closeMenu: () => void) {
+  const choices: MenuChoice<number | null>[] = [
+    { value: null, label: t('bookView.versions.default') },
+    ...props.versions.map((v) => ({ value: v.id, label: labelFor(v), title: v.heVersionNotes || v.versionNotes || v.versionSource || undefined })),
+  ]
+  return submenuRow(t('bookView.versions.title'), IconManuscript, choiceItems(choices, props.activeVersionId, onSelect, closeMenu))
+}
+defineExpose({ moreMenuRow })
 </script>
 
 <template>
-  <div class="versions-wrapper" :class="{ 'overflow-host': inOverflow }">
+  <div class="versions-wrapper">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen || activeVersionId != null, 'overflow-row': inOverflow }"
-      :role="inOverflow ? 'menuitem' : undefined"
+      :class="{ active: isOpen || activeVersionId != null }"
       :title="buttonTitle"
       @click="toggleOpen"
     >
       <IconManuscript />
-      <span v-if="inOverflow">{{ $t('bookView.versions.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="versions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="versions-dropdown" :class="dropdownPositionClass">
       <button
         class="version-row"
         :class="{ selected: activeVersionId == null }"
