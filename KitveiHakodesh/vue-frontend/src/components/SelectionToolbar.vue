@@ -5,13 +5,13 @@
  * buttons, and the trailing "more" button opens that ContextMenu with the full list.
  * Logic: useSelectionToolbar. Look: ContextMenu's tokens (background, border, radius, shadow, hover).
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { IconMoreHorizontal20Regular } from '@iconify-prerendered/vue-fluent'
 import { useI18n } from 'vue-i18n'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
-import { useSelectionToolbar, selectionToolbarButtons } from '@/composables/useSelectionToolbar'
+import { useSelectionToolbar, selectionToolbarButtons, type SelectionToolbarButton } from '@/composables/useSelectionToolbar'
 import type ContextMenu from '@/components/ContextMenu.vue'
-import type { ContextMenuItem, ContextMenuTextItem } from '@/components/ContextMenu.vue'
+import type { ContextMenuItem, ContextMenuTextItem, ContextMenuComponentItem } from '@/components/ContextMenu.vue'
 
 const props = defineProps<{
   /** The element whose selections this bar serves. */
@@ -24,6 +24,8 @@ const props = defineProps<{
   menu: InstanceType<typeof ContextMenu> | null
   isBlocked?: () => boolean
   prepare?: () => void
+  /** How many menu items become buttons (default 4); the rest stay under "more". */
+  maxButtons?: number
 }>()
 
 const { t } = useI18n()
@@ -37,7 +39,38 @@ const toolbar = useSelectionToolbar({
   prepare: () => props.prepare?.(),
 })
 
-const buttons = computed(() => selectionToolbarButtons(props.items))
+const buttons = computed(() => selectionToolbarButtons(props.items, props.maxButtons))
+
+// A component row's button opens that same row in a small panel under the bar (one at a time).
+const openPanelIndex = ref<number | null>(null)
+watch(toolbar.visible, (visible) => { if (!visible) openPanelIndex.value = null })
+
+function buttonLabel(item: SelectionToolbarButton): string {
+  return item.type === 'component' ? item.toolbar.label : item.label
+}
+
+function buttonIcon(item: SelectionToolbarButton) {
+  return item.type === 'component' ? item.toolbar.icon : item.icon
+}
+
+function press(item: SelectionToolbarButton, index: number): void {
+  if (item.type === 'component') {
+    toolbar.restoreSelection()
+    openPanelIndex.value = openPanelIndex.value === index ? null : index
+    return
+  }
+  run(item)
+}
+
+function closePanel(): void {
+  openPanelIndex.value = null
+  toolbar.hide()
+}
+
+const openPanelItem = computed(() => {
+  const item = openPanelIndex.value == null ? null : buttons.value[openPanelIndex.value]
+  return item?.type === 'component' ? (item as ContextMenuComponentItem) : null
+})
 
 function tooltip(item: ContextMenuTextItem): string {
   return item.shortcut ? `${item.label} (${item.shortcut})` : item.label
@@ -77,11 +110,12 @@ defineExpose({ hide: toolbar.hide })
         :key="index"
         type="button"
         class="selection-toolbar-button"
-        :title="tooltip(item)"
-        :aria-label="item.label"
-        @click="run(item)"
+        :class="{ open: openPanelIndex === index }"
+        :title="item.type === 'component' ? buttonLabel(item) : tooltip(item)"
+        :aria-label="buttonLabel(item)"
+        @click="press(item, index)"
       >
-        <component :is="item.icon" />
+        <component :is="buttonIcon(item)" />
       </button>
       <button
         v-if="menu"
@@ -93,6 +127,9 @@ defineExpose({ hide: toolbar.hide })
       >
         <IconMoreHorizontal20Regular />
       </button>
+      <div v-if="openPanelItem" class="selection-toolbar-panel">
+        <component :is="openPanelItem.component" v-bind="openPanelItem.props ?? {}" @close="closePanel" />
+      </div>
     </div>
   </Teleport>
 </template>
@@ -134,6 +171,25 @@ defineExpose({ hide: toolbar.hide })
 /* ContextMenu's row hover/press tints. */
 .selection-toolbar-button:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.selection-toolbar-button.open {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+/* A component row opened from its button: ContextMenu's chrome and row metrics, under the bar. */
+.selection-toolbar-panel {
+  --context-menu-row-height: 27px;
+  --context-menu-row-padding-block: 2px;
+  --context-menu-row-padding-inline: 10px;
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  white-space: nowrap;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.08);
 }
 .selection-toolbar-button:active {
   background: color-mix(in srgb, var(--text-primary) 13%, transparent);

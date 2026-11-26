@@ -1,7 +1,7 @@
 import { ref, computed, nextTick, watch, type Ref } from 'vue'
 import { useEventListener, unrefElement, type MaybeElementRef } from '@vueuse/core'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
-import type { ContextMenuItem, ContextMenuTextItem } from '@/components/ContextMenu.vue'
+import type { ContextMenuItem, ContextMenuTextItem, ContextMenuComponentItem } from '@/components/ContextMenu.vue'
 
 /** Marks a container that has its own selection toolbar; the app-wide fallback stays out of it. */
 export const SELECTION_TOOLBAR_OWNER_ATTRIBUTE = 'data-selection-toolbar'
@@ -15,11 +15,17 @@ const VIEWPORT_MARGIN_PX = 4
 // Keys that end a keyboard selection (Shift+arrows, Shift+Home/End, Ctrl+A).
 const SELECTION_KEYS = new Set(['Shift', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'a', 'A'])
 
-/** The context menu's icon text items - the toolbar's buttons, in menu order. */
-export function selectionToolbarButtons(items: ContextMenuItem[]): ContextMenuTextItem[] {
+/** A toolbar button: a text item runs its action, a component item opens its component in a panel. */
+export type SelectionToolbarButton = ContextMenuTextItem | (ContextMenuComponentItem & { toolbar: NonNullable<ContextMenuComponentItem['toolbar']> })
+
+/** The context menu's icon text items and toolbar-enabled component rows - the toolbar's buttons, in menu order. */
+export function selectionToolbarButtons(items: ContextMenuItem[], maxButtons = SELECTION_TOOLBAR_MAX_BUTTONS): SelectionToolbarButton[] {
   return items
-    .filter((item): item is ContextMenuTextItem => (item.type === undefined || item.type === 'text') && !!(item as ContextMenuTextItem).icon)
-    .slice(0, SELECTION_TOOLBAR_MAX_BUTTONS)
+    .filter((item): item is SelectionToolbarButton => {
+      if (item.type === 'component') return !!item.toolbar
+      return (item.type === undefined || item.type === 'text') && !!item.icon && !item.hideInToolbar
+    })
+    .slice(0, maxButtons)
 }
 
 /**

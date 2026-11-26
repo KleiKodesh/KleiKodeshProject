@@ -6,6 +6,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
  * alert instead of acting - which a text item has nowhere to render.
  */
 import { ref } from 'vue'
+import { IconNoteAdd20Regular } from '@iconify-prerendered/vue-fluent'
 import AlertDialog from '@/components/AlertDialog.vue'
 
 const hostWindow = useHostWindow()
@@ -37,6 +38,7 @@ function onNote() {
       :message="$t('bookView.annotation.selectFirst')"
       @close="showNoSelectionAlert = false"
     />
+    <IconNoteAdd20Regular class="row-icon" />
     <span class="note-label">{{ $t('bookView.annotation.addNote') }}</span>
   </div>
 </template>
@@ -52,6 +54,14 @@ function onNote() {
   height: var(--context-menu-row-height);
   cursor: pointer;
   font-size: 12px;
+  /* ContextMenu's icon-to-label gap */
+  gap: 6px;
+}
+
+.row-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }
 
 .note-row:hover {

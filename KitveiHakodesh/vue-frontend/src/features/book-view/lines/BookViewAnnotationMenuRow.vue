@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref } from 'vue'
-import { IconEraser20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconEraser20Regular, IconHighlight20Regular } from '@iconify-prerendered/vue-fluent'
 import { HIGHLIGHT_COLORS_LIST } from './bookViewAnnotationColors'
 import AlertDialog from '@/components/AlertDialog.vue'
 
@@ -50,6 +50,7 @@ function argbToCss(signedArgb: number): string {
       @close="showNoSelectionAlert = false"
     />
     <div class="highlight-row">
+      <IconHighlight20Regular class="row-icon" />
       <span class="highlight-label">{{ $t('bookView.annotation.highlight') }}</span>
       <button
         v-for="colorArgb in HIGHLIGHT_COLORS_LIST"
@@ -82,6 +83,14 @@ function argbToCss(signedArgb: number): string {
 
 .highlight-row {
   gap: 5px;
+}
+
+.row-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  /* 5px row gap + 1px = ContextMenu's 6px icon-to-label gap */
+  margin-inline-end: 1px;
 }
 
 .highlight-label {

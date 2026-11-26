@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, type Directive } from 'vue'
+import { IconRename20Regular, IconTarget20Regular, IconAdd20Regular, IconTextIndentIncreaseRtl20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
+import { computed, nextTick, ref, shallowRef, type Directive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEventListener } from '@vueuse/core'
 import { IconAdd16Regular, IconMoreHorizontal16Regular } from '@iconify-prerendered/vue-fluent'
@@ -137,19 +138,19 @@ function addChildEntry(parentId: number) {
 }
 
 const menuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const menuItems = ref<ContextMenuItem[]>([])
+const menuItems = shallowRef<ContextMenuItem[]>([])
 
 function openRowMenu(node: TreeNodeItem, x: number, y: number) {
   if (!editable.value || !props.edit) return
   const edit = props.edit
   menuItems.value = [
-    { label: t('pdfReader.outline.rename'), shortcut: 'F2', action: () => void startRename(node.id) },
-    { label: t('pdfReader.outline.retarget'), action: () => edit.retarget(node.id) },
+    { label: t('pdfReader.outline.rename'), icon: IconRename20Regular, shortcut: 'F2', action: () => void startRename(node.id) },
+    { label: t('pdfReader.outline.retarget'), icon: IconTarget20Regular, action: () => edit.retarget(node.id) },
     { type: 'separator' },
-    { label: t('pdfReader.outline.addAfter'), shortcut: 'Ctrl+B', action: () => addEntry(node.id) },
-    { label: t('pdfReader.outline.addChild'), action: () => addChildEntry(node.id) },
+    { label: t('pdfReader.outline.addAfter'), icon: IconAdd20Regular, shortcut: 'Ctrl+B', action: () => addEntry(node.id) },
+    { label: t('pdfReader.outline.addChild'), icon: IconTextIndentIncreaseRtl20Regular, action: () => addChildEntry(node.id) },
     { type: 'separator' },
-    { label: t('pdfReader.outline.delete'), shortcut: 'Del', action: () => edit.remove(node.id) },
+    { label: t('pdfReader.outline.delete'), icon: IconDelete20Regular, shortcut: 'Del', action: () => edit.remove(node.id) },
   ]
   void menuRef.value?.showAtPosition(x, y)
 }

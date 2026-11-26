@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ensureMultiBookCopyAllowed } from '../bookProtection'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { useTimeoutFn } from '@vueuse/core'
+import { useTimeoutFn, useEventListener } from '@vueuse/core'
+import { t } from '@/i18n'
+import { showToast } from '@/composables/useToast'
+import { copyTextToClipboard } from '@/utils/clipboard'
+import { buildLineLink } from '@/utils/appDeepLink'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
@@ -519,6 +523,39 @@ function buildCommentaryContentHtmlForRange(firstIndex: number, lastIndex: numbe
   return parts.join('')
 }
 
+// "Copy link to this passage" (the book view's line link): the commentary line the menu was
+// opened on, or where the selection starts; it links into the commentary book itself.
+let pressedLinkNode: Node | null = null
+useEventListener(scrollerEl, 'pointerdown', (event: PointerEvent) => { pressedLinkNode = event.target as Node | null })
+
+function commentaryLinkTarget(node: Node | null): { bookId: number; lineIndex: number } | null {
+  const element = node instanceof Element ? node : (node?.parentElement ?? null)
+  const row = element?.closest('[data-index]') as HTMLElement | null
+  const index = row?.dataset['index'] == null ? -1 : parseInt(row.dataset['index'], 10)
+  const item = flatItems.value[index]
+  if (!item) return null
+  const target = item.type === 'header'
+    ? { bookId: item.bookId, lineIndex: item.firstLineIndex ?? -1 }
+    : { bookId: headerAt(index)?.bookId ?? 0, lineIndex: item.line.lineIndex }
+  return target.bookId > 0 && target.lineIndex >= 0 ? target : null
+}
+
+function copyCommentaryLineLink(): void {
+  const selection = hostWindow.getSelection()
+  const selectionStart = selection && selection.rangeCount > 0 && !selection.isCollapsed && scrollerEl.value?.contains(selection.anchorNode)
+    ? selection.getRangeAt(0).startContainer
+    : null
+  const target = commentaryLinkTarget(selectionStart) ?? commentaryLinkTarget(pressedLinkNode)
+  if (!target) {
+    showToast(t('bookView.link.noLine'), { variant: 'error' })
+    return
+  }
+  copyTextToClipboard(buildLineLink(target.bookId, target.lineIndex)).then((copied) => {
+    if (copied) showToast(t('bookView.link.copied'))
+    else showToast(t('bookView.link.failed'), { variant: 'error' })
+  })
+}
+
 const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCopy: onCommentaryCopy, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
@@ -575,6 +612,7 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
     ensureAllContents: () => props.ensureLineContents(allLineIds()),
   },
   () => openCommentaryErrorReport(),
+  copyCommentaryLineLink,
 )
 // A commentary line belongs to the commentary book its group came from, never to the
 // base book this pane is attached to — so the report's identity is looked up from the

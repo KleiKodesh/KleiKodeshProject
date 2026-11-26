@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, nextTick } from 'vue'
-import { IconChevronLeft16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconChevronLeft16Regular, IconCheckmark16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
 export interface ContextMenuTextItem {
@@ -11,6 +11,8 @@ export interface ContextMenuTextItem {
   action: () => void
   /** Optional icon shown before the label. */
   icon?: import('vue').Component
+  /** Not offered as a button on the selection toolbar (it stays in the menu). */
+  hideInToolbar?: boolean
 }
 
 export interface ContextMenuSeparatorItem {
@@ -30,6 +32,8 @@ export interface ContextMenuComponentItem {
   type: 'component'
   component: import('vue').Component
   props?: Record<string, unknown>
+  /** Offered on the selection toolbar as this icon button; it opens the same component in a small panel. */
+  toolbar?: { icon: import('vue').Component; label: string }
 }
 
 // Items a submenu may contain — one level of nesting only, so no submenus (and no
@@ -231,7 +235,8 @@ defineExpose({ show, showAtPosition, hide })
             class="item-icon"
           />
           <span v-else class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
-          <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
+          <span class="item-label">{{ (item as ContextMenuCheckboxItem).label }}</span>
+          <IconCheckmark16Regular v-if="(item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked" class="item-check" />
         </div>
         <div
           v-else-if="item.type === 'submenu'"
@@ -275,7 +280,8 @@ defineExpose({ show, showAtPosition, hide })
                 class="item-icon"
               />
               <span v-else class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
-              <span>{{ (child as ContextMenuCheckboxItem).label }}</span>
+              <span class="item-label">{{ (child as ContextMenuCheckboxItem).label }}</span>
+              <IconCheckmark16Regular v-if="(child as ContextMenuCheckboxItem).icon && (child as ContextMenuCheckboxItem).checked" class="item-check" />
             </div>
             <div v-else class="context-menu-item" @click.stop="runItem(child as ContextMenuTextItem)">
               <component :is="(child as ContextMenuTextItem).icon" v-if="(child as ContextMenuTextItem).icon" class="item-icon" />
@@ -295,6 +301,13 @@ defineExpose({ show, showAtPosition, hide })
   width: 16px;
   height: 16px;
   color: inherit;
+}
+.item-check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-inline-start: 10px;
+  color: var(--accent-color);
 }
 .context-menu-item.is-selected {
   background: color-mix(in srgb, var(--accent-color) 18%, transparent);

@@ -1,3 +1,4 @@
+import { IconLink20Regular, IconSelectAllOn20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconDocumentHeader20Regular, IconDocumentFooter20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
 import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
@@ -115,6 +116,8 @@ export function useCommentaryCopy(
   },
   /** Opens the "report a mistake" dialog for the pressed commentary line. */
   onReportError?: () => void,
+  /** Copies a link to the commentary passage pressed or selected (as the book view's line link). */
+  onCopyLineLink?: () => void,
 ) {
   const hostWindow = useHostWindow()
   const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
@@ -718,20 +721,21 @@ export function useCommentaryCopy(
   }
 
   const contextMenuItems: ContextMenuItem[] = [
-    { label: t('bookView.selectAll'), action: selectAllInContainer, shortcut: 'Ctrl+A' },
+    { label: t('bookView.selectAll'), icon: IconSelectAllOn20Regular, hideInToolbar: true, action: selectAllInContainer, shortcut: 'Ctrl+A' },
     { label: t('bookView.copy.copy'), icon: IconCopy20Regular, action: onCopy, shortcut: 'Ctrl+C' },
     { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
     { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+    ...(onCopyLineLink ? [{ label: t('bookView.copy.link'), icon: IconLink20Regular, action: onCopyLineLink }] : []),
     addNoteRow,
     { type: 'separator' },
     {
       type: 'submenu',
-      label: t('bookView.copy.options'),
+      label: t('bookView.copy.options'), icon: IconOptions20Regular,
       items: [
         // Independent checkboxes — all can be active simultaneously
         {
           type: 'checkbox',
-          label: t('bookView.copy.joinLines'),
+          label: t('bookView.copy.joinLines'), icon: IconTextWrapOff20Regular,
           get checked() { return settingsStore.copyJoinLines },
           onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
         },
@@ -740,25 +744,25 @@ export function useCommentaryCopy(
         // copyFlagExclusivity.ts; do not add ad-hoc clears here.
         {
           type: 'checkbox',
-          label: t('bookView.copy.sourceStart'),
+          label: t('bookView.copy.sourceStart'), icon: IconDocumentHeader20Regular,
           get checked() { return settingsStore.copySourcePosition === 'start' },
           onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
         },
         {
           type: 'checkbox',
-          label: t('bookView.copy.sourceEnd'),
+          label: t('bookView.copy.sourceEnd'), icon: IconDocumentFooter20Regular,
           get checked() { return settingsStore.copySourcePosition === 'end' },
           onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
         },
         {
           type: 'checkbox',
-          label: t('bookView.copy.quote'),
+          label: t('bookView.copy.quote'), icon: IconTextQuote20Regular,
           get checked() { return settingsStore.copyAsSourceWithQuotation },
           onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
         },
         {
           type: 'checkbox',
-          label: t('bookView.copy.withNotes'),
+          label: t('bookView.copy.withNotes'), icon: IconTextFootnote20Regular,
           get checked() { return settingsStore.copyWithNotes },
           onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
         },
@@ -766,7 +770,7 @@ export function useCommentaryCopy(
       ],
     },
     { type: 'separator' },
-    { label: t('bookView.report.title'), action: onReportError ?? (() => {}) },
+    { label: t('bookView.report.title'), icon: IconFlag20Regular, action: onReportError ?? (() => {}) },
     { type: 'separator' },
     annotationRow,
   ]

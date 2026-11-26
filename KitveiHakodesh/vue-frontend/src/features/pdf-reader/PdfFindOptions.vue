@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { IconOptions20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconOptions20Regular, IconHighlight20Regular, IconTextCaseTitle20Regular, IconTextWholeWord20Regular, IconTextAsterisk20Regular } from '@iconify-prerendered/vue-fluent'
 import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
 import { PDF_KEYS, withKey } from './usePdfReaderShortcuts'
 
@@ -17,11 +17,18 @@ const { t } = useI18n()
 
 const button = ref<HTMLElement | null>(null)
 const menu = ref<InstanceType<typeof ContextMenu> | null>(null)
+const ICONS: Record<keyof PdfFindOptionsModel, Component> = {
+  highlightAll: IconHighlight20Regular,
+  caseSensitive: IconTextCaseTitle20Regular,
+  entireWord: IconTextWholeWord20Regular,
+  matchDiacritics: IconTextAsterisk20Regular,
+}
 const KEYS: (keyof PdfFindOptionsModel)[] = ['highlightAll', 'caseSensitive', 'entireWord', 'matchDiacritics']
 const items = computed<ContextMenuItem[]>(() =>
   KEYS.map((k) => ({
     type: 'checkbox',
     label: withKey(t(`pdfReader.find.${k}`), PDF_KEYS.find[k]),
+    icon: ICONS[k],
     checked: options.value[k],
     onChange: (v: boolean) => (options.value = { ...options.value, [k]: v }),
   })),

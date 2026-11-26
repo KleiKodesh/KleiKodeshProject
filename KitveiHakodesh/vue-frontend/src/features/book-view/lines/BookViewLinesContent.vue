@@ -672,7 +672,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
 <template>
   <div dir="rtl" class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" />
+    <SelectionToolbar :container="windowedScroller?.scrollerElement ?? null" :items="contextMenuItems" :menu="contextMenuRef" :max-buttons="6" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
       :selected-text="errorReportTarget.selectedText"
