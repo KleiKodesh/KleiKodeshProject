@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, markRaw } from 'vue'
+import { ref, watch, markRaw } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggestionCard'
@@ -27,9 +27,12 @@ const itemTitle = (item: SearchFsItem) =>
     ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
 
-// Same shape as the search list row: author in the title, folder path below.
-const cards = computed((): CardData[] =>
-  props.items.map((item, i) => ({
+// Same shape as the search list row: author in the title, folder path below. Built per RENDERED
+// card, never for all hits: reading a hit's book (title, authors, path) is what asks for its
+// details, and results are never capped.
+function cardAt(i: number): CardData {
+  const item = props.items[i]!
+  return {
     key: item.uid,
     title: itemTitle(item),
     path: item.kind === 'file' ? fileFolder(item.file) : item.book.parentPath ?? '',
@@ -39,8 +42,8 @@ const cards = computed((): CardData[] =>
       focusedIndex.value = i
       emit('select', item, openInNewTab)
     },
-  })),
-)
+  }
+}
 
 // Combobox model: DOM focus stays in the page's search input, which forwards its
 // keydown here. Nothing here may take focus.
@@ -67,9 +70,9 @@ defineExpose({
 </script>
 
 <template>
-  <WindowedCardGrid ref="gridRef" class="catalog-cards" :count="cards.length" view="cards" :list-key="props.items" stretch @mousedown.prevent>
+  <WindowedCardGrid ref="gridRef" class="catalog-cards" :count="props.items.length" view="cards" :list-key="props.items" stretch @mousedown.prevent>
     <template #item="{ index }">
-      <HomeSuggestionCard :card="cards[index]!" :class="{ 'is-focused': focusedIndex === index }" />
+      <HomeSuggestionCard :card="cardAt(index)" :class="{ 'is-focused': focusedIndex === index }" />
     </template>
   </WindowedCardGrid>
 </template>

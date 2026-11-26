@@ -1,6 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { summaryBook } from '@/stores/bookSummaries'
 import type { UserSpaceRoot } from '@/stores/userSpaceStore'
 import { userSpaceSearch, type UserSpaceSearchHit, type UserSpaceSearchRoot } from '@/webview-host/bridge'
 import { reportCatalogTocSearchResponse, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
@@ -36,7 +37,6 @@ export function useUserSpaceSearch(searchQuery: Ref<string>, roots: Ref<UserSpac
   )
 
   function toItems(hits: UserSpaceSearchHit[]): SearchFsItem[] {
-    const bookById = new Map(store.allBooks.map((b) => [b.id, b]))
     const items: SearchFsItem[] = []
     hits.forEach((hit, i) => {
       if (hit.filePath) {
@@ -44,10 +44,10 @@ export function useUserSpaceSearch(searchQuery: Ref<string>, roots: Ref<UserSpac
         items.push({ uid: `p-${hit.filePath}`, kind: 'file', file: { path: hit.filePath, name: hit.filePath.substring(cut + 1), title: hit.title || undefined, folderTitle: hit.displayFolder || undefined } })
         return
       }
-      const book = bookById.get(hit.bookId)
-      if (!book) return // not in the loaded catalog (stale index row)
+      // The hit stays thin; the row's book details are asked for when the row renders.
+      const book = summaryBook(hit.bookId)
       if (!hit.tocPath) {
-        items.push({ uid: `b-${book.id}`, kind: 'book', book })
+        items.push({ uid: `b-${hit.bookId}`, kind: 'book', book })
         return
       }
       items.push({

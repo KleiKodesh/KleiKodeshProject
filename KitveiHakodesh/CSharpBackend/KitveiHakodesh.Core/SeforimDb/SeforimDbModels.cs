@@ -503,6 +503,8 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Title { get; set; } = "";
         /// <summary>The book's catalog categories, root first.</summary>
         public List<string> CategoryPath { get; set; } = new();
+        /// <summary>The book's authors, ', '-joined; "" when it has none.</summary>
+        public string Authors { get; set; } = "";
     }
 
     [MessagePackObject(keyAsPropertyName: true)]

@@ -18,18 +18,18 @@
 
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { useBooksDataStore } from '@/stores/booksDataStore'
+import { summaryBook, type SearchBook } from '@/stores/bookSummaries'
 import { catalogTocSearch } from '@/webview-host/bridge'
 import { reportCatalogTocSearchResponse, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
-import type { BookRow } from '@/webview-host/queries.types'
 import type { LocalFileItem } from './bookCatalogTree'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }
+/** A result row's book: its title, authors and path load per RENDERED row (stores/bookSummaries). */
+export type BookFsItem = { uid: string; kind: 'book'; book: SearchBook }
 export type TocFsItem = {
   uid: string
   kind: 'toc'
-  book: BookRow
+  book: SearchBook
   tocEntryId: number
   tocLineIndex: number | null
   tocTitle: string
@@ -74,21 +74,20 @@ const INDEX_NOT_READY_RETRY_MS = 1200
  * tree order) is preserved as-is — book hits are simply the level-0 docs, so they lead.
  */
 function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
-  const store = useBooksDataStore()
   const debouncedQuery = refDebounced(searchQuery, 150)
   const results = ref<SearchFsItem[]>([])
   const searching = ref(false)
 
   let searchGeneration = 0
 
+  // The hits stay thin (ids and ranking). A row's book details are asked for when the windowed
+  // list renders that row, not for the whole - uncapped - result set.
   const toItems = (hits: CatalogTocServiceHit[]): SearchFsItem[] => {
-    const bookById = new Map(store.allBooks.map((b) => [b.id, b]))
     const items: SearchFsItem[] = []
     for (const hit of hits) {
-      const book = bookById.get(hit.bookId)
-      if (!book) continue // book not in the loaded catalog (e.g. stale index row)
+      const book = summaryBook(hit.bookId)
       if (hit.level === 0) {
-        items.push({ uid: `b-${book.id}`, kind: 'book', book })
+        items.push({ uid: `b-${hit.bookId}`, kind: 'book', book })
       } else {
         // The UI prepends the book title itself. Navigation is line-based (tocEntryId
         // is no longer carried by the index).

@@ -1287,21 +1287,33 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (bookIds is null || bookIds.Count == 0) return list;
             using var conn = Open();
             var byId = new Dictionary<int, BookSummaryRow>();
-            using (var cmd = conn.CreateCommand())
+            foreach (var part in bookIds.Distinct().Chunk(900))   // under SQLite's 999 variables
             {
-                cmd.CommandText = SeforimDbSqlStrings.GetBookSummaryPaths(bookIds.Count);
-                BindList(cmd, "p", bookIds);
-                using var r = cmd.ExecuteReader();
-                // Rows come per book, root category first (category.level ascending).
-                while (r.Read())
+                var ids = part.ToList();
+                using (var cmd = conn.CreateCommand())
                 {
-                    int id = r.GetInt32(0);
-                    if (!byId.TryGetValue(id, out var row))
-                        byId[id] = row = new BookSummaryRow { Id = id, Title = r.IsDBNull(1) ? "" : r.GetString(1) };
-                    if (!r.IsDBNull(2)) row.CategoryPath.Add(r.GetString(2));
+                    cmd.CommandText = SeforimDbSqlStrings.GetBookSummaryPaths(ids.Count);
+                    BindList(cmd, "p", ids);
+                    using var r = cmd.ExecuteReader();
+                    // Rows come per book, root category first (category.level ascending).
+                    while (r.Read())
+                    {
+                        int id = r.GetInt32(0);
+                        if (!byId.TryGetValue(id, out var row))
+                            byId[id] = row = new BookSummaryRow { Id = id, Title = r.IsDBNull(1) ? "" : r.GetString(1) };
+                        if (!r.IsDBNull(2)) row.CategoryPath.Add(r.GetString(2));
+                    }
+                }
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = SeforimDbSqlStrings.GetBookAuthors(ids.Count);
+                    BindList(cmd, "p", ids);
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                        if (byId.TryGetValue(r.GetInt32(0), out var row) && !r.IsDBNull(1)) row.Authors = r.GetString(1);
                 }
             }
-            foreach (int id in bookIds)
+            foreach (int id in bookIds.Distinct())
                 if (byId.TryGetValue(id, out var row)) list.Add(row);
             return list;
         }

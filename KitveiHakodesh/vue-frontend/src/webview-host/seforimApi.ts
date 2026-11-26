@@ -539,6 +539,8 @@ export interface BookSummary {
   title: string
   /** The book's catalog categories, root first. */
   categoryPath: string[]
+  /** The book's authors, ', '-joined; '' when it has none. */
+  authors: string
 }
 
 /** Title and catalog path of the given books; ids the library does not have are absent. */

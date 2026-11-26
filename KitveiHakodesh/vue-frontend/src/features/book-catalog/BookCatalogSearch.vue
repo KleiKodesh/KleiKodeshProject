@@ -20,7 +20,7 @@ const props = defineProps<{
   searching: boolean
 }>()
 const emit = defineEmits<{
-  selectBook: [BookRow, boolean?]
+  selectBook: [Pick<BookRow, 'id' | 'title'>, boolean?]
   selectToc: [TocFsItem, boolean?]
   /** UserSpace only: a computer file. */
   selectFile: [LocalFileItem, boolean?]

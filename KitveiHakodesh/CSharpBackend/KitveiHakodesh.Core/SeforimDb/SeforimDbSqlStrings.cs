@@ -762,6 +762,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetBookBasics(int count) =>
             $"SELECT id, title, categoryId FROM book WHERE id IN ({InPlaceholders("p", count)})";
 
+        /// <summary>The author names of the given books, ', '-joined per book (books with none are absent).</summary>
+        public static string GetBookAuthors(int count) => $@"
+            SELECT ba.bookId, group_concat(a.name, ', ')
+            FROM book_author ba JOIN author a ON a.id = ba.authorId
+            WHERE ba.bookId IN ({InPlaceholders("p", count)})
+            GROUP BY ba.bookId";
+
         /// <summary>For each given category: its folder titles from category_closure, the category
         /// itself first and its root last (category.level descending).</summary>
         public static string GetCategoryChainsLeafFirst(int count) => $@"

@@ -303,7 +303,7 @@ onMounted(() => {
   openSearch()
 })
 
-function onSelectBook(book: BookRow, openInNewTab = false) {
+function onSelectBook(book: Pick<BookRow, 'id' | 'title'>, openInNewTab = false) {
   editingSearch.value = false
   paneNavigation.openOrUpdateActiveTab(
     {

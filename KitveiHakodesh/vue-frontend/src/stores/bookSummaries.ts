@@ -94,3 +94,32 @@ export function bookTitle(id: number): string {
 export function bookCategoryPath(id: number): string[] {
   return summaryOf(id)?.categoryPath ?? []
 }
+
+/** The book's authors, ', '-joined; '' until fetched or when it has none. */
+export function bookAuthors(id: number): string {
+  return summaryOf(id)?.authors ?? ''
+}
+
+/** What a result row shows of a book. */
+export interface SearchBook {
+  readonly id: number
+  readonly title: string
+  readonly authors: string
+  /** The catalog path, ' / '-joined. */
+  readonly parentPath: string
+}
+
+/**
+ * A search result's book for a row: its fields read from the summary cache WHEN the row renders,
+ * so only the rows a windowed list actually shows are ever fetched (batched, one request per
+ * tick) - never the whole result set - and the page holds no catalog. Reactive: a field reads
+ * '' until its summary arrives, then the row updates.
+ */
+export function summaryBook(id: number): SearchBook {
+  return {
+    id,
+    get title() { return bookTitle(id) },
+    get authors() { return bookAuthors(id) },
+    get parentPath() { return bookCategoryPath(id).join(' / ') },
+  }
+}

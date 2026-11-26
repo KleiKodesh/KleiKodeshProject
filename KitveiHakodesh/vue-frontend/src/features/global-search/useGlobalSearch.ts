@@ -46,6 +46,7 @@ import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewB
 import { normalizeAddinQuery, queryTargetsAddins } from '@/features/local-file-search/otzariaAddins'
 import { catalogTocSearch, fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { summaryBook, type SearchBook } from '@/stores/bookSummaries'
 import { parseBookAddress } from '@/layout/addressBarPath'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { BookRow } from '@/webview-host/queries.types'
@@ -62,7 +63,8 @@ import {
 
 export interface CatalogSearchResult {
   source: 'catalog'
-  book: BookRow
+  /** Its title, authors and path load when the row renders (stores/bookSummaries). */
+  book: SearchBook
 }
 
 export interface HebrewBooksSearchResult {
@@ -277,13 +279,12 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
   }
 
   function applyCatalogHits(hits: CatalogTocServiceHit[]): void {
-    const bookById = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
     const books: CatalogSearchResult[] = []
     const tocItems: TocFsItem[] = []
 
+    // The hits stay thin; a row's book details are asked for when that row renders.
     for (const hit of hits) {
-      const book = bookById.get(hit.bookId)
-      if (!book) continue
+      const book = summaryBook(hit.bookId)
       if (hit.level === 0) {
         if (books.length < MAX_RESULTS_PER_SOURCE) books.push({ source: 'catalog', book })
       } else if (tocItems.length < MAX_RESULTS_PER_SOURCE) {

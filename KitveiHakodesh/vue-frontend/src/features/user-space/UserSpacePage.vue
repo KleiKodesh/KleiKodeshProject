@@ -170,7 +170,7 @@ onMounted(() => {
 })
 
 // ── Opening ──────────────────────────────────────────────────────────────────
-function onSelectBook(book: BookRow, openInNewTab = false) {
+function onSelectBook(book: Pick<BookRow, 'id' | 'title'>, openInNewTab = false) {
   paneNavigation.openOrUpdateActiveTab({ title: book.title, route: '/book-view', bookId: book.id }, openInNewTab)
 }
 
