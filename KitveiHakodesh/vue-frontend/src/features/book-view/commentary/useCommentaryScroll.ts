@@ -230,6 +230,14 @@ export function useCommentaryScroll(
     // nothing and runs the request's follow-up (the search mark).
     if (request) void goTo(request)
   }
+  /**
+   * A new list is being swapped into the same scroller (its `restart`): a request made
+   * now is for the new list, so it waits and is run when the scroller opens it. The old
+   * list stays on screen meanwhile, so what the header shows (isScrollerOpen) stays too.
+   */
+  function listChanging() {
+    isOpen = false
+  }
   // The scroller went with its list: nothing is on screen until the next one opens.
   watch(scroller, (api) => { if (!api) { isOpen = false; isScrollerOpen.value = false } }, { flush: 'sync' })
 
@@ -303,6 +311,7 @@ export function useCommentaryScroll(
     onMoveEnd,
     startRow,
     scrollerOpened,
+    listChanging,
     onScroll,
     scrollToGroup,
     scrollToFlatIndex,

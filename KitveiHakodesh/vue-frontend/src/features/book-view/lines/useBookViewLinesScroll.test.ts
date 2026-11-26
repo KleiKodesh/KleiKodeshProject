@@ -56,6 +56,7 @@ function mountScroll(
     scrollbarElement: null,
     renderedRange: { start: 0, end: 10 },
     scrollToIndex: vi.fn(async () => true),
+    restart: vi.fn(async () => true),
     revealIndex: vi.fn(),
     readFirstVisible: () => ({ index: 3, offsetWithinRow: 0 }),
     isRowRendered: () => true,

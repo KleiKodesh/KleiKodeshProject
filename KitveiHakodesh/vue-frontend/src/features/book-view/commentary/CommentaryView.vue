@@ -204,11 +204,24 @@ const _commentaryZoom = computed({
 })
 useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: true })
 
-const visibleGroups = computed(() => props.groups)
+// The list ON SCREEN. It follows `props.groups`, except while another line's list is
+// on its way: the old list then stays on screen until the new one's first rows have
+// their text, and is swapped for it in the same scroller (see openList) - no blank.
+const shownGroups = shallowRef<CommentaryGroup[]>(props.groups)
+/** A new list (another line's) was asked for and has not been swapped in yet. */
+let isNewListPending = false
+watch(() => props.loading, (busy) => { if (busy) isNewListPending = true }, { flush: 'sync', immediate: true })
+watch(() => props.groups, (groups) => {
+  // No scroller yet: nothing to keep on screen. A filter or a pin change of the
+  // list on screen (no new list pending) applies at once, as always.
+  if (!isNewListPending || !scrollerStart.value) shownGroups.value = groups
+}, { flush: 'sync' })
 
-const flatItems = computed<FlatItem[]>(() => {
+const visibleGroups = computed(() => shownGroups.value)
+
+function flattenGroups(groups: CommentaryGroup[]): FlatItem[] {
   const items: FlatItem[] = []
-  for (const g of visibleGroups.value) {
+  for (const g of groups) {
     items.push({
       type: 'header',
       bookId: g.bookId,
@@ -222,7 +235,18 @@ const flatItems = computed<FlatItem[]>(() => {
     for (const l of g.lines) items.push({ type: 'line', line: l })
   }
   return items
-})
+}
+
+function headerIndexesOf(items: FlatItem[]): number[] {
+  const indexes: number[] = []
+  items.forEach((item, index) => { if (item.type === 'header') indexes.push(index) })
+  return indexes
+}
+
+const flatItems = computed<FlatItem[]>(() => flattenGroups(visibleGroups.value))
+
+/** The list being staged (openList): where it opens is decided over it, before it is shown. */
+let staged: { items: FlatItem[]; headers: number[] } | null = null
 
 /** A header row's TOC path: looked up per render, so the paths arriving re-render the headers only. */
 function tocPathOf(header: { groupKey: string }): string | undefined {
@@ -230,11 +254,7 @@ function tocPathOf(header: { groupKey: string }): string | undefined {
 }
 
 /** Row index of every group header, ascending — the bar's landmarks and the label's lookup. */
-const headerIndexes = computed(() => {
-  const indexes: number[] = []
-  flatItems.value.forEach((item, index) => { if (item.type === 'header') indexes.push(index) })
-  return indexes
-})
+const headerIndexes = computed(() => headerIndexesOf(flatItems.value))
 const headerLandmarkTiers = computed(() => [headerIndexes.value])
 
 /** The group a row belongs to: the last header at or above it. */
@@ -285,9 +305,8 @@ const {
 )
 
 /** Ids of the real lines (not headers, not the no-text rows) among flat items [start, end). */
-function lineIdsIn(start: number, end: number): number[] {
+function lineIdsIn(start: number, end: number, items: FlatItem[] = flatItems.value): number[] {
   const ids: number[] = []
-  const items = flatItems.value
   for (let index = Math.max(0, start); index < Math.min(end, items.length); index++) {
     const item = items[index]
     if (item?.type === 'line' && item.line.lineId > 0) ids.push(item.line.lineId)
@@ -423,9 +442,10 @@ const {
   scrollToFlatIndex,
   captureScrollPos,
   topVisibleFlatIndex,
+  listChanging,
 } = useCommentaryScroll(
-  () => flatItems.value,
-  () => headerIndexes.value,
+  () => staged?.items ?? flatItems.value,
+  () => staged?.headers ?? headerIndexes.value,
   scroller,
   (group) => emit('commentator', group),
 )
@@ -447,14 +467,38 @@ const scrollerStart = shallowRef<CommentaryRow | null>(null)
 const scrollerGeneration = ref(0)
 /** The line whose list the last scroller showed: the saved place belongs to that list only. */
 let lastShownAnchor: number | null | undefined
-const isListReady = computed(() => !props.loading && flatItems.value.length > 0 && props.pinSettled)
+let openToken = 0
+/** Rows around the start row whose text is fetched before a list is swapped in (the scroller's first window is 12 above, 36 below). */
+const SWAP_ROWS_ABOVE = 20
+const SWAP_ROWS_BELOW = 60
+const isListReady = computed(() => !props.loading && props.groups.length > 0 && props.pinSettled)
 // Sync: the list going away and the next one arriving can fall in one tick, and each
-// list must get its own decision and its own scroller.
+// list must get its own decision.
 watch(isListReady, (ready) => {
-  if (!ready) {
-    scrollerStart.value = null
+  if (ready) {
+    void openList()
     return
   }
+  // Loading, or the pin not settled yet: the list on screen stays. Settled with nothing
+  // to show (no commentary on the line, an error, no line): the old list goes.
+  if (!props.loading && !props.groups.length) {
+    openToken++
+    isNewListPending = false
+    shownGroups.value = props.groups
+    scrollerStart.value = null
+  }
+}, { flush: 'sync', immediate: true })
+
+/**
+ * Shows the list `props.groups` now holds. With no scroller yet, one is created at its
+ * start row. With one on screen, the new list is STAGED: its start row is decided over
+ * it, the text of the rows there is fetched while the old list stays on screen, and
+ * then the list and the scroller's window change in the same tick (`restart`): the
+ * rows already mounted are patched with the new text, never blanked or recreated.
+ */
+async function openList() {
+  const token = ++openToken
+  const next = props.groups
   const anchor = props.selectedLineId
   // The saved place is where this panel was — in the list of the line it was showing.
   // The first scroller of this view takes it as given (a reopened or remounted panel,
@@ -463,12 +507,48 @@ watch(isListReady, (ready) => {
   const samePlace = isSameList && props.savedScrollIndex != null
     ? { scrollIndex: props.savedScrollIndex, scrollOffset: props.savedScrollOffset ?? 0 }
     : null
+
+  if (!scrollerStart.value || !windowedScroller.value) {
+    isNewListPending = false
+    shownGroups.value = next
+    lastShownAnchor = anchor
+    scrollerStart.value = startRow(samePlace, props.pinnedGroup)
+    scrollerGeneration.value++
+    // A new scroller is not at rest until it has opened.
+    isScrollerMoving = true
+    return
+  }
+
+  // From here the list on screen is on its way out: navigation waits for the new one.
+  listChanging()
+  const items = flattenGroups(next)
+  staged = { items, headers: headerIndexesOf(items) }
+  const start = startRow(samePlace, props.pinnedGroup)
+  staged = null
+  await props.ensureLineContents(lineIdsIn(start.index - SWAP_ROWS_ABOVE, start.index + SWAP_ROWS_BELOW, items)).catch(() => {})
+  if (token !== openToken) return
+  if (props.groups !== next) {
+    // A filter or pin change rebuilt the groups while the text was coming: open the newer list.
+    void openList()
+    return
+  }
+
+  isNewListPending = false
   lastShownAnchor = anchor
-  scrollerStart.value = startRow(samePlace, props.pinnedGroup)
-  scrollerGeneration.value++
-  // A new scroller is not at rest until it has opened.
+  shownGroups.value = next
   isScrollerMoving = true
-}, { flush: 'sync', immediate: true })
+  // The scroller reads its new `count` after this render; it is all microtasks from
+  // here to the new window (its rows' text is in), so nothing in between is painted.
+  await nextTick()
+  if (token !== openToken) return
+  const landed = await windowedScroller.value?.restart(start.index, start.offsetPx)
+  // A restart that did not land (its rows could not be had) emits no `opened`: the panel
+  // still has to leave the swap, or navigation would wait for it forever.
+  if (landed === false && token === openToken) {
+    scrollerOpened()
+    isScrollerMoving = false
+  }
+}
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -917,7 +997,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
           @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
           @close="emit('close')"
         />
-        <div v-if="props.loading" class="state-overlay">
+        <div v-if="props.loading && !flatItems.length" class="state-overlay">
           <LoadingAnimation v-if="showLoadingSpinner" />
         </div>
         <div v-else-if="!flatItems.length" class="state-overlay">

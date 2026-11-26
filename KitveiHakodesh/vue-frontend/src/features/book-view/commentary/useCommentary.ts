@@ -326,7 +326,9 @@ export function useCommentary(
     const range = bookId > 0 ? selectedLineRange() : null
     const isMulti = range != null || (multiIds != null && multiIds.length > 0)
     loadedIdsSignature = selectionSignature(lineId)
-    groups.value = []
+    // The previous groups STAY: the panel keeps showing them until this line's list is
+    // ready and swaps it in (CommentaryView.openList). They are cleared below only when
+    // the answer is empty or failed - clearing here would blank the panel for the wait.
     resetContents()
     loading.value = true
     loadError.value = false
@@ -342,9 +344,11 @@ export function useCommentary(
         : isMulti ? multiIds! : [lineId]
 
       const list = await getCommentaryList(queryLines, bookId)
-      if (!list.length) return
-
       if (loadedForLineId !== lineId) return
+      if (!list.length) {
+        groups.value = []
+        return
+      }
 
       const built: CommentaryGroup[] = list.map((group) => ({
         bookId: group.bookId,
@@ -371,7 +375,10 @@ export function useCommentary(
       // Link/content queries failed (older or mismatched seforim DB, service
       // error). Without this catch the rejection was unhandled and the panel
       // stayed empty forever with no indication anything went wrong.
-      if (loadedForLineId === lineId) loadError.value = true
+      if (loadedForLineId === lineId) {
+        groups.value = []
+        loadError.value = true
+      }
     } finally {
       // Keep the spinner up if the effective ID set has already changed since this
       // load started — the fallback watcher is about to fire another load().
