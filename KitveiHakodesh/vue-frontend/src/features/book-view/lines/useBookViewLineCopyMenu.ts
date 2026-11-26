@@ -1,7 +1,8 @@
 import { SourceAtStartIcon, SourceAtEndIcon } from '@/components/textGlyphIcon'
 import { IconHighlight20Regular, IconComment20Regular, IconSlideTextCursor20Regular, IconFlag20Regular, IconOptions20Regular, IconTextWrapOff20Regular, IconTextQuote20Regular, IconTextFootnote20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLink20Regular, IconBookmarkAdd20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLink20Regular, IconBookmarkAdd20Regular, IconLibrary20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
+import { useHostSearchStore } from '@/stores/hostSearchStore'
 import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -647,6 +648,14 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     void prepareAndCopy(() => pasteIntoWord().catch(() => {}))
   }
 
+  /** Searches the selection in the catalog (book titles) - the PDF reader's "copy to catalog search". */
+  function onSearchInCatalog(): void {
+    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null)
+    if (!result) return
+    const query = toHebrewSearchQuery(result.joined)
+    if (query) useHostSearchStore().openCatalogSearch(query)
+  }
+
   function onSearchInRepository(): void {
     const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null)
     if (!result) return
@@ -683,6 +692,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: t('bookView.copy.copy'), icon: IconCopy20Regular, action: onCopy, shortcut: 'Ctrl+C' },
       { label: t('bookView.copy.intoWord'), icon: IconDocumentArrowRight20Regular, action: onPasteIntoWord, shortcut: 'Ctrl+V' },
       { label: t('bookView.copy.toSearch'), icon: IconSearch20Regular, action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+      { label: t('pdfReader.menu.searchInCatalog'), icon: IconLibrary20Regular, hideInToolbar: true, action: onSearchInCatalog },
       { label: t('bookView.copy.link'), icon: IconLink20Regular, action: options.onCopyLineLink ?? (() => {}) },
       { label: t('bookView.bookmarks.add'), icon: IconBookmarkAdd20Regular, action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
       addNoteRow,

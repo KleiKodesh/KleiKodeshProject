@@ -1,5 +1,5 @@
 import { IconComment20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconCopy20Regular, IconDocumentArrowRight20Regular, IconSearch20Regular, IconLibrary20Regular, IconImageCopy20Regular, IconHighlight20Regular } from '@iconify-prerendered/vue-fluent'
 import { t } from '@/i18n'
 import { shallowRef, onScopeDispose, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -26,6 +26,8 @@ export function usePdfReaderContextMenu(
     copyPageAsImage: () => void
     searchInLibrary: (query: string) => void
     searchInCatalog: (query: string) => void
+    /** Highlights the selected text (PDF.js's highlight, default colour). */
+    highlightSelection: () => void
     /** "Add note" for the selection as it is now: a note at its end (usePdfNotes), no highlight; null = none. */
     noteAtSelection: () => (() => void) | null
   },
@@ -75,20 +77,22 @@ export function usePdfReaderContextMenu(
     else options.searchInLibrary(query)
   }
 
-  // The book view's order: the copy actions, then add note.
+  // The book view's order: the copy actions, then add note. Selection bar: copy, copy into
+  // Word, copy as image, add note, highlight; the two searches stay in the menu only.
   function buildItems(text: string): ContextMenuItem[] {
     const hasText = !!text.trim()
     const list: ContextMenuItem[] = []
     if (hasText) {
       list.push({ label: t('pdfReader.menu.copy'), icon: IconCopy20Regular, action: () => void copySelection(), shortcut: 'Ctrl+C' })
       list.push({ label: t('pdfReader.menu.copyIntoWord'), icon: IconDocumentArrowRight20Regular, action: () => copyIntoWord(text), shortcut: 'Ctrl+V' })
-      list.push({ label: t('pdfReader.menu.searchInLibrary'), icon: IconSearch20Regular, action: () => searchSelection(text), shortcut: 'Ctrl+Shift+C' })
-      list.push({ label: t('pdfReader.menu.searchInCatalog'), icon: IconLibrary20Regular, action: () => searchSelection(text, true) })
+      list.push({ label: t('pdfReader.menu.searchInLibrary'), icon: IconSearch20Regular, hideInToolbar: true, action: () => searchSelection(text), shortcut: 'Ctrl+Shift+C' })
+      list.push({ label: t('pdfReader.menu.searchInCatalog'), icon: IconLibrary20Regular, hideInToolbar: true, action: () => searchSelection(text, true) })
     }
     list.push({ label: t('pdfReader.menu.copyPageAsImage'), icon: IconImageCopy20Regular, action: options.copyPageAsImage })
     // Read where the selection ends now: clicking the menu may clear it.
     const addNote = hasText ? options.noteAtSelection() : null
     if (addNote) list.push({ label: t('pdfReader.notes.add'), icon: IconComment20Regular, action: addNote })
+    if (hasText) list.push({ label: t('pdfReader.edit.highlight'), icon: IconHighlight20Regular, action: options.highlightSelection })
     return list
   }
 

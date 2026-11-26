@@ -124,6 +124,7 @@
     "copy": "Copy",
     "copyIntoWord": "Copy into Word",
     "copyPageAsImage": "Copy page as image",
+    "deleteHighlight": "Delete highlight",
     "searchInCatalog": "Copy to catalog search",
     "searchInLibrary": "Copy to library search"
   },

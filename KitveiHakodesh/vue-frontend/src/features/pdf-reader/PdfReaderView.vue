@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
-import { useLocalStorage } from '@vueuse/core'
+import { useLocalStorage, useEventListener } from '@vueuse/core'
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
@@ -115,7 +115,43 @@ function toggleEditBar() {
 }
 // The floating "highlight" button on a selection switches PDF.js to the highlight editor:
 // show the editing bar with it, so the mode is visible and can be left (Esc / the bar).
+// Not so for the menu / selection bar's "highlight": PDF.js still switches to its highlight
+// editor (so the new mark can be selected, recoloured, removed), but our editing bar stays
+// closed.
+let quickHighlight = false
+function highlightFromMenu() {
+  // Only when a mode switch will follow: no page selection means PDF.js does nothing.
+  quickHighlight = editing.mode.value === AnnotationEditorType.NONE && selectionActions.hasPageSelection()
+  selectionActions.highlightSelection()
+}
+// A press anywhere outside PDF.js's highlight menu, or Esc, ends the highlight
+// mode a menu "highlight" opened; a mode the user picked on the editing bar is left alone.
+let inQuickHighlightMode = false
+function endQuickHighlightMode() {
+  inQuickHighlightMode = false
+  if (pdf.viewer.value) pdf.viewer.value.annotationEditorMode = { mode: AnnotationEditorType.NONE }
+}
+// Click-outside, window-wide: only PDF.js's highlight menu (its edit toolbar and colour
+// picker) keeps the mode.
+const quickHighlightWindow = useHostWindow()
+useEventListener(quickHighlightWindow, 'pointerdown', (e: PointerEvent) => {
+  if (!inQuickHighlightMode) return
+  if ((e.target as Element | null)?.closest('.editToolbar')) return
+  endQuickHighlightMode()
+}, { capture: true })
+// Esc ends it too.
+useEventListener(quickHighlightWindow, 'keydown', (e: KeyboardEvent) => {
+  if (inQuickHighlightMode && e.key === 'Escape') endQuickHighlightMode()
+})
 watch(editing.mode, (mode) => {
+  if (mode !== AnnotationEditorType.HIGHLIGHT) inQuickHighlightMode = false
+  if (quickHighlight) {
+    if (mode === AnnotationEditorType.HIGHLIGHT) {
+      quickHighlight = false
+      inQuickHighlightMode = true
+    }
+    return
+  }
   if (mode === AnnotationEditorType.NONE || editBarVisible.value) return
   editBarVisible.value = true
 })
@@ -468,7 +504,7 @@ async function onPrintChoice(choice: 'saveAndPrint' | 'withoutChanges' | 'cancel
 }
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 // Highlight mode in a detached window (usePdfSelectionActions).
-usePdfSelectionActions({
+const selectionActions = usePdfSelectionActions({
   container,
   eventBus: pdf.eventBus,
   highlightMode: () => editing.mode.value === AnnotationEditorType.HIGHLIGHT,
@@ -479,6 +515,7 @@ const contextMenu = usePdfReaderContextMenu(container, contextMenuRef, {
   searchInLibrary: (q) => paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query: q }), searchQuery: q }),
   searchInCatalog: (q) => useHostSearchStore().openCatalogSearch(q),
   noteAtSelection: notes.noteAtSelection,
+  highlightSelection: highlightFromMenu,
 })
 // Add a bookmark at the current place (toolbar button, Ctrl+Shift+D): shows the bookmarks list.
 function addBookmark() {
@@ -718,6 +755,7 @@ function showSideMode(mode: PdfSideMode) {
       :menu="contextMenuRef"
       :is-blocked="() => ocr.isActive.value || editing.mode.value !== AnnotationEditorType.NONE"
       :prepare="contextMenu.prepareForSelection"
+      :max-buttons="5"
     />
     <PdfPasswordDialog
       v-if="pdf.passwordRequest.value"
