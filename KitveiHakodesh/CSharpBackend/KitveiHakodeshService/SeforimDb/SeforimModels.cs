@@ -225,25 +225,6 @@ public sealed class BookIdArgs { public int BookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CommentaryLinksResult { public List<CommentaryLinkRow> Rows { get; set; } = new(); }
 
-/// <summary>Lines to look up plus the book they belong to (0 = unknown; the catalogue's
-/// commentary verdict is then skipped). The result is Core's CommentaryLinkGroups as-is.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class CommentaryLinkGroupsArgs
-{
-    public List<int> LineIds { get; set; } = new();
-    public int BookId { get; set; }
-}
-
-/// <summary>The lines of a book with lineIndex in [FromIndex, ToIndex) - a section sent as
-/// its bounds instead of its ids.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookLineRangeArgs
-{
-    public int BookId { get; set; }
-    public int FromIndex { get; set; }
-    public int ToIndex { get; set; }
-}
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentsResult { public List<LineContentRow> Rows { get; set; } = new(); }
 
@@ -264,21 +245,6 @@ public sealed class ReverseLineDataArgs
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ReverseLineDataResult { public List<ReverseLineRow> Rows { get; set; } = new(); }
-
-/// <summary>getReverseLines: the lines as ids (LineIds) or, when BookId > 0, as the book's
-/// lines with lineIndex in [FromIndex, ToIndex).</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class ReverseLinesArgs
-{
-    public List<int> LineIds { get; set; } = new();
-    public int BookId { get; set; }
-    public int FromIndex { get; set; }
-    public int ToIndex { get; set; }
-    public List<int> TypeIds { get; set; } = new();
-}
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class ReverseLinesResult { public List<ReverseLineRefRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ReverseBooksArgs
@@ -361,6 +327,18 @@ public sealed class BookIdsArgs { public List<int> BookIds { get; set; } = new()
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookSummariesResult { public List<BookSummaryRow> Rows { get; set; } = new(); }
+
+/// <summary>The lines whose commentary panel is wanted: their ids, or - when LineIds is empty -
+/// the lines of BookId with lineIndex in [FromIndex, ToIndex). BookId is the book the lines
+/// belong to (0 = unknown). The result is Core's CommentaryList as-is.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CommentaryListArgs
+{
+    public List<int> LineIds { get; set; } = new();
+    public int BookId { get; set; }
+    public int FromIndex { get; set; }
+    public int ToIndex { get; set; }
+}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIdArgs { public int LineId { get; set; } }

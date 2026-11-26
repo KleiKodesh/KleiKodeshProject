@@ -1017,18 +1017,6 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinksResult { Rows = seforim.GetCommentaryLinksForSourceLineRange(a.LineIds) }));
                 }
-                case "getCommentaryLinkGroupsForSourceLineRange":
-                {
-                    var a = MsgPack.De<CommentaryLinkGroupsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds, a.BookId)));
-                }
-
-                case "getCommentaryLinkGroupsForBookLineRange":
-                {
-                    var a = MsgPack.De<BookLineRangeArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForBookLineRange(a.BookId, a.FromIndex, a.ToIndex)));
-                }
-
                 case "getLineContents":
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
@@ -1078,15 +1066,6 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<ReverseLineDataArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new ReverseLineDataResult { Rows = seforim.GetReverseLineData(a.LineIds, a.TypeIds) }));
-                }
-
-                case "getReverseLines":
-                {
-                    var a = MsgPack.De<ReverseLinesArgs>(req.Args);
-                    var rows = a.BookId > 0
-                        ? seforim.GetReverseLinesForBookLineRange(a.BookId, a.FromIndex, a.ToIndex, a.TypeIds)
-                        : seforim.GetReverseLines(a.LineIds, a.TypeIds);
-                    return RpcResponse.Ok(MsgPack.Ser(new ReverseLinesResult { Rows = rows }));
                 }
 
                 case "getReverseBooks":
@@ -1150,6 +1129,12 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<BookIdsArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new BookSummariesResult { Rows = seforim.GetBookSummaries(a.BookIds) }));
+                }
+
+                case "getCommentaryList":
+                {
+                    var a = MsgPack.De<CommentaryListArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryList(a.LineIds, a.BookId, a.FromIndex, a.ToIndex)));
                 }
 
                 case "getBookIdsForLines":

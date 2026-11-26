@@ -16,6 +16,7 @@ import { useCommentaryNotes } from './commentary/useCommentaryNotes'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useLineNotes } from './lines/useLineNotes'
+import { createLineDecorationsBatch } from './lines/lineDecorationsBatch'
 import { useCopyExportData } from './lines/useCopyExportData'
 
 type GroupsForDisplay = Parameters<typeof useCommentaryHighlights>[0] extends () => infer T ? T : never
@@ -36,14 +37,19 @@ export function useBookViewCommentaryAnnotations(
   const { getNotesForLine, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
+  // Word-link anchors and inline notes are asked for together: the panel's window watcher
+  // schedules both in the same turn, so ONE service call answers both (the same batch the
+  // book's own lines view uses) instead of two calls and two connections per window.
+  const lineDecorations = createLineDecorationsBatch()
+
   // Word-level link anchors for commentary lines (they are source lines of their own
   // links, e.g. a Mishnah Berurah line citing Chosen Mishpat). Schedule-driven from
   // CommentaryView's virtualizer watcher, same as notes.
   const { getWordLinkAnchorsForLine, getWordLinkTargetBookTitle, scheduleWordLinkAnchorsLoad, loadWordLinkAnchorsForLines } =
-    useWordLinkAnchors()
+    useWordLinkAnchors(undefined, lineDecorations.anchorsFor)
 
   // Inline notes (line_note) of commentary lines - schedule-driven, same as word links.
-  const { getLineNotesForLine, scheduleLineNotesLoad } = useLineNotes()
+  const { getLineNotesForLine, scheduleLineNotesLoad } = useLineNotes(undefined, lineDecorations.notesFor)
 
   // What copy-with-notes needs beyond the rendered markup — built here because this
   // is where the commentary's lazy note/citation stores live. CommentaryView receives

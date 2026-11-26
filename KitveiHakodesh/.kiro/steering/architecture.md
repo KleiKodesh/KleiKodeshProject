@@ -48,6 +48,18 @@ All three hold as of 2026-07-28. The last one was fixed by pointing `components/
 
 **When refactoring a file that has drifted:** name its single job before deciding where anything goes ("where should this live?" is unanswerable while a file has several jobs), park everything undecided in one staging file with a manifest of candidate homes, land the direction fix separately from the ownership decisions, then delete the staging file. Treat an existing workaround comment as evidence of where the design is broken — but verify the claim, since the one reading "imported lazily to avoid a circular dependency" turned out to be guarding a type-only cycle that could not occur at runtime.
 
+## Backend Core: layers and API
+
+The page shows; Core thinks. In `KitveiHakodesh.Core` (full rules: `CSharpBackend/KitveiHakodesh.Core/CLAUDE.md`, section 5a) the seforim.db code is split in three kinds of file, and nothing of one kind lives in another:
+
+- **SQL strings: one file** (`SeforimDbSqlStrings.cs`), SQL text and nothing else.
+- **SQL calls: one file** (`SeforimDbQueries.cs`), run a string, read rows into plain data, no decisions.
+- **Thinking files**: rules, grouping, ordering, caches, staleness. They call the queries for data and never touch SQL, connections or readers.
+
+The flow, each step used only by the next: SQL strings -> SQL calls -> logic -> simple CLI-like API -> service -> UI. The UI displays; it may think about UI data (its own state, layout, presentation) but never builds queried data (no grouping, ordering, sectioning or deriving of what the database knows) - that belongs in Core.
+
+Core's public surface is a few simple commands, like endpoints of a CLI tool (plain input, plain data out, e.g. `GetCommentaryList`, `GetBookSummaries`). The service only forwards them; the page never rebuilds what Core already computed.
+
 ## App Shell
 
 The shell is two levels: a split-view container and one or two pane shells inside it.

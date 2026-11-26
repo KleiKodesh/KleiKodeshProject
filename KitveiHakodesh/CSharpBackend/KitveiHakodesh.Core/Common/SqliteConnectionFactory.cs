@@ -168,6 +168,33 @@ namespace KitveiHakodesh.Core.Common
         }
 
         /// <summary>
+        /// The COMPANION database of a library: derived data of ours (the stored tree order) kept in
+        /// its own file beside the app and attached to the library's read connections as schema
+        /// "companion" (SeforimDbQueries.AttachCompanionIfPresent), so SQL can join it like part of
+        /// the library while the library file itself is never written. Opened here to be rebuilt:
+        /// read-write, created when missing, unpooled, waiting out readers. Its own file, so DDL here
+        /// cannot touch the library's schema version (which the search-index stamps read).
+        /// </summary>
+        public static SqliteConnection OpenCompanionWrite(string dbPath)
+        {
+            if (string.IsNullOrWhiteSpace(dbPath))
+                throw new ArgumentException("dbPath is required", nameof(dbPath));
+
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false,
+                DefaultTimeout = BundledWriteBusyTimeoutSeconds,
+            }.ConnectionString;
+
+            var connection = new SqliteConnection(connectionString);
+            connection.Open();
+            Execute(connection, "PRAGMA busy_timeout=" + (BundledWriteBusyTimeoutSeconds * 1000) + ";");
+            return connection;
+        }
+
+        /// <summary>
         /// An FtsLib index segment being written. Pooling off — see the class remarks.
         /// </summary>
         public static SqliteConnection OpenSegmentWrite(string dbPath)

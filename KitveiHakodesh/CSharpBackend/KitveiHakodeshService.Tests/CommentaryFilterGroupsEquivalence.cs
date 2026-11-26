@@ -99,6 +99,16 @@ internal static class CommentaryFilterGroupsEquivalence
     private static string Ascii(string? s) => s == null ? "null"
         : string.Concat(s.Select(ch => ch < 128 ? ch.ToString() : ((int)ch).ToString("X4")));
 
+    /// <summary>The reference's own walk: a category's folder titles, itself first, root last,
+    /// from the full category list - what Core now reads from category_closure.</summary>
+    private static List<string> ChainLeafFirst(int categoryId, Dictionary<int, CategoryRow> cats)
+    {
+        var chain = new List<string>();
+        for (int? id = categoryId; id is int i && cats.TryGetValue(i, out var cat) && chain.Count < 64; id = cat.ParentId)
+            chain.Add(cat.Title);
+        return chain;
+    }
+
     // === The old frontend algorithm ===
 
     private sealed class OldAlgorithm
@@ -161,7 +171,7 @@ internal static class CommentaryFilterGroupsEquivalence
                     Title = !string.IsNullOrEmpty(b?.Title) ? SeforimDbQueries.CommentaryDisplayTitle(b!.Title) : id.ToString(),
                     Types = types,
                     // resolveCategory over findCategoryMeta (ported in SeforimDbBookCommentaryCategory)
-                    Cat = b == null ? SeforimDbBookCommentaryCategory.OtherCategory : SeforimDbBookCommentaryCategory.Resolve(b.CategoryId, cats),
+                    Cat = b == null ? SeforimDbBookCommentaryCategory.OtherCategory : SeforimDbBookCommentaryCategory.Resolve(ChainLeafFirst(b.CategoryId, cats)),
                     Tree = b?.TreeOrder ?? 999999,
                     Primary = primary,
                 };

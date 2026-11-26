@@ -12,8 +12,8 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, HebrewBooksEditionsResult, UserEdition, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
-  RelatedBook, RelatedBooksList, CommentaryFilterGroup,
+  LineRow, BookVersionRow, HebrewBooksEdition, HebrewBooksEditionsResult, UserEdition, BookLineRange, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow, LineNote,
+  RelatedBook, RelatedBooksList, CommentaryFilterGroup, CommentaryListGroup,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -444,21 +444,20 @@ export async function getDefaultCommentators(bookId: number): Promise<{ commenta
   return (await seforimOp<{ rows: { commentatorBookId: number }[] }>('getDefaultCommentators', { bookId })).rows
 }
 
-// ── Reverse lookups (source & targum) + static filter books ────────────────────
+// ── The commentary panel's structure ──────────────────────────────────────────
 
-/** Reverse source/targum lookup — pass commentary type ids for source, targum type ids for targum. */
 /**
- * The lines a reverse lookup finds, once each and without their text (the commentary
- * panel fetches the text of the rows it shows). `lines` is a list of ids or a book's
- * index range; a section as a range spares sending (and binding) thousands of ids.
+ * The commentary panel's whole structure for the tapped line(s), in display order - Core builds
+ * it in one call (which books link here, their titles, sections and order). Lines are ids and
+ * indexes only; their text comes per window. `lines` is the tapped line ids, or a book's line
+ * range (a section sent as its bounds).
  */
-export async function getReverseLines(lines: number[] | BookLineRange, typeIds: number[]): Promise<ReverseLineRefRow[]> {
-  if (typeIds.length === 0) return []
-  if (Array.isArray(lines)) {
-    if (lines.length === 0) return []
-    return (await seforimOp<{ rows: ReverseLineRefRow[] }>('getReverseLines', { lineIds: lines, typeIds })).rows
-  }
-  return (await seforimOp<{ rows: ReverseLineRefRow[] }>('getReverseLines', { ...lines, typeIds })).rows
+export async function getCommentaryList(lines: number[] | BookLineRange, bookId: number): Promise<CommentaryListGroup[]> {
+  const args = Array.isArray(lines)
+    ? { lineIds: lines, bookId, fromIndex: 0, toIndex: 0 }
+    : { lineIds: [], bookId: lines.bookId, fromIndex: lines.fromIndex, toIndex: lines.toIndex }
+  if (Array.isArray(lines) && lines.length === 0) return []
+  return (await seforimOp<{ groups: CommentaryListGroup[] }>('getCommentaryList', args)).groups
 }
 
 /** The commentary filter tree's groups for a book, in display order (Core builds them). */
@@ -636,21 +635,3 @@ export async function getLineRefAndContent(
   return (await seforimOp<{ rows: Row[] }>('getLineRefAndContent', { bookId, lineIndex })).rows[0]
 }
 
-/**
- * Commentary links for a range of lines, de-duplicated and grouped per (book, connection
- * type) in Core: forward links, links pointing AT the lines, and the catalogue's commentary
- * verdict for `bookId` (see CommentaryLinkGroups). Numbers only: a whole-book range is a
- * few hundred KB where the per-row shape above was ~4 MB.
- */
-export async function getCommentaryLinkGroupsForSourceLineRange(
-  lineIds: number[],
-  /** The book the lines belong to; 0 skips the catalogue's commentary verdict. */
-  bookId = 0,
-): Promise<CommentaryLinkGroups> {
-  return seforimOp<CommentaryLinkGroups>('getCommentaryLinkGroupsForSourceLineRange', { lineIds, bookId })
-}
-
-/** getCommentaryLinkGroupsForSourceLineRange for a book's lines with lineIndex in [fromIndex, toIndex). */
-export async function getCommentaryLinkGroupsForBookLineRange(range: BookLineRange): Promise<CommentaryLinkGroups> {
-  return seforimOp<CommentaryLinkGroups>('getCommentaryLinkGroupsForBookLineRange', range)
-}

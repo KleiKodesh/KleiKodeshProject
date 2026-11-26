@@ -26,7 +26,7 @@ const emit = defineEmits<{
 
 const headerEl = ref<HTMLElement | null>(null)
 
-// bookTitle already arrives cleaned by commentaryGroupBuilder — do not strip again here.
+// bookTitle already arrives cleaned by Core (GetCommentaryList) — do not strip again here.
 const displayPath = computed(() => {
   return props.ownTocPath ? `${props.bookTitle} ${props.ownTocPath}` : props.bookTitle
 })

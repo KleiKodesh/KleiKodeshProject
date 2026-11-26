@@ -1,20 +1,13 @@
 import { computed, nextTick, onScopeDispose, ref, shallowReactive, shallowRef, watch } from 'vue'
-import { getCommentaryFilterGroups, getCommentaryLinkGroupsForBookLineRange, getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import { getCommentaryFilterGroups, getCommentaryList, getLineContents } from '@/webview-host/seforimApi'
 import type { BookLineRange } from '@/webview-host/queries.types'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
 import { isCommentaryBookUnchecked } from './uncheckedCommentaryBooks'
 import {
-  ensureConnectionTypeNamesLoaded,
   getPrimaryConnectionType,
   isStaticFilterConnectionType,
 } from './commentaryConnectionTypes'
-import {
-  buildCommentaryGroupsFromCombined,
-  fetchSourceEntriesViaReverseQuery,
-  commentaryDisplayTitle,
-} from './commentaryGroupBuilder'
 
 export interface CommentaryLine {
   lineId: number
@@ -45,16 +38,6 @@ export function commentaryGroupKey(group: {
   subSectionLabel?: string
 }): string {
   return `${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`
-}
-
-export interface CommentaryBookEntry {
-  bookId: number
-  bookTitle: string
-  connectionTypes: string[]
-  lines: CommentaryLine[]
-  category: string
-  treeOrder: number
-  primaryConnectionType: string
 }
 
 export {
@@ -141,7 +124,6 @@ export function useCommentary(
   // Set when load() fails (DB/bridge error, e.g. a seforim DB missing the links
   // tables) — the panel shows an error message instead of a silent empty state.
   const loadError = ref(false)
-  const booksDataStore = useBooksDataStore()
   let staticFilterLoadToken = 0
 
   const filterGroups = computed(() => {
@@ -347,48 +329,31 @@ export function useCommentary(
     loading.value = true
     loadError.value = false
     try {
-      // Fire all pre-flight work in parallel:
-      // - catalog + commentary metadata (needed by allBooksMap for group building)
-      // - connection type ID table (needed by reverse-lookup queries)
-      // - the forward commentary query (needs no ID table — pure SQL with a fixed line param)
-      // The reverse queries depend on connection type IDs so they start after that resolves,
-      // but they run concurrently with each other and with the catalog awaits.
-      // Two-phase load for both single-line and section clicks: the links-only
-      // query returns ids and line indexes grouped per (book, type) — a whole-book
-      // range is a few hundred KB (the per-row shape was ~4 MB, the old
-      // content-joining query up to 10 MB per click) — so the group structure
-      // renders at once. Line text is fetched for the rows shown.
+      // ONE call: Core finds the books linked to the line(s), reads their titles, sections and
+      // order, and answers the whole structure in display order. The page holds no catalog and
+      // none of the grouping rules. Two-phase for both single-line and section clicks: the
+      // structure is ids and line indexes only (a whole-book range is a few hundred KB), so it
+      // renders at once; line text is fetched for the rows shown.
       // A range goes to Core as (book, from, to): no ids needed, none sent.
       const queryLines: number[] | BookLineRange = range
         ? { bookId, ...range }
         : isMulti ? multiIds! : [lineId]
 
-      // One call brings the forward groups, the links pointing AT these lines and the
-      // catalogue's commentary verdict for this book (see CommentaryLinkGroups).
-      const linkGroupsPromise = Array.isArray(queryLines)
-        ? getCommentaryLinkGroupsForSourceLineRange(queryLines, bookId)
-        : getCommentaryLinkGroupsForBookLineRange(queryLines)
-
-      const [linkGroups, sourceEntries] = await Promise.all([
-        linkGroupsPromise,
-        Promise.all([
-          booksDataStore.ensureLoaded(),
-          booksDataStore.ensureCommentaryMetadataLoaded(),
-          ensureConnectionTypeNamesLoaded(),
-        ]).then(() =>
-          fetchSourceEntriesViaReverseQuery(queryLines, booksDataStore.allBooksMap),
-        ),
-      ])
-
-      if (!linkGroups.rows.length && !linkGroups.incoming.length && !sourceEntries.length) return
-
-      const built = await buildCommentaryGroupsFromCombined(
-        linkGroups,
-        sourceEntries,
-        booksDataStore.allBooksMap,
-      )
+      const list = await getCommentaryList(queryLines, bookId)
+      if (!list.length) return
 
       if (loadedForLineId !== lineId) return
+
+      const built: CommentaryGroup[] = list.map((group) => ({
+        bookId: group.bookId,
+        bookTitle: group.bookTitle,
+        path: group.path,
+        connectionTypes: group.connectionTypes,
+        lines: group.lineIds.map((id, index) => ({ lineId: id, lineIndex: group.lineIndexes[index] ?? 0, content: '' })),
+        category: group.category,
+        sectionLabel: group.sectionLabel,
+        ...(group.subSectionLabel != null ? { subSectionLabel: group.subSectionLabel } : {}),
+      }))
 
       // The structure (which commentators, which lines) is all the panel needs to
       // open: the windowed scroller asks for exactly the lines it will show, before
@@ -550,9 +515,9 @@ export function useGroupsForDisplay(
    * real list arrives.
    */
   commentaryLineId: () => number | null = selectedLineId,
+  /** The pinned book's title, kept on the pin when it was made (for a book that has no static group). */
+  pinnedTitle: () => string | undefined = () => undefined,
 ) {
-  const booksDataStore = useBooksDataStore()
-
   return computed<CommentaryGroup[]>(() => {
     const pinned = pinnedBookId()
     const currentGroups = groups()
@@ -566,15 +531,13 @@ export function useGroupsForDisplay(
     )
       return currentGroups
 
-    const book = booksDataStore.allBooksMap.get(pinned)
-    // Must match how commentaryGroupBuilder titles the real group this placeholder stands in for.
-    const bookTitle = book?.title ? commentaryDisplayTitle(book.title) : String(pinned)
-
     // staticFilterGroups is the canonical ordering of every book that ever links
     // to this one, so it decides where the placeholder slots in.
     const staticOrder = staticFilterGroups()
     const pinnedRank = staticOrder.findIndex((g) => g.bookId === pinned)
     const staticGroup = pinnedRank !== -1 ? staticOrder[pinnedRank] : undefined
+    // Must match how the real group this placeholder stands in for is titled (Core's list title).
+    const bookTitle = staticGroup?.bookTitle ?? pinnedTitle() ?? String(pinned)
 
     const placeholder: CommentaryGroup = {
       bookId: pinned,

@@ -81,20 +81,19 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         public RelatedBooksList GetRelatedBooks(int bookId)
         {
+            EnsureBookTreeOrder();   // before the read: it may write to the library file
             using var conn = Open();
             var schema = SchemaOf(conn);
             var typeNames = ReadConnectionTypeNames(conn);
             var dependantTypeIds = DependantTypeIds(typeNames);
-            var books = BooksById();
-            var categories = CategoriesById();
-            var categoryCache = new Dictionary<int, string>();
+            var facts = new CommentaryBookFacts(ids => ReadBookFactsData(conn, ids));
 
             var bases = new BaseTextLookup(conn, schema, dependantTypeIds);
 
             // The open book's own groups: what depends on it, and what it depends on.
             var ownGroups = BuildStaticGroups(
                 ReadStaticForward(conn, bookId, dependantTypeIds), bases.BasesOf(new[] { bookId })[bookId],
-                typeNames, books, categories, categoryCache);
+                typeNames, facts);
 
             // Its base texts, once each, in list order.
             var sourceIds = new List<int>();
@@ -114,7 +113,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 var linked = new HashSet<int>(forward.Select(f => f.Item1));
                 foreach (int extra in listed)
                     if (extra != id && !linked.Contains(extra)) forward.Add((extra, commentaryTypeId));
-                return BuildStaticGroups(forward, sourceBases[id], typeNames, books, categories, categoryCache);
+                return BuildStaticGroups(forward, sourceBases[id], typeNames, facts);
             });
 
             // The primary base of every book in those groups - again ONE query - so a book
@@ -122,15 +121,14 @@ namespace KitveiHakodesh.Core.SeforimDb
             var memberIds = sourceGroups.Values.SelectMany(gs => gs.Select(g => g.BookId)).Distinct().ToList();
             var memberBases = bases.BasesOf(memberIds, primaryOnly: true);
 
-            return BuildSections(bookId, ownGroups, sourceIds, sourceGroups, memberBases, books);
+            return BuildSections(bookId, ownGroups, sourceIds, sourceGroups, memberBases);
         }
 
         /// <summary>The dropdown's sections: the open book's groups by category, then one section
         /// per base text with that text's commentaries.</summary>
         private static RelatedBooksList BuildSections(
             int bookId, List<StaticGroup> ownGroups, List<int> sourceIds,
-            Dictionary<int, List<StaticGroup>> sourceGroups, Dictionary<int, List<int>> memberBases,
-            IReadOnlyDictionary<int, BookRow> books)
+            Dictionary<int, List<StaticGroup>> sourceGroups, Dictionary<int, List<int>> memberBases)
         {
             var sections = new List<RelatedBooksSection>();
             var byLabel = new Dictionary<string, RelatedBooksSection>();
@@ -222,22 +220,21 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         private static List<StaticGroup> BuildStaticGroups(
             List<(int TargetBookId, int TypeId)> forwardRows, List<int> reverseBookIds,
-            Dictionary<int, string> typeNames, IReadOnlyDictionary<int, BookRow> books,
-            IReadOnlyDictionary<int, CategoryRow> categories, Dictionary<int, string> categoryCache)
+            Dictionary<int, string> typeNames, CommentaryBookFacts facts)
         {
             if (forwardRows.Count == 0 && reverseBookIds.Count == 0) return new List<StaticGroup>();
 
+            // Every book of this list, in a few queries.
+            facts.Load(reverseBookIds.Concat(forwardRows.Select(f => f.TargetBookId)));
+
             GroupEntry Entry(int id, List<string> types)
             {
-                books.TryGetValue(id, out var book);
-                string category = SeforimDbBookCommentaryCategory.OtherCategory;
-                if (book != null && !categoryCache.TryGetValue(book.CategoryId, out category!))
-                    categoryCache[book.CategoryId] = category = SeforimDbBookCommentaryCategory.Resolve(book.CategoryId, categories);
+                var book = facts.Get(id);
                 return new GroupEntry
                 {
                     BookId = id,
                     Title = !string.IsNullOrEmpty(book?.Title) ? CommentaryDisplayTitle(book!.Title) : id.ToString(),
-                    Category = category,
+                    Category = book?.Category ?? SeforimDbBookCommentaryCategory.OtherCategory,
                     TreeOrder = book?.TreeOrder ?? 999999,
                     PrimaryType = PrimaryConnectionType(types),
                     ConnectionTypes = types,
@@ -345,38 +342,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var cr = catalogCmd.ExecuteReader();
             while (cr.Read()) rows.Add((cr.GetInt32(0), (int)commentaryTypeId));
             return rows;
-        }
-
-        // -- Catalog lookups -------------------------------------------------------
-
-        private Dictionary<int, BookRow>? _booksById;
-        private Dictionary<int, CategoryRow>? _categoriesById;
-
-        /// <summary>The cached catalog by id (dropped with it by ClearCatalogCache).</summary>
-        private IReadOnlyDictionary<int, BookRow> BooksById()
-        {
-            var list = GetAllBooks();
-            lock (_catalogCacheLock)
-            {
-                if (_booksById != null && ReferenceEquals(list, _booksCache)) return _booksById;
-                var map = new Dictionary<int, BookRow>(list.Count);
-                foreach (var b in list) map[b.Id] = b;
-                if (ReferenceEquals(list, _booksCache)) _booksById = map;
-                return map;
-            }
-        }
-
-        private IReadOnlyDictionary<int, CategoryRow> CategoriesById()
-        {
-            var list = GetAllCategories();
-            lock (_catalogCacheLock)
-            {
-                if (_categoriesById != null && ReferenceEquals(list, _categoriesCache)) return _categoriesById;
-                var map = new Dictionary<int, CategoryRow>(list.Count);
-                foreach (var c in list) map[c.Id] = c;
-                if (ReferenceEquals(list, _categoriesCache)) _categoriesById = map;
-                return map;
-            }
         }
     }
 }

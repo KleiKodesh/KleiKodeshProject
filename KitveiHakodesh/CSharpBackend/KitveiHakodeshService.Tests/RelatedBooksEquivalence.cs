@@ -199,6 +199,16 @@ internal static class RelatedBooksEquivalence
         (s.CommentariesOfBookId != null ? $"[of {s.CommentariesOfBookId}:{Ascii(s.CommentariesOfTitle)}]" : $"[{Ascii(s.Label)}]")
         + string.Join(",", s.Books.Select(b => $"{b.BookId}{(b.IsBaseText ? "B" : "")}{(b.ViaSourceBookId is int v ? "v" + v : "")}{(b.ChainBaseBookId is int c ? "c" + c : "")}:{Ascii(b.Title)}"))).ToList();
 
+    /// <summary>The reference's own walk: a category's folder titles, itself first, root last,
+    /// from the full category list - what Core now reads from category_closure.</summary>
+    private static List<string> ChainLeafFirst(int categoryId, Dictionary<int, CategoryRow> cats)
+    {
+        var chain = new List<string>();
+        for (int? id = categoryId; id is int i && cats.TryGetValue(i, out var cat) && chain.Count < 64; id = cat.ParentId)
+            chain.Add(cat.Title);
+        return chain;
+    }
+
     private static string Ascii(string? s) => s == null ? "null"
         : string.Concat(s.Select(ch => ch < 128 ? ch.ToString() : ((int)ch).ToString("X4")));
 
@@ -282,7 +292,7 @@ internal static class RelatedBooksEquivalence
             {
                 books.TryGetValue(id, out var b);
                 string title = !string.IsNullOrEmpty(b?.Title) ? SeforimDbQueries.CommentaryDisplayTitle(b!.Title) : id.ToString();
-                string cat = b == null ? SeforimDbBookCommentaryCategory.OtherCategory : SeforimDbBookCommentaryCategory.Resolve(b.CategoryId, cats);
+                string cat = b == null ? SeforimDbBookCommentaryCategory.OtherCategory : SeforimDbBookCommentaryCategory.Resolve(ChainLeafFirst(b.CategoryId, cats));
                 return (id, title, types, cat, b?.TreeOrder ?? 999999, primary);
             }
             foreach (var r in reverse) entries.Add(E(r.SourceBookId, new List<string> { "SOURCE" }, "SOURCE"));

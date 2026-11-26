@@ -51,6 +51,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             GetAllCategories();
             GetAllBooks();
+            EnsureBookTreeOrder();
             GetBookById(1);
             GetLinesPaged(1, 1, 0);
         }
@@ -66,7 +67,10 @@ namespace KitveiHakodesh.Core.SeforimDb
                 throw SeforimDbUnavailableException.NotOnDisk(_databasePath!);
 
             ForgetShapeIfFileChanged(file);
-            return SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
+            var connection = SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
+            // The companion (our derived data, in the app folder) joins the library as schema "companion".
+            AttachCompanionIfPresent(connection, CompanionDatabasePath());
+            return connection;
         }
 
         /// <summary>Size + last-write of the file the remembered shape and catalog came from.</summary>

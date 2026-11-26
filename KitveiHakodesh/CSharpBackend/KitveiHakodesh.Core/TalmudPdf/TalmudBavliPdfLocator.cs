@@ -31,15 +31,14 @@ namespace KitveiHakodesh.Core.TalmudPdf
             using (var connection = SqliteConnectionFactory.OpenCorpusRead(seforimDbPath!))
             using (var command = connection.CreateCommand())
             {
+                // The book's folder chain from category_closure, root first (category.level ascending).
                 command.CommandText = @"
-                    WITH RECURSIVE chain(id, parentId, title, depth) AS (
-                        SELECT c.id, c.parentId, c.title, 0 FROM category c
-                        JOIN book b ON b.categoryId = c.id WHERE b.id = @b
-                        UNION ALL
-                        SELECT c.id, c.parentId, c.title, chain.depth + 1 FROM category c
-                        JOIN chain ON c.id = chain.parentId WHERE chain.depth < 50
-                    )
-                    SELECT (SELECT title FROM book WHERE id = @b), title FROM chain ORDER BY depth DESC";
+                    SELECT b.title, c.title
+                    FROM book b
+                    JOIN category_closure cc ON cc.descendantId = b.categoryId
+                    JOIN category c ON c.id = cc.ancestorId
+                    WHERE b.id = @b
+                    ORDER BY c.level";
                 command.Parameters.AddWithValue("@b", bookId);
                 using var reader = command.ExecuteReader();
                 while (reader.Read())

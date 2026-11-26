@@ -6,7 +6,6 @@ import { watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import type { BookBookmark } from '@/stores/bookBookmarks'
@@ -61,7 +60,6 @@ const tocTreeDockedRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const tocTreeOverlayRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
-const booksDataStore = useBooksDataStore()
 // Shown when a publisher-restricted book's export is attempted (Core's book protection).
 const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 

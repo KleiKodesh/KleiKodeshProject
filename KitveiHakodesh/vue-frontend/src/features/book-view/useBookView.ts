@@ -25,7 +25,6 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import type { TocBridge } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useToc } from './toc/useBookViewToc'
@@ -180,14 +179,6 @@ export function useBookView(
     // The recents entry keeps the book as it was when last opened (home card path).
     if (title && bookId != null) useRecentlyOpenedStore().recordBookDetails(bookId, title, bookCategoryPath.value)
   })
-
-  // Warm the catalog + commentary metadata in the background too. The first
-  // commentary toggle otherwise pays for both (the app's biggest payloads)
-  // serialized before anything renders — the "first toggle hangs" report.
-  // Both are cached globally, so this is a no-op when already loaded.
-  const booksDataStore = useBooksDataStore()
-  void booksDataStore.ensureLoaded().catch(() => {})
-  void booksDataStore.ensureCommentaryMetadataLoaded().catch(() => {})
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 

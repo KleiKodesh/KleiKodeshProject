@@ -441,6 +441,57 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
 
+    // ── Plain data the SQL calls hand to the thinking files (not wire types) ──────────────────
+
+    /// <summary>A book's own rows as read: its metadata plus the raw protection level and banner.</summary>
+    internal sealed record BookInfoData(BookInfo Info, int? ProtectionLevel, string? BannerText, string? BannerBookTitle);
+
+    /// <summary>What a commentary list needs to know of a set of books, as read: their title and
+    /// category, the folder titles of those categories (leaf first), and the stored tree orders.</summary>
+    internal sealed class BookFactsData
+    {
+        public Dictionary<int, (string Title, int? CategoryId)> Books { get; } = new();
+        public Dictionary<int, List<string>> CategoryChains { get; } = new();
+        public Dictionary<int, int> TreeOrders { get; } = new();
+    }
+
+    /// <summary>Everything one commentary list is built from, read on ONE connection.</summary>
+    internal sealed record CommentaryListData(
+        Dictionary<int, string> TypeNames,
+        CommentaryLinkGroups LinkGroups,
+        List<ReverseLineRefRow> ReverseRows,
+        BookFactsData Facts);
+
+    /// <summary>What the stored tree order is judged stale by: do the tables exist, what were they
+    /// built from, and the library's totals now.</summary>
+    internal sealed record BookTreeOrderState(bool TablesExist, string? StoredSignature, long[] CategoryTotals, long[] BookTotals);
+
+    /// <summary>One row group of the commentary panel: a book in one section, with the lines of
+    /// the tapped line(s) it comments on - ids and indexes only, the text comes per window.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryListGroup
+    {
+        public int BookId { get; set; }
+        public string BookTitle { get; set; } = "";
+        public string Path { get; set; } = "";
+        public string[] ConnectionTypes { get; set; } = System.Array.Empty<string>();
+        /// <summary>The group's lines, ascending by line index (parallel to <see cref="LineIndexes"/>).</summary>
+        public int[] LineIds { get; set; } = System.Array.Empty<int>();
+        public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
+        /// <summary>The section the book's folders put it in.</summary>
+        public string Category { get; set; } = "";
+        public string SectionLabel { get; set; } = "";
+        public string? SubSectionLabel { get; set; }
+    }
+
+    /// <summary>The commentary panel's whole structure for the tapped line(s), in display order -
+    /// built by Core in one call (see SeforimDbCommentaryList.cs).</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryList
+    {
+        public List<CommentaryListGroup> Groups { get; set; } = new();
+    }
+
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class BookSummaryRow
     {

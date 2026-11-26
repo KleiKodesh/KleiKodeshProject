@@ -60,15 +60,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             return result;
         }
 
-        private string ReadBookTitle(int bookId)
-        {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT title FROM book WHERE id = @bookId";
-            cmd.Parameters.AddWithValue("@bookId", bookId);
-            return cmd.ExecuteScalar() as string ?? "";
-        }
-
         private WordLinkPreviewSection? ReadWordLinkSection(int bookId, int lineIndex, int lineId)
         {
             var entries = GetAllTocEntries(bookId);

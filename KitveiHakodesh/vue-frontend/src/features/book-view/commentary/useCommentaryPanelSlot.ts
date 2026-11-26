@@ -144,6 +144,7 @@ export function useCommentaryPanelSlot(
     () => source.selectedLineId.value,
     () => shared.staticFilterGroupsLoaded.value,
     () => source.commentaryLineId.value,
+    () => pinnedCommentaryGroup.value?.bookTitle,
   )
 
   // The scroller is created at the commentator's row, so it waits until that row can

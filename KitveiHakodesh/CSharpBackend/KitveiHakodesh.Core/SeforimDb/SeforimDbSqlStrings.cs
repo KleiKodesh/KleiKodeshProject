@@ -285,14 +285,10 @@ namespace KitveiHakodesh.Core.SeforimDb
             JOIN line ln ON ln.id = l.targetLineId
             WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}";
 
-        /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange: ordered so
-        /// the reader can cut groups on a (book, type) change; DISTINCT because a range of source
-        /// lines links the same target line many times over.</summary>
-        public static string GetCommentaryLinkGroupsForSourceLineRange(SeforimDbSchema schema, int count, bool hasTargetLineIndex) =>
-            GetCommentaryLinkGroupsForSourceLines(schema, LineIdList("p", count), hasTargetLineIndex);
-
-        /// <summary>GetCommentaryLinkGroupsForSourceLineRange for the lines <paramref name="lineSet"/>
-        /// names - LineIdList or BookLineRangeIds.</summary>
+        /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange for the lines
+        /// <paramref name="lineSet"/> names - LineIdList or BookLineRangeIds: ordered so the reader can
+        /// cut groups on a (book, type) change; DISTINCT because a range of source lines links the
+        /// same target line many times over.</summary>
         public static string GetCommentaryLinkGroupsForSourceLines(SeforimDbSchema schema, string lineSet, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
@@ -712,31 +708,90 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY groupKey";
         }
 
-        /// <summary>A category's chain, root first: walks parentId up from @categoryId only.
-        /// Depth-capped so a parent loop in a broken DB cannot run away.</summary>
-        public const string GetCategoryPath = @"
-            WITH RECURSIVE chain(id, parentId, title, depth) AS (
-                SELECT id, parentId, title, 0 FROM category WHERE id = @categoryId
-                UNION ALL
-                SELECT c.id, c.parentId, c.title, chain.depth + 1
-                FROM category c JOIN chain ON c.id = chain.parentId
-                WHERE chain.depth < 64)
-            SELECT title FROM chain ORDER BY depth DESC";
+        // ── The companion database (a sidecar file of ours, attached as schema "companion") ──────
+        // Derived data the library does not ship, kept in the app's own folder and attached to every
+        // library connection so SQL can join it like part of the library (SeforimDbQueries.AttachCompanionIfPresent).
 
-        /// <summary>For each given book: its title and its category chain (one row per category,
-        /// root first; one row with a NULL category for a book with none).</summary>
+        public const string AttachCompanion = "ATTACH DATABASE $path AS companion";
+        public const string IsCompanionAttached = "SELECT 1 FROM pragma_database_list WHERE name = 'companion'";
+        public const string CompanionHasTable = "SELECT 1 FROM companion.sqlite_master WHERE type = 'table' AND name = @t LIMIT 1";
+
+        // ── Stored tree order (companion.book_tree_order, built by SeforimDbBookTreeOrderTable.cs) ──
+
+        public const string BookTreeOrderTableName = "book_tree_order";
+        public const string BookTreeOrderStateTableName = "book_tree_order_state";
+
+        /// <summary>What the stored tree order was built from.</summary>
+        public const string StoredBookTreeOrderSignature = "SELECT signature FROM companion.book_tree_order_state LIMIT 1";
+
+        /// <summary>Totals over what the tree-order walk reads of the categories (weighted by id, so
+        /// swapping two rows' positions changes them).</summary>
+        public static string LibraryOrderTotalsOfCategories(bool hasOrderIndex) => $@"
+            SELECT COUNT(*), COALESCE(SUM(id), 0), COALESCE(SUM(id * COALESCE(parentId, 0)), 0),
+                   {(hasOrderIndex ? "COALESCE(SUM(id * COALESCE(orderIndex, 0)), 0)" : "0")}
+            FROM category";
+
+        /// <summary>The same for the books: their category, order and base-text flag.</summary>
+        public static string LibraryOrderTotalsOfBooks(bool hasOrderIndex, bool hasIsBaseBook) => $@"
+            SELECT COUNT(*), COALESCE(SUM(id), 0), COALESCE(SUM(id * COALESCE(categoryId, 0)), 0),
+                   {(hasOrderIndex ? "COALESCE(SUM(id * COALESCE(orderIndex, 0)), 0)" : "0")},
+                   {(hasIsBaseBook ? "COALESCE(SUM(id * COALESCE(isBaseBook, 0)), 0)" : "0")}
+            FROM book";
+
+        /// <summary>Run on the companion file's OWN connection (unqualified names): rebuilds its tables.</summary>
+        public const string ReplaceBookTreeOrderTables = @"
+            DROP TABLE IF EXISTS book_tree_order;
+            DROP TABLE IF EXISTS book_tree_order_state;
+            CREATE TABLE book_tree_order (bookId INTEGER PRIMARY KEY, treeOrder INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE book_tree_order_state (signature TEXT NOT NULL);";
+
+        public const string InsertBookTreeOrder = "INSERT INTO book_tree_order (bookId, treeOrder) VALUES ($id, $order)";
+        public const string InsertBookTreeOrderState = "INSERT INTO book_tree_order_state (signature) VALUES ($signature)";
+
+        // ── One book's own rows ──────────────────────────────────────────────────────────
+
+        public const string GetBookTitle = "SELECT title FROM book WHERE id = @bookId";
+
+        public const string GetBookProtectionLevel = "SELECT level FROM book_protection WHERE bookId = @bookId";
+
+        /// <summary>The book's banner text and its own title (the text may hold a {title} placeholder).</summary>
+        public const string GetBookBannerOf =
+            "SELECT b.title, n.text FROM book_banner bb JOIN banner n ON n.id = bb.bannerId JOIN book b ON b.id = bb.bookId WHERE bb.bookId = @bookId";
+
+        /// <summary>Title and category of the given books - just their own rows.</summary>
+        public static string GetBookBasics(int count) =>
+            $"SELECT id, title, categoryId FROM book WHERE id IN ({InPlaceholders("p", count)})";
+
+        /// <summary>For each given category: its folder titles from category_closure, the category
+        /// itself first and its root last (category.level descending).</summary>
+        public static string GetCategoryChainsLeafFirst(int count) => $@"
+            SELECT cc.descendantId, c.title
+            FROM category_closure cc JOIN category c ON c.id = cc.ancestorId
+            WHERE cc.descendantId IN ({InPlaceholders("p", count)})
+            ORDER BY cc.descendantId, c.level DESC";
+
+        /// <summary>The stored tree order of the given books (companion.book_tree_order, see
+        /// SeforimDbBookTreeOrderTable.cs).</summary>
+        public static string GetBookTreeOrders(int count) =>
+            $"SELECT bookId, treeOrder FROM companion.book_tree_order WHERE bookId IN ({InPlaceholders("p", count)})";
+
+        /// <summary>A category's chain, root first, from category_closure (one indexed join;
+        /// category.level orders it, root = 0).</summary>
+        public const string GetCategoryPath = @"
+            SELECT c.title
+            FROM category_closure cc JOIN category c ON c.id = cc.ancestorId
+            WHERE cc.descendantId = @categoryId
+            ORDER BY c.level";
+
+        /// <summary>For each given book: its title and its category chain from category_closure
+        /// (one row per category, root first; one row with a NULL category for a book with none).</summary>
         public static string GetBookSummaryPaths(int count) => $@"
-            WITH RECURSIVE chain(bookId, id, parentId, title, depth) AS (
-                SELECT b.id, c.id, c.parentId, c.title, 0
-                FROM book b LEFT JOIN category c ON c.id = b.categoryId
-                WHERE b.id IN ({InPlaceholders("p", count)})
-                UNION ALL
-                SELECT chain.bookId, c.id, c.parentId, c.title, chain.depth + 1
-                FROM category c JOIN chain ON c.id = chain.parentId
-                WHERE chain.depth < 64)
-            SELECT chain.bookId, b.title, chain.title
-            FROM chain JOIN book b ON b.id = chain.bookId
-            ORDER BY chain.bookId, chain.depth DESC";
+            SELECT b.id, b.title, c.title
+            FROM book b
+            LEFT JOIN category_closure cc ON cc.descendantId = b.categoryId
+            LEFT JOIN category c ON c.id = cc.ancestorId
+            WHERE b.id IN ({InPlaceholders("p", count)})
+            ORDER BY b.id, c.level";
 
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";

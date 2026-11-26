@@ -205,21 +205,6 @@ export interface UserEdition {
   isOnDisk: boolean
 }
 
-/** Reverse source/targum lookup — which lines point AT the given ones. */
-export interface ReverseLineRow {
-  sourceBookId: number
-  sourceLineId: number
-  lineIndex: number
-  content: string
-}
-
-/** A ReverseLineRow without its text: one base-text line (getReverseLines). */
-export interface ReverseLineRefRow {
-  sourceBookId: number
-  sourceLineId: number
-  lineIndex: number
-}
-
 /** A book's lines with lineIndex in [fromIndex, toIndex): a section sent as its bounds. */
 export interface BookLineRange {
   bookId: number
@@ -238,36 +223,20 @@ export interface CommentaryLinkRow {
 }
 
 /**
- * Forward commentary links grouped per (target book, connection type): DISTINCT
- * target line ids with their line indexes as parallel arrays. Ids and numbers only.
+ * One row group of the commentary panel, as Core builds it (getCommentaryList): a book in one
+ * section with the lines of the tapped line(s) it comments on. Lines are parallel arrays -
+ * ids and indexes only, ascending by index; their text comes per window.
  */
-export interface CommentaryLinkGroupRow {
-  targetBookId: number
-  connectionTypeId: number
+export interface CommentaryListGroup {
+  bookId: number
+  bookTitle: string
+  path: string
+  connectionTypes: string[]
   lineIds: number[]
   lineIndexes: number[]
-}
-
-/** A link group seen from its target end: the source book and ITS lines that point at ours. */
-export interface IncomingLinkGroupRow {
-  sourceBookId: number
-  connectionTypeId: number
-  lineIds: number[]
-  lineIndexes: number[]
-}
-
-/**
- * One call's worth of commentary-pane structure. `incoming` is the other end of links
- * the DB stores pointing AT our lines (Sefaria stores non-dependant links in alphabetical
- * order, so e.g. every Pilpula Charifta ↔ Rosh link is source=Pilpula, type OTHER);
- * `catalogCommentaryBookIds` are the books the catalogue files as commentaries on this
- * one (shelved two or more folders below the parent of its folder, e.g.
- * "Rosh / Mefarshim / …") — commentaries by placement, whatever the link type says.
- */
-export interface CommentaryLinkGroups {
-  rows: CommentaryLinkGroupRow[]
-  incoming: IncomingLinkGroupRow[]
-  catalogCommentaryBookIds: number[]
+  category: string
+  sectionLabel: string
+  subSectionLabel: string | null
 }
 
 /** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */

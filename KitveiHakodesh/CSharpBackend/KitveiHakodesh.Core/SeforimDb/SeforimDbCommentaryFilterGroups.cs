@@ -20,6 +20,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         public CommentaryFilterGroupList GetCommentaryFilterGroups(int bookId)
         {
+            EnsureBookTreeOrder();   // before the read: it may write to the library file
             using var conn = Open();
             var typeNames = ReadConnectionTypeNames(conn);
             var typeIds = DependantTypeIds(typeNames);
@@ -28,7 +29,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             var forward = ReadStaticFilterBooks(conn, bookId, typeIds).Select(r => (r.TargetBookId, r.ConnectionTypeId)).ToList();
             var reverse = ReadReverseBooks(conn, SchemaOf(conn), bookId, typeIds);
-            var groups = BuildStaticGroups(forward, reverse, typeNames, BooksById(), CategoriesById(), new Dictionary<int, string>());
+            var groups = BuildStaticGroups(forward, reverse, typeNames, new CommentaryBookFacts(ids => ReadBookFactsData(conn, ids)));
 
             foreach (var g in groups)
             {

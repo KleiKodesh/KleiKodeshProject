@@ -48,10 +48,12 @@ namespace KitveiHakodesh.Core.SeforimDb
             "\u05E2\u05DC \u05D4\u05E9\u05E1",
         };
 
-        /// <summary>The list category of a book in <paramref name="categoryId"/> (resolveCategory).</summary>
-        public static string Resolve(int categoryId, IReadOnlyDictionary<int, CategoryRow> categories)
+        /// <summary>The list category of a book whose category's folder titles are
+        /// <paramref name="chainLeafFirst"/> - the category itself first, its root last, as the
+        /// closure-table query returns them (resolveCategory). An empty chain is "other".</summary>
+        public static string Resolve(IReadOnlyList<string> chainLeafFirst)
         {
-            var (period, root) = FindMeta(categoryId, categories);
+            var (period, root) = FindMeta(chainLeafFirst);
             period ??= OtherCategory;
             if (period.Length > 0 && period != OtherCategory) return TruncateAtAl(period);
             return TruncateAtAl(root ?? OtherCategory);
@@ -80,25 +82,22 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>findCategoryMeta, rule for rule - including that an early return reports no
         /// root (the root is only known once the walk reaches it).</summary>
-        private static (string? Period, string? Root) FindMeta(int categoryId, IReadOnlyDictionary<int, CategoryRow> categories)
+        private static (string? Period, string? Root) FindMeta(IReadOnlyList<string> chainLeafFirst)
         {
-            var visited = new HashSet<int>();
-            CategoryRow? rootCat = null;
+            string? root = null;
             string? mefarshimParentTitle = null;
             string? fallbackPeriod = null;
 
-            int? currentId = categoryId;
-            while (currentId is int id)
+            for (int i = 0; i < chainLeafFirst.Count; i++)
             {
-                if (!visited.Add(id)) break;
-                if (!categories.TryGetValue(id, out var cat)) break;
-                if (cat.ParentId == null)
+                string title = chainLeafFirst[i];
+                // The last folder of the chain is the root: it only names the root, no rule reads it.
+                if (i == chainLeafFirst.Count - 1)
                 {
-                    rootCat = cat;
+                    root = title;
                     break;
                 }
 
-                string title = cat.Title;
                 if (title == "\u05D1\u05D9\u05D0\u05D5\u05E8 " + Chavruta || title == "\u05D4\u05E2\u05E8\u05D5\u05EA \u05E2\u05DC \u05D1\u05D9\u05D0\u05D5\u05E8 " + Chavruta)
                     return (Chavruta, null);
                 foreach (var marker in CommentaryBucketMarkers)
@@ -108,16 +107,16 @@ namespace KitveiHakodesh.Core.SeforimDb
                 if (title == MechabreiZmanenu) return (MechabreiZmanenu, null);
                 if (title == Rishonim) return (Rishonim, null);
 
+                // The folder above "mefarshim" names what they comment on: the next of the chain.
                 if (title == Mefarshim && mefarshimParentTitle == null)
-                    mefarshimParentTitle = cat.ParentId is int p && categories.TryGetValue(p, out var parent) ? parent.Title : "";
+                    mefarshimParentTitle = chainLeafFirst[i + 1];
 
                 fallbackPeriod ??= DetectPeriod(title);
-                currentId = cat.ParentId;
             }
 
             if (mefarshimParentTitle != null)
-                return (Mefarshim + " \u05E2\u05DC " + mefarshimParentTitle, rootCat?.Title);
-            return (fallbackPeriod ?? rootCat?.Title, rootCat?.Title);
+                return (Mefarshim + " \u05E2\u05DC " + mefarshimParentTitle, root);
+            return (fallbackPeriod ?? root, root);
         }
     }
 }

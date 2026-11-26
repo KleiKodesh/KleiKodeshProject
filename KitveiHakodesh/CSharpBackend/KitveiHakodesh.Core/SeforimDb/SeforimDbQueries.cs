@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
+using KitveiHakodesh.Core.Common;
 using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodesh.Core.SeforimDb
@@ -50,8 +52,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 _categoriesCache = null;
                 _booksCache = null;
-                _categoriesById = null;
-                _booksById = null;
                 _catalogCommentaryBookIdsByBook.Clear();
             }
         }
@@ -123,7 +123,9 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── Book + lines ──────────────────────────────────────────────────────────
 
-        public BookInfo? GetBookById(int id)
+        /// <summary>One book's own rows: its metadata row, its category chain, and the raw protection
+        /// level and banner text (SeforimDbBookInfo.cs turns those into the answer).</summary>
+        internal BookInfoData? ReadBookInfo(int id)
         {
             BookInfo? book = null;
             using var conn = Open();
@@ -149,9 +151,32 @@ namespace KitveiHakodesh.Core.SeforimDb
             }
             int? categoryId = book != null && !r.IsDBNull(9) ? r.GetInt32(9) : null;
             r.Close();
-            if (book != null && categoryId != null) book.CategoryPath = CategoryPathOf(conn, categoryId.Value);
-            if (book != null) AttachBookProtection(conn, id, book);
-            return book;
+            if (book == null) return null;
+            if (categoryId != null) book.CategoryPath = CategoryPathOf(conn, categoryId.Value);
+
+            // Library schema 7+: the publisher's copy limit and credit line; older libraries have neither.
+            int? level = null;
+            string? bannerText = null, bannerBookTitle = null;
+            if (HasColumns(conn, "book_protection", "bookId", "level"))
+            {
+                using var levelCmd = conn.CreateCommand();
+                levelCmd.CommandText = SeforimDbSqlStrings.GetBookProtectionLevel;
+                levelCmd.Parameters.AddWithValue("@bookId", id);
+                if (levelCmd.ExecuteScalar() is long stored) level = (int)stored;
+            }
+            if (HasColumns(conn, "book_banner", "bookId", "bannerId") && HasColumns(conn, "banner", "id", "text"))
+            {
+                using var bannerCmd = conn.CreateCommand();
+                bannerCmd.CommandText = SeforimDbSqlStrings.GetBookBannerOf;
+                bannerCmd.Parameters.AddWithValue("@bookId", id);
+                using var bannerReader = bannerCmd.ExecuteReader();
+                if (bannerReader.Read() && !bannerReader.IsDBNull(0) && !bannerReader.IsDBNull(1))
+                {
+                    bannerBookTitle = bannerReader.GetString(0);
+                    bannerText = bannerReader.GetString(1);
+                }
+            }
+            return new BookInfoData(book, level, bannerText, bannerBookTitle);
         }
 
         private bool? _bookHasDependenceType;
@@ -576,37 +601,15 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        /// <summary>The same links as GetCommentaryLinksForSourceLineRange, de-duplicated and
-        /// grouped per (target book, connection type) — see CommentaryLinkGroupRow — together
-        /// with the links pointing AT the lines and the catalogue's commentary verdict for
-        /// <paramref name="bookId"/> (the book the lines belong to; 0 = skip the verdict).
-        /// One connection, three statements: the pane opens on this single call.</summary>
-        public CommentaryLinkGroups GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds, int bookId)
-        {
-            if (lineIds is null || lineIds.Count == 0) return new CommentaryLinkGroups();
-            return GetCommentaryLinkGroups(bookId,
-                prefix => SeforimDbSqlStrings.LineIdList(prefix, lineIds.Count),
-                (cmd, prefix) => BindList(cmd, prefix, lineIds));
-        }
-
-        /// <summary>GetCommentaryLinkGroupsForSourceLineRange for the lines of
-        /// <paramref name="bookId"/> with lineIndex in [<paramref name="fromIndex"/>,
-        /// <paramref name="toIndex"/>): the same answer, without sending a section's thousands
-        /// of line ids (see SeforimDbSqlStrings.BookLineRangeIds).</summary>
-        public CommentaryLinkGroups GetCommentaryLinkGroupsForBookLineRange(int bookId, int fromIndex, int toIndex)
-        {
-            if (bookId <= 0 || toIndex <= fromIndex) return new CommentaryLinkGroups();
-            return GetCommentaryLinkGroups(bookId,
-                _ => SeforimDbSqlStrings.BookLineRangeIds,
-                (cmd, _) => BindBookLineRange(cmd, bookId, fromIndex, toIndex));
-        }
-
-        /// <summary>The body of both forms: <paramref name="lineSet"/> names the lines in SQL
-        /// for a parameter prefix, <paramref name="bindLines"/> binds them.</summary>
-        private CommentaryLinkGroups GetCommentaryLinkGroups(int bookId, Func<string, string> lineSet, Action<SqliteCommand, string> bindLines)
+        /// <summary>The commentary links of a range of lines, de-duplicated and grouped per (target
+        /// book, connection type), together with the links pointing AT the lines and the catalogue's
+        /// commentary verdict for <paramref name="bookId"/> (the book the lines belong to; 0 = skip
+        /// the verdict). <paramref name="lineSet"/> names the lines in SQL for a parameter prefix,
+        /// <paramref name="bindLines"/> binds them. On an open connection, so the commentary list
+        /// (ReadCommentaryListData) runs its other statements on the same one.</summary>
+        private CommentaryLinkGroups ReadCommentaryLinkGroups(SqliteConnection conn, int bookId, Func<string, string> lineSet, Action<SqliteCommand, string> bindLines)
         {
             var result = new CommentaryLinkGroups();
-            using var conn = Open();
             var schema = SchemaOf(conn);
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
 
@@ -852,28 +855,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        /// <summary>GetReverseLineData's lines without text, one row per line (see
-        /// SeforimDbSqlStrings.GetReverseLines): what the commentary panel's base-text rows need
-        /// before it fetches the text of the rows it shows.</summary>
-        public List<ReverseLineRefRow> GetReverseLines(List<int> lineIds, List<int> typeIds)
-        {
-            if (lineIds is null || lineIds.Count == 0) return new List<ReverseLineRefRow>();
-            return ReadReverseLines(SeforimDbSqlStrings.LineIdList("t", lineIds.Count), cmd => BindList(cmd, "t", lineIds), typeIds);
-        }
-
-        /// <summary>GetReverseLines for the lines of <paramref name="bookId"/> with lineIndex in
-        /// [<paramref name="fromIndex"/>, <paramref name="toIndex"/>).</summary>
-        public List<ReverseLineRefRow> GetReverseLinesForBookLineRange(int bookId, int fromIndex, int toIndex, List<int> typeIds)
-        {
-            if (bookId <= 0 || toIndex <= fromIndex) return new List<ReverseLineRefRow>();
-            return ReadReverseLines(SeforimDbSqlStrings.BookLineRangeIds, cmd => BindBookLineRange(cmd, bookId, fromIndex, toIndex), typeIds);
-        }
-
-        private List<ReverseLineRefRow> ReadReverseLines(string lineSet, Action<SqliteCommand> bindLines, List<int> typeIds)
+        /// <summary>The base-text lines a reverse lookup finds, one row per line and without text
+        /// (see SeforimDbSqlStrings.GetReverseLines), on an open connection: what the commentary
+        /// list's base-text rows need before the text of the rows shown is fetched.</summary>
+        private List<ReverseLineRefRow> ReadReverseLines(SqliteConnection conn, string lineSet, Action<SqliteCommand> bindLines, List<int> typeIds)
         {
             var list = new List<ReverseLineRefRow>();
             if (typeIds is null || typeIds.Count == 0) return list;
-            using var conn = Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetReverseLines(SchemaOf(conn), lineSet, typeIds.Count);
             bindLines(cmd);
@@ -1061,6 +1049,236 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
+        // ── Book facts, the commentary list, the stored tree order: calls only ────────────────────
+
+        /// <summary>For the given books: their title and category, the folder titles of those
+        /// categories (leaf first, from category_closure), and their stored tree orders (none when
+        /// the stored order is not available).</summary>
+        internal BookFactsData ReadBookFactsData(SqliteConnection conn, IReadOnlyCollection<int> bookIds)
+        {
+            var data = new BookFactsData();
+            if (bookIds.Count == 0) return data;
+
+            foreach (var part in bookIds.Chunk(900))   // under SQLite's 999 variables
+            {
+                var ids = part.ToList();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetBookBasics(ids.Count);
+                BindList(cmd, "p", ids);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    data.Books[r.GetInt32(0)] = (r.IsDBNull(1) ? "" : r.GetString(1), r.IsDBNull(2) ? null : r.GetInt32(2));
+            }
+
+            foreach (var part in data.Books.Values.Select(b => b.CategoryId).OfType<int>().Distinct().Chunk(900))
+            {
+                var ids = part.ToList();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetCategoryChainsLeafFirst(ids.Count);
+                BindList(cmd, "p", ids);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    int categoryId = r.GetInt32(0);
+                    if (!data.CategoryChains.TryGetValue(categoryId, out var chain)) data.CategoryChains[categoryId] = chain = new List<string>();
+                    if (!r.IsDBNull(1)) chain.Add(r.GetString(1));
+                }
+            }
+
+            if (CompanionHasTable(conn, SeforimDbSqlStrings.BookTreeOrderTableName))
+                foreach (var part in data.Books.Keys.Chunk(900))
+                {
+                    var ids = part.ToList();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = SeforimDbSqlStrings.GetBookTreeOrders(ids.Count);
+                    BindList(cmd, "p", ids);
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) data.TreeOrders[r.GetInt32(0)] = r.GetInt32(1);
+                }
+            return data;
+        }
+
+        /// <summary>Everything one commentary list is built from, read on ONE connection: the link
+        /// groups of the lines (or of a book's line range), the base-text lines a reverse lookup
+        /// finds, and the facts of every book they name. Null when no lines were asked about.</summary>
+        internal CommentaryListData? ReadCommentaryListData(List<int>? lineIds, int bookId, int fromIndex, int toIndex)
+        {
+            Func<string, string> linkLineSet;
+            Action<SqliteCommand, string> bindLinkLines;
+            string reverseLineSet;
+            Action<SqliteCommand> bindReverseLines;
+            if (lineIds is { Count: > 0 })
+            {
+                linkLineSet = prefix => SeforimDbSqlStrings.LineIdList(prefix, lineIds.Count);
+                bindLinkLines = (cmd, prefix) => BindList(cmd, prefix, lineIds);
+                reverseLineSet = SeforimDbSqlStrings.LineIdList("t", lineIds.Count);
+                bindReverseLines = cmd => BindList(cmd, "t", lineIds);
+            }
+            else if (bookId > 0 && toIndex > fromIndex)
+            {
+                linkLineSet = _ => SeforimDbSqlStrings.BookLineRangeIds;
+                bindLinkLines = (cmd, _) => BindBookLineRange(cmd, bookId, fromIndex, toIndex);
+                reverseLineSet = SeforimDbSqlStrings.BookLineRangeIds;
+                bindReverseLines = cmd => BindBookLineRange(cmd, bookId, fromIndex, toIndex);
+            }
+            else return null;
+
+            using var conn = Open();
+            var typeNames = ReadConnectionTypeNames(conn);
+            var linkGroups = ReadCommentaryLinkGroups(conn, bookId, linkLineSet, bindLinkLines);
+            var reverseRows = ReadReverseLines(conn, reverseLineSet, bindReverseLines, DependantTypeIds(typeNames));
+
+            var bookIds = new HashSet<int>();
+            foreach (var row in linkGroups.Rows) bookIds.Add(row.TargetBookId);
+            foreach (var row in linkGroups.Incoming) bookIds.Add(row.SourceBookId);
+            foreach (var row in reverseRows) bookIds.Add(row.SourceBookId);
+            return new CommentaryListData(typeNames, linkGroups, reverseRows, ReadBookFactsData(conn, bookIds));
+        }
+
+        /// <summary>The stored tree order's state next to the library's totals now.</summary>
+        internal BookTreeOrderState ReadBookTreeOrderState()
+        {
+            using var conn = Open();
+            bool tablesExist = CompanionHasTable(conn, SeforimDbSqlStrings.BookTreeOrderTableName)
+                && CompanionHasTable(conn, SeforimDbSqlStrings.BookTreeOrderStateTableName);
+            string? stored = null;
+            if (tablesExist)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.StoredBookTreeOrderSignature;
+                stored = cmd.ExecuteScalar() as string;
+            }
+            bool hasCategoryOrder = ColumnExists(conn, "category", "orderIndex");
+            bool hasBookOrder = ColumnExists(conn, "book", "orderIndex");
+            bool hasBaseBook = ColumnExists(conn, "book", "isBaseBook");
+            return new BookTreeOrderState(
+                tablesExist,
+                stored,
+                ReadTotals(conn, SeforimDbSqlStrings.LibraryOrderTotalsOfCategories(hasCategoryOrder)),
+                ReadTotals(conn, SeforimDbSqlStrings.LibraryOrderTotalsOfBooks(hasBookOrder, hasBaseBook)));
+        }
+
+        private static long[] ReadTotals(SqliteConnection conn, string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            using var r = cmd.ExecuteReader();
+            if (!r.Read()) return Array.Empty<long>();
+            var totals = new long[r.FieldCount];
+            for (int i = 0; i < totals.Length; i++) totals[i] = r.IsDBNull(i) ? 0 : r.GetInt64(i);
+            return totals;
+        }
+
+        /// <summary>The library's tree order, walked once over every category and book.</summary>
+        internal Dictionary<int, int> ReadBookTreeOrderFromLibrary()
+        {
+            using var conn = Open();
+            return SeforimDbBookTreeOrder.Load(conn);
+        }
+
+        /// <summary>Attaches the companion database file (derived data of ours, in the app's folder) to
+        /// a library connection as schema "companion", when the file exists and is not attached yet.
+        /// The attached file opens with the connection's own mode, read-only here. A companion that
+        /// cannot be attached (damaged) is simply absent: false, and the thinking side rebuilds it.</summary>
+        internal bool AttachCompanionIfPresent(SqliteConnection conn, string companionPath)
+        {
+            if (CompanionAttached(conn)) return true;
+            if (!File.Exists(companionPath)) return false;
+            try
+            {
+                using var attach = conn.CreateCommand();
+                attach.CommandText = SeforimDbSqlStrings.AttachCompanion;
+                attach.Parameters.AddWithValue("$path", companionPath);
+                attach.ExecuteNonQuery();
+                return true;
+            }
+            catch (SqliteException)
+            {
+                return false;
+            }
+        }
+
+        private static bool CompanionAttached(SqliteConnection conn)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.IsCompanionAttached;
+            return cmd.ExecuteScalar() != null;
+        }
+
+        /// <summary>True when the companion is attached and has the table.</summary>
+        private static bool CompanionHasTable(SqliteConnection conn, string table)
+        {
+            if (!CompanionAttached(conn)) return false;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.CompanionHasTable;
+            cmd.Parameters.AddWithValue("@t", table);
+            return cmd.ExecuteScalar() != null;
+        }
+
+        /// <summary>Replaces the stored tree order (and what it was built from) in the companion file at
+        /// <paramref name="companionPath"/>, creating the file when missing. One writer transaction,
+        /// waiting out readers (SqliteConnectionFactory.OpenCompanionWrite). The library file is not touched.</summary>
+        internal void WriteBookTreeOrder(Dictionary<int, int> order, string signature, string companionPath)
+        {
+            using var write = SqliteConnectionFactory.OpenCompanionWrite(companionPath);
+            using var tx = write.BeginTransaction();
+            using (var create = write.CreateCommand())
+            {
+                create.Transaction = tx;
+                create.CommandText = SeforimDbSqlStrings.ReplaceBookTreeOrderTables;
+                create.ExecuteNonQuery();
+            }
+            using (var insert = write.CreateCommand())
+            {
+                insert.Transaction = tx;
+                insert.CommandText = SeforimDbSqlStrings.InsertBookTreeOrder;
+                var id = insert.Parameters.Add("$id", SqliteType.Integer);
+                var value = insert.Parameters.Add("$order", SqliteType.Integer);
+                foreach (var (bookId, treeOrder) in order)
+                {
+                    id.Value = bookId;
+                    value.Value = treeOrder;
+                    insert.ExecuteNonQuery();
+                }
+            }
+            using (var state = write.CreateCommand())
+            {
+                state.Transaction = tx;
+                state.CommandText = SeforimDbSqlStrings.InsertBookTreeOrderState;
+                state.Parameters.AddWithValue("$signature", signature);
+                state.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+
+        /// <summary>The stored tree orders of the given books (the thinking file checks the stored
+        /// order is current first); a book the library does not have is absent.</summary>
+        internal Dictionary<int, int> ReadBookTreeOrders(List<int> bookIds)
+        {
+            var result = new Dictionary<int, int>();
+            using var conn = Open();
+            foreach (var part in bookIds.Chunk(900))   // under SQLite's 999 variables
+            {
+                var ids = part.ToList();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetBookTreeOrders(ids.Count);
+                BindList(cmd, "p", ids);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) result[r.GetInt32(0)] = r.GetInt32(1);
+            }
+            return result;
+        }
+
+        /// <summary>The title of one book, or "" when the library does not have it.</summary>
+        internal string ReadBookTitle(int bookId)
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetBookTitle;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            return cmd.ExecuteScalar() as string ?? "";
+        }
+
         /// <summary>Title and catalog path of the given books - only their own rows and their
         /// category chains are read; ids the library does not have are absent.</summary>
         public List<BookSummaryRow> GetBookSummaries(List<int> bookIds)
@@ -1074,7 +1292,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 cmd.CommandText = SeforimDbSqlStrings.GetBookSummaryPaths(bookIds.Count);
                 BindList(cmd, "p", bookIds);
                 using var r = cmd.ExecuteReader();
-                // Rows come per book, root category first (depth descending).
+                // Rows come per book, root category first (category.level ascending).
                 while (r.Read())
                 {
                     int id = r.GetInt32(0);

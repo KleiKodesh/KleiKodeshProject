@@ -156,8 +156,6 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds) =>
         Run(() => _queries.GetCommentaryLinksForSourceLineRange(lineIds), new List<CommentaryLinkRow>(), "getCommentaryLinksForSourceLineRange");
-    public CommentaryLinkGroups GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds, int bookId) =>
-        Run(() => _queries.GetCommentaryLinkGroupsForSourceLineRange(lineIds, bookId), new CommentaryLinkGroups(), "getCommentaryLinkGroupsForSourceLineRange");
 
     // A failed or DB-less call answers Supported = true with no rows. Supported = false means
     // "this schema has no link_anchor", which the page caches until it reloads — a transient
@@ -189,15 +187,6 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 
     public List<DefaultCommentatorRow> GetDefaultCommentators(int bookId) =>
         Run(() => _queries.GetDefaultCommentators(bookId), new List<DefaultCommentatorRow>(), "getDefaultCommentators");
-
-    public CommentaryLinkGroups GetCommentaryLinkGroupsForBookLineRange(int bookId, int fromIndex, int toIndex) =>
-        Run(() => _queries.GetCommentaryLinkGroupsForBookLineRange(bookId, fromIndex, toIndex), new CommentaryLinkGroups(), "getCommentaryLinkGroupsForBookLineRange");
-
-    public List<ReverseLineRefRow> GetReverseLines(List<int> lineIds, List<int> typeIds) =>
-        Run(() => _queries.GetReverseLines(lineIds, typeIds), new List<ReverseLineRefRow>(), "getReverseLines");
-
-    public List<ReverseLineRefRow> GetReverseLinesForBookLineRange(int bookId, int fromIndex, int toIndex, List<int> typeIds) =>
-        Run(() => _queries.GetReverseLinesForBookLineRange(bookId, fromIndex, toIndex, typeIds), new List<ReverseLineRefRow>(), "getReverseLines");
 
     public List<ReverseLineRow> GetReverseLineData(List<int> lineIds, List<int> typeIds) =>
         Run(() => _queries.GetReverseLineData(lineIds, typeIds), new List<ReverseLineRow>(), "getReverseLineData");
@@ -232,6 +221,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 
     public List<BookSummaryRow> GetBookSummaries(List<int> bookIds) =>
         Run(() => _queries.GetBookSummaries(bookIds), new List<BookSummaryRow>(), "getBookSummaries");
+
+    public CommentaryList GetCommentaryList(List<int> lineIds, int bookId, int fromIndex, int toIndex) =>
+        Run(() => _queries.GetCommentaryList(lineIds, bookId, fromIndex, toIndex), new CommentaryList(), "getCommentaryList");
 
     public List<LineBookRow> GetBookIdsForLines(List<int> lineIds) =>
         Run(() => _queries.GetBookIdsForLines(lineIds), new List<LineBookRow>(), "getBookIdsForLines");
