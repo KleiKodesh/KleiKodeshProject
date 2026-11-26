@@ -50,14 +50,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
-        /// The companion database file: ONE file, `companion.db`, inside the app folder. Named for what
-        /// it is, not for the tree order, because it can hold any other data derived from the library.
+        /// The companion database file: ONE file, `seforim-db-companion.db`, inside the app folder. Named
+        /// for what it is (the seforim db's companion), not for the tree order, because it can hold any
+        /// other data derived from the library.
         /// It describes the library that is open now; switching library makes the signature differ (it
         /// names the library), so the tables are dropped and rebuilt for the new one - the file never
         /// mixes two libraries.
         /// </summary>
         private static string CompanionDatabasePath() =>
-            AppFileLocator.ResolveWritablePath("companion.db");
+            AppFileLocator.ResolveWritablePath("seforim-db-companion.db");
 
         /// <summary>
         /// Makes sure the stored tree order exists and matches the library, building it when it
