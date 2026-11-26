@@ -40,6 +40,10 @@ export const CREDIT_GROUPS: CreditGroup[] = [
       { id: 'hamichlol', name: 'HaMichlol', license: 'CC BY-SA', url: 'https://www.hamichlol.org.il' },
       { id: 'geonames', name: 'GeoNames', license: 'CC BY 4.0', url: 'https://www.geonames.org' },
       { id: 'openmeteo', name: 'Open-Meteo / Copernicus DEM', license: 'CC BY 4.0', url: 'https://open-meteo.com' },
+      { id: 'era5', name: 'Copernicus Climate Change Service (ERA5)', license: 'Copernicus licence (attribution)', url: 'https://cds.climate.copernicus.eu' },
+      { id: 'igra', name: 'NOAA IGRA radiosonde archive', license: 'Public domain', url: 'https://www.ncei.noaa.gov/products/weather-balloon/integrated-global-radiosonde-archive' },
+      { id: 'cbs', name: 'Israel Central Bureau of Statistics (localities list)', license: 'CBS usage licence v2.1', url: 'https://www.cbs.gov.il' },
+      { id: 'osm', name: 'OpenStreetMap contributors', license: 'ODbL 1.0', url: 'https://www.openstreetmap.org/copyright' },
     ],
   },
   {
