@@ -475,25 +475,39 @@ const canPrintFile = () => !!pdf.pdfDocument.value
 // Captured during setup: the window this viewer is drawn in (a detached window opens its tab there).
 const printHostWindow = useHostWindow()
 /**
- * The fallback when there is no desktop host (a plain browser, dev): the whole file as a blob in a
- * hidden frame, printed by the frame's own window.print() as soon as the frame has loaded.
- * KNOWN LIMIT (measured, see the print research): the frame's onload fires long before the
- * browser's PDF viewer is ready and the page cannot see when it is - a print started that early
- * comes out BLANK on scanned books (20 MB scan and up) and the whole file is held in memory.
- * The desktop app never takes this path: its host waits for the viewer itself (PdfViewerReady).
+ * The fallback when there is no desktop host (a plain browser, dev): the file in a hidden frame,
+ * printed by the frame's own window.print() once the frame has loaded.
+ * The frame may only be printed from this page when its content is same-origin. In dev the file's
+ * address already is (the dev server forwards /khs-file/... to the service), so the frame loads it
+ * directly and nothing is copied into the page. An address on another origin cannot be printed
+ * that way: then the whole file goes through a blob (same-origin by construction).
+ * Measured: the browser's print waits for its PDF viewer by itself, so a 40 MB and a 172 MB scan
+ * printed correctly (slowly) this way; a print started through DevTools at the frame's onload
+ * came out blank, so never replace window.print() by a snapshot call. The desktop app does not take
+ * this path: its host waits for the viewer itself (PdfViewerReady).
  */
-async function printViaBlobFrame() {
+async function printViaFrame() {
   const doc = pdf.pdfDocument.value
   if (!doc) return showToast(t('pdfReader.printNoFile'))
   const win = printHostWindow
-  const bytes = await doc.getData()
-  const blobUrl = win.URL.createObjectURL(new win.Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }))
+  const address = props.url ?? null
+  let sameOrigin = false
+  try { sameOrigin = address != null && new URL(address, win.location.href).origin === win.location.origin } catch { /* not an address */ }
+  let src: string
+  let release = () => {}
+  if (sameOrigin && address) {
+    src = address
+  } else {
+    const bytes = await doc.getData()
+    src = win.URL.createObjectURL(new win.Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }))
+    release = () => win.URL.revokeObjectURL(src)
+  }
   const frame = win.document.createElement('iframe')
   frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden'
-  frame.src = blobUrl
+  frame.src = src
   const cleanup = () => {
     frame.remove()
-    win.URL.revokeObjectURL(blobUrl)
+    release()
   }
   frame.addEventListener('load', () => {
     try {
@@ -524,8 +538,13 @@ async function printFile() {
     dismissToast()
   }
   if (result === 'unsupported') {
-    // No desktop host (the browser, dev): print through a hidden frame from a blob.
-    await printViaBlobFrame()
+    // No desktop host (the browser, dev): print through a hidden frame.
+    try {
+      await printViaFrame()
+    } catch (e) {
+      console.error('[PdfReader] print failed', e)
+      showToast(t('pdfReader.printFailed'))
+    }
   } else if (typeof result === 'object') {
     console.error('[PdfReader] print failed', result.error)
     showToast(t(result.code === 'password' ? 'pdfReader.printPasswordProtected' : result.code === 'wrongpassword' ? 'pdfReader.printWrongPassword' : 'pdfReader.printFailed'))
