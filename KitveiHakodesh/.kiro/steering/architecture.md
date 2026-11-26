@@ -58,6 +58,8 @@ The page shows; Core thinks. In `KitveiHakodesh.Core` (full rules: `CSharpBacken
 
 The flow, each step used only by the next: SQL strings -> SQL calls -> logic -> simple CLI-like API -> service -> UI. The UI displays; it may think about UI data (its own state, layout, presentation) but never builds queried data (no grouping, ordering, sectioning or deriving of what the database knows) - that belongs in Core.
 
+Lists are windowed: a command that feeds a list returns the thin list (ids, order, counts, grouping) and a separate batched command returns per-row details for the ids the rendered window asks for - never details for a whole result set, and never an all-items map or computed in the page.
+
 Core's public surface is a few simple commands, like endpoints of a CLI tool (plain input, plain data out, e.g. `GetCommentaryList`, `GetBookSummaries`). The service only forwards them; the page never rebuilds what Core already computed.
 
 ## App Shell

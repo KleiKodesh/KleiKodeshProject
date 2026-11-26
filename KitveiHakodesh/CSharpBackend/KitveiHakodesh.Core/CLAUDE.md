@@ -98,6 +98,11 @@ so that one day a real command-line tool can be built straight on it. Nothing of
 wrapper lives outside that folder (today parts sit in `SeforimDbCatalog/`, `SeforimDbFullTextSearch/`,
 `TalmudPdf/`, `UserSpace/` and others - the audit decides what moves in or stays a separate library).
 
+**Lists are windowed (user rule, repeated): a command that feeds a list returns the THIN list**
+(ids, order, counts, grouping - the list's metadata) **and a separate batched command returns the
+per-row details for the ids the window asks for.** Never attach per-row details to a whole result
+set; the UI fetches details only for the rows it renders (see `stores/bookSummaries.ts`).
+
 **Core's public surface is a few simple commands**, like endpoints of a CLI tool: plain input
 in (ids, a line range), plain data out (`GetCommentaryList`, `GetBookSummaries`, ...). Callers
 (the service) see no connection, no SQL and no intermediate data; the service only forwards.
