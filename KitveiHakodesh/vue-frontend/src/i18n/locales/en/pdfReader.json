@@ -42,7 +42,10 @@
     "pageCount": "Pages",
     "pageSize": "Page size",
     "location": "Location",
-    "openLocation": "Open file location"
+    "openLocation": "Open file location",
+    "sectionDescription": "Description",
+    "sectionAdvanced": "Advanced",
+    "notAvailable": "Not available"
   },
   "menuFit": "Page fit",
   "menuScroll": "Scrolling",
@@ -132,6 +135,7 @@
   "cancel": "Cancel",
   "saveFailed": "Could not save the document.",
   "shortcuts": {
+    "pageManage": "Page thumbnails: copy / cut / delete the selected pages",
     "group": "PDF files",
     "print": "Print",
     "save": "Save",
@@ -139,7 +143,7 @@
     "cycleFit": "Change the page fit",
     "cycleScroll": "Change the scrolling",
     "cycleSpread": "Change the page display",
-    "sideModes": "Side panel: contents / bookmarks / comments / thumbnails",
+    "sideModes": "Side panel: contents / bookmarks / comments / thumbnails / search results",
     "editTools": "Editing bar: highlight / text / draw / image / signature",
     "undoRedo": "Undo / redo an edit (also a removed note)",
     "ocrScript": "Area text (OCR): change the script",
@@ -168,12 +172,43 @@
     "entireWord": "Whole words",
     "matchDiacritics": "Match diacritics (nikud)"
   },
+  "pageManage": {
+    "selectPages": "Select pages",
+    "selectedOne": "1 selected",
+    "selectedMany": "{count} selected",
+    "selectAll": "Select all pages",
+    "selectPage": "Select page {n}",
+    "manage": "Manage",
+    "copy": "Copy",
+    "cut": "Cut",
+    "delete": "Delete",
+    "exportSelected": "Export selected\u2026",
+    "copyOne": "1 page copied",
+    "copyMany": "{count} pages copied",
+    "cutOne": "1 page cut",
+    "cutMany": "{count} pages cut",
+    "deleteOne": "1 page deleted",
+    "deleteMany": "{count} pages deleted",
+    "undo": "Undo",
+    "close": "Close",
+    "paste": "Paste",
+    "pasteBefore": "Paste before the first page",
+    "pasteAfter": "Paste after page {page}",
+    "failed": "Couldn't change the pages: {error}"
+  },
   "panel": {
     "outline": "Table of contents",
     "bookmarks": "Bookmarks",
     "comments": "Comments",
     "thumbnails": "Page thumbnails",
+    "search": "Search results",
+    "searchHint": "Type a word to search the document; the results show here",
+    "searchPlaceholder": "Search in the document",
+    "noResults": "No results found",
+    "resultCount": "{n} results",
+    "searching": "Searching...",
     "addBookmark": "Add a bookmark at the current place",
+    "addBookmarkShort": "Add bookmark",
     "page": "Page {n}",
     "noBookmarks": "No bookmarks in this document yet",
     "noComments": "No comments in this document",
@@ -226,5 +261,12 @@
     "cancelHint": "Cancel (Esc)",
     "edit": "Edit note",
     "delete": "Delete note"
-  }
+  },
+  "ocrResult": {
+    "startNew": "Start new",
+    "force": "Force",
+    "forceTitle": "Force: read the area again from the image, ignoring the text layer",
+    "startNewTitle": "Close and select a new area"
+  },
+  "sidePanel": "Navigation"
 }

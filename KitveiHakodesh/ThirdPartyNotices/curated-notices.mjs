@@ -172,6 +172,14 @@ export const curatedGroups = [
         url: 'https://github.com/tesseract-ocr/tessdata',
         files: ['KitveiHakodesh/vue-frontend/public/LICENSE'],
       },
+      {
+        name: 'DictaRashi (Tesseract model)',
+        use: 'Text recognition of Rashi script in scanned pages (public/tesseract/DictaRashi.traineddata)',
+        copyright: 'Dicta - The Israel Center for Text Analysis',
+        license: 'CC BY-NC 4.0',
+        url: 'https://github.com/Dicta-Israel-Center-for-Text-Analysis/dicta_ocr',
+        licenseUrl: 'https://creativecommons.org/licenses/by-nc/4.0/',
+      },
     ],
   },
   {

@@ -48,7 +48,7 @@ export const PDF_KEYS = {
   // The app's tab Back / Forward keys; in the PDF view they first step back through its jumps.
   historyBack: 'Alt+Right',
   historyForward: 'Alt+Left',
-  side: { outline: 'Alt+1', bookmarks: 'Alt+2', comments: 'Alt+3', thumbnails: 'Alt+4' } as Record<PdfSideMode, string>,
+  side: { outline: 'Alt+1', bookmarks: 'Alt+2', comments: 'Alt+3', thumbnails: 'Alt+4', search: 'Alt+5' } as Record<PdfSideMode, string>,
   editTool: { highlight: 'Alt+H', text: 'Alt+T', draw: 'Alt+D', image: 'Alt+I', signature: 'Alt+G', note: 'Alt+N' },
   ocrScript: 'Alt+S',
   ocrForce: 'Alt+F',
@@ -58,7 +58,7 @@ export const PDF_KEYS = {
 /** "Label (Key)" - the book view's tooltip form; a label that already names its key is left as is. */
 export const withKey = (label: string, key: string) => (label.includes(`(${key})`) ? label : `${label} (${key})`)
 
-const SIDE_KEYS: Record<string, PdfSideMode> = { Digit1: 'outline', Digit2: 'bookmarks', Digit3: 'comments', Digit4: 'thumbnails' }
+const SIDE_KEYS: Record<string, PdfSideMode> = { Digit1: 'outline', Digit2: 'bookmarks', Digit3: 'comments', Digit4: 'thumbnails', Digit5: 'search' }
 export type PdfEditTool = 'highlight' | 'text' | 'draw' | 'image' | 'signature' | 'note'
 const EDIT_KEYS: Record<string, PdfEditTool> = { KeyH: 'highlight', KeyT: 'text', KeyD: 'draw', KeyI: 'image', KeyG: 'signature', KeyN: 'note' }
 const FIND_KEYS: Record<string, keyof PdfFindOptionsModel> = { KeyA: 'highlightAll', KeyC: 'caseSensitive', KeyE: 'entireWord', KeyM: 'matchDiacritics' }
@@ -139,6 +139,18 @@ export function usePdfReaderShortcuts(
   const hasVScroll = () => !!scroller.value && scroller.value.scrollHeight > scroller.value.clientHeight + 1
   const hasHScroll = () => !!scroller.value && scroller.value.scrollWidth > scroller.value.clientWidth + 1
 
+  // Ctrl+P while this PDF is the one showing: always our print (capture phase, wherever the
+  // focus is - the title bar, a side panel, nowhere), never the browser's print dialog.
+  useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyP') return
+    const el = root.value
+    if (!el || !el.isConnected || el.getClientRects().length === 0) return
+    if (hostWindow.document.activeElement?.closest('[role="dialog"], dialog')) return
+    e.preventDefault()
+    e.stopPropagation()
+    actions.print()
+  }, { capture: true })
+
   useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
     const active = hostWindow.document.activeElement
     if (!root.value || !active || !root.value.isConnected) return
@@ -184,7 +196,6 @@ export function usePdfReaderShortcuts(
       switch (e.code) {
         case 'KeyF': actions.openSearch(); break
         case 'KeyK': actions.toggleToc(); break
-        case 'KeyP': actions.print(); break
         case 'KeyS': actions.save(); break
         case 'KeyD': actions.properties(); break
         // RTL, as the book view: Left = next section, Right = previous. Fields keep word moves.

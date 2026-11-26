@@ -37,7 +37,8 @@ export function useDropdownClose(
   target: MaybeElementRef<MaybeElement>,
   handler: (event?: FocusEvent | MouseEvent | PointerEvent | TouchEvent | Event) => void,
   options?: {
-    ignore?: MaybeElementRef<MaybeElement>[]
+    /** Elements, or CSS selectors (e.g. '.context-menu': a menu teleported out of the target). */
+    ignore?: (MaybeElementRef<MaybeElement> | string)[]
     toggleButton?: MaybeElementRef<MaybeElement>
     closeOnBlur?: boolean
     enabled?: MaybeRefOrGetter<boolean>

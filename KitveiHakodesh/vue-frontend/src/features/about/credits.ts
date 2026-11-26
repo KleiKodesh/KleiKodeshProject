@@ -62,6 +62,7 @@ export const CREDIT_GROUPS: CreditGroup[] = [
       { id: 'hebcal', name: 'Hebcal (@hebcal/core, hdate, noaa, learning)', license: 'GPL-2.0, LGPL-2.1, BSD-2-Clause', url: 'https://github.com/hebcal' },
       { id: 'pdfjs', name: 'PDF.js', license: 'Apache-2.0', url: 'https://github.com/mozilla/pdf.js' },
       { id: 'tesseract', name: 'Tesseract / tesseract.js', license: 'Apache-2.0', url: 'https://github.com/naptha/tesseract.js' },
+      { id: 'dictarashi', name: 'DictaRashi OCR model (Dicta - The Israel Center for Text Analysis)', license: 'CC BY-NC 4.0', url: 'https://github.com/Dicta-Israel-Center-for-Text-Analysis/dicta_ocr' },
       { id: 'kiwix', name: 'kiwix-js', license: 'GPL-3.0', url: 'https://github.com/kiwix/kiwix-js' },
       { id: 'vue', name: 'Vue, Pinia, VueUse, vue-i18n', license: 'MIT', url: 'https://vuejs.org' },
       { id: 'lucene', name: 'Lucene.Net', license: 'Apache-2.0', url: 'https://lucenenet.apache.org' },

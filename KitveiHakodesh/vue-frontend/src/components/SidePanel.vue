@@ -15,11 +15,12 @@ const attrs = useAttrs()
 
 const panelRef = ref<HTMLElement | null>(null)
 
-// Click-outside close only applies in overlay mode.
+// Click-outside close only applies in overlay mode. A menu opened from the panel (teleported
+// to the body) is part of it: choosing an item there does not close the panel.
 useDropdownClose(
   panelRef,
   () => { if (props.isOverlay) emit('close') },
-  { toggleButton: computed(() => props.toggleButtonEl ?? null), fitToViewport: false },
+  { toggleButton: computed(() => props.toggleButtonEl ?? null), fitToViewport: false, ignore: ['.context-menu'] },
 )
 </script>
 

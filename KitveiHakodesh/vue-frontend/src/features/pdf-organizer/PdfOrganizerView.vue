@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IconBlankPage from './icons/IconBlankPage.vue'
 /**
  * Organize pages: a grid of page thumbnails to select, reorder (drag and drop), turn,
  * delete, copy, add blank pages or pages of another PDF, and take out as a new PDF, split
@@ -19,7 +20,6 @@ import {
   IconArrowRotateClockwise20Regular,
   IconCopy20Regular,
   IconDelete20Regular,
-  IconDocumentOnePage20Regular,
   IconDocumentAdd20Regular,
   IconDocumentArrowRight20Regular,
   IconImage20Regular,
@@ -331,7 +331,7 @@ useEventListener(hostWindow, 'keydown', (e: KeyboardEvent) => {
       <button :disabled="!hasSelection" :title="$t('pdfOrganizer.duplicate')" @click="organizer.duplicateSelected()"><IconCopy20Regular /></button>
       <button :disabled="!hasSelection || selected.size >= pages.length" :title="$t('pdfOrganizer.delete')" @click="organizer.deleteSelected()"><IconDelete20Regular /></button>
       <span class="sep" />
-      <button :title="$t('pdfOrganizer.insertBlank')" @click="organizer.insertBlank()"><IconDocumentOnePage20Regular /></button>
+      <button :title="$t('pdfOrganizer.insertBlank')" @click="organizer.insertBlank()"><IconBlankPage /></button>
       <button :title="$t('pdfOrganizer.insertFile')" @click="insertFromFile"><IconDocumentAdd20Regular /></button>
       <span class="sep" />
       <button :disabled="!hasSelection" :title="$t('pdfOrganizer.extract')" @click="extractSelected"><IconDocumentArrowRight20Regular /></button>

@@ -26,8 +26,12 @@ import type { EventBus, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs'
 const WIDTH_STEPS = [128, 160, 240, 360, 520]
 /** Renders at once (PDF.js renders thumbnails one at a time behind the pages; two keeps a fast scroll fed). */
 const CONCURRENT_RENDERS = 2
-/** Thumbnails kept per document (a few KB each); the least recently used beyond this are dropped. */
-const MAX_KEPT = 600
+/**
+ * Thumbnails kept per document that no row shows: none. An image lives only while a mounted row
+ * (thumbnails panel / organizer) holds it; when the row unmounts - scrolled away, panel closed or
+ * mode switched - its image is released (the user asked for no thumbnail kept in memory).
+ */
+const MAX_KEPT = 0
 /** RenderingStates.RUNNING in pdf_viewer.mjs (not imported: importing the viewer module here would load it in the organizer). */
 const PAGE_VIEW_RUNNING = 1
 const PAGE_VIEW_FINISHED = 3
@@ -268,12 +272,12 @@ export class PdfThumbnailEngine {
       this.touch(old)
       return old.image
     }
+    // No trim here: the row that asked takes its hold right after; release() trims.
     this.entries.set(key, { pageIndex, rotation, width, image, holders: 0 })
-    this.trim()
     return image
   }
 
-  /** Drops the least recently used images beyond MAX_KEPT that no row shows. */
+  /** Drops images no row shows (beyond MAX_KEPT, which is 0). */
   private trim() {
     if (this.entries.size <= MAX_KEPT) return
     for (const [key, entry] of this.entries) {

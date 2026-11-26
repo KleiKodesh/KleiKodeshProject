@@ -3,7 +3,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { t } from '@/i18n'
 import { showToast, dismissToast } from '@/composables/useToast'
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
-import { savePdfAs, writePdfTail } from '@/webview-host/bridge'
+import { savePdfAs, writePdfFile, writePdfTail } from '@/webview-host/bridge'
 import type { PdfScroller } from './usePdfScroller'
 import type { PdfOutlineEdit } from './usePdfOutlineEdit'
 import type { PdfNotes } from './usePdfNotes'
@@ -29,6 +29,9 @@ type ForkSave = {
  * its offset after checking the bytes before it (writePdfTail); the whole file is never held
  * twice. The view then reopens the file from disk at the same page and zoom.
  * Save As writes the whole file.
+ *
+ * Page edits from the thumbnails panel (usePdfPageEdits) open a new document built from the old
+ * one's pages: that document is dirty as a whole, and Save writes the whole file (writePdfFile).
  */
 export function usePdfSave(
   pdf: PdfScroller,
@@ -57,7 +60,12 @@ export function usePdfSave(
     storage.onResetModified = () => { annotationsDirty.value = false; prevReset?.() }
   }, { immediate: true })
 
-  const dirty = computed(() => annotationsDirty.value || notes.dirty.value || outlineEdit.dirty.value)
+  /** The open document came from page edits (deleted / pasted pages), not from the file. */
+  const pagesEditedDoc = shallowRef<PDFDocumentProxy | null>(null)
+  const pagesEdited = computed(() => !!pagesEditedDoc.value && pagesEditedDoc.value === pdf.pdfDocument.value)
+  /** Unsaved edits on the pages' content (marks, notes, outline) - the ones only PDF.js's save writes. */
+  const contentDirty = computed(() => annotationsDirty.value || notes.dirty.value || outlineEdit.dirty.value)
+  const dirty = computed(() => contentDirty.value || pagesEdited.value)
   const canSave = computed(() => !!pdf.pdfDocument.value && !!file.filePath() && dirty.value && !busy.value)
   const canSaveAs = computed(() => !!pdf.pdfDocument.value && !busy.value)
 
@@ -118,6 +126,15 @@ export function usePdfSave(
     if (!path || !url) return saveAs()
     if (!dirty.value) return true
     return run(async () => {
+      if (pagesEdited.value) {
+        // A document built from page edits: the whole file is new.
+        const bytes = await engineSave<Uint8Array>(doc, {})
+        const error = await writePdfFile(path, bytes)
+        if (error) throw new Error(error)
+        await reopenFromDisk(url)
+        showToast(t('pdfReader.saveDoc.saved'))
+        return true
+      }
       const section = await engineSave<SaveSection>(doc, { sectionOnly: true })
       if (section.data.length) {
         const error = await writePdfTail(path, section.start, section.data, section.anchor, section.length)
@@ -177,7 +194,19 @@ export function usePdfSave(
     return true
   }
 
-  return { dirty, busy, canSave, canSaveAs, save, saveAs }
+  /** The open document's bytes as they now are, unsaved marks, notes and outline included. */
+  async function currentBytes(): Promise<Uint8Array> {
+    const doc = pdf.pdfDocument.value
+    if (!doc) throw new Error('no document')
+    return contentDirty.value ? engineSave<Uint8Array>(doc, {}) : doc.getData()
+  }
+  /** Show a document built by page edits where the reader was; `edited` = it differs from the file. */
+  async function showEditedPages(bytes: Uint8Array, edited = true, keep = pdf.viewState()) {
+    await pdf.open(bytes, keep)
+    pagesEditedDoc.value = edited ? pdf.pdfDocument.value : null
+  }
+
+  return { dirty, contentDirty, busy, canSave, canSaveAs, save, saveAs, currentBytes, showEditedPages }
 }
 
 export type PdfSave = ReturnType<typeof usePdfSave>

@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, shallowRef, type Ref } from 'vue'
-import { GlobalWorkerOptions, PasswordResponses, getDocument, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist'
+import { GlobalWorkerOptions, PDFWorker, PasswordResponses, getDocument, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist'
 import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDFScriptingManager, PDFViewer, ScrollMode, SpreadMode } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import { classifyPdfLoadError, reportPdfLoadFailure, type PdfLoadFailure } from './pdfLoadErrors'
 import { createPdfJumpHistory } from './pdfJumpHistory'
@@ -15,6 +15,35 @@ import { usePdfViewHistory } from './usePdfViewHistory'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = workerUrl
+
+/**
+ * One PDF.js worker for every PDF view in the app (all windows run in one page), instead of a new
+ * Web Worker per opened document. Documents are destroyed on their own (loadingTask.destroy());
+ * the worker outlives them for a short while so the next open or tab switch skips its start-up,
+ * and is terminated when no view has used it for that long.
+ */
+const PDF_WORKER_IDLE_MS = 60_000
+let sharedPdfWorker: PDFWorker | null = null
+let pdfWorkerUsers = 0
+let pdfWorkerIdleTimer: ReturnType<typeof setTimeout> | null = null
+function acquirePdfWorker(): PDFWorker {
+  if (pdfWorkerIdleTimer != null) clearTimeout(pdfWorkerIdleTimer)
+  pdfWorkerIdleTimer = null
+  pdfWorkerUsers++
+  if (!sharedPdfWorker || sharedPdfWorker.destroyed) sharedPdfWorker = new PDFWorker()
+  return sharedPdfWorker
+}
+function releasePdfWorker() {
+  pdfWorkerUsers = Math.max(0, pdfWorkerUsers - 1)
+  if (pdfWorkerUsers > 0) return
+  if (pdfWorkerIdleTimer != null) clearTimeout(pdfWorkerIdleTimer)
+  pdfWorkerIdleTimer = setTimeout(() => {
+    pdfWorkerIdleTimer = null
+    if (pdfWorkerUsers > 0) return
+    sharedPdfWorker?.destroy()
+    sharedPdfWorker = null
+  }, PDF_WORKER_IDLE_MS)
+}
 
 // PDF.js's decoder files (scanned books, Hebrew fonts, colour profiles), from the same pdfjs-dist
 // as the engine (vite.config.ts pdfjsResourcesPlugin). Without them those pages render blank.
@@ -72,6 +101,8 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
   const viewer = shallowRef<PDFViewer | null>(null)
   const pdfDocument = shallowRef<PDFDocumentProxy | null>(null)
   let loadingTask: PDFDocumentLoadingTask | null = null
+  /** This view's hold on the shared PDF.js worker (taken at the first open, given back on unmount). */
+  let pdfWorker: PDFWorker | null = null
 
   const pageNumber = ref(1)
   const pageCount = ref(0)
@@ -194,7 +225,9 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     let password = keep ? openedPassword : null
     try {
       void loadingTask?.destroy()
+      if (!pdfWorker) pdfWorker = acquirePdfWorker()
       loadingTask = getDocument({
+        worker: pdfWorker,
         ...(typeof source === 'string' ? { url: source } : { data: source.slice() }),
         ...(password ? { password } : {}),
         cMapUrl: `${RESOURCES}cmaps/`,
@@ -358,7 +391,12 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     void scriptingManager.setDocument(null)
     pageMemory.dispose()
     viewer.value?.cleanup()
-    void loadingTask?.destroy()
+    // The document first, then this view's hold on the shared worker.
+    const task = loadingTask
+    loadingTask = null
+    const held = pdfWorker
+    pdfWorker = null
+    void (task ? task.destroy().catch(() => {}) : Promise.resolve()).finally(() => { if (held) releasePdfWorker() })
   })
 
   return {
@@ -368,7 +406,7 @@ export function usePdfScroller(container: Ref<HTMLDivElement | null>) {
     scale, zoomIn, zoomOut, zoomBy, setScale, fitWidth, preset, setPreset,
     rotation, rotate,
     scrollMode, setScrollMode, spreadMode, setSpreadMode,
-    find, findOptions, clearFind, matchCount, currentMatch,
+    find, findOptions, clearFind, matchCount, currentMatch, findController,
   }
 }
 

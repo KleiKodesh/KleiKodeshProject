@@ -3,7 +3,7 @@ import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, computed, watch } from 'vue'
-import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular, IconAdd20Regular, IconScanText20Regular } from '@iconify-prerendered/vue-fluent'
 import type { OcrSelectionResult, OcrScript } from './pdfOcrTypes'
 
 const hostWindow = useHostWindow()
@@ -14,7 +14,7 @@ const props = defineProps<{
   isProcessing?: boolean
   processingProgress?: number
 }>()
-const emit = defineEmits<{ dismiss: []; 'update:script': [OcrScript] }>()
+const emit = defineEmits<{ dismiss: []; 'update:script': [OcrScript]; startNew: []; rerun: [force: boolean] }>()
 
 const textRef = ref<HTMLTextAreaElement | null>(null)
 const copied = ref(false)
@@ -109,6 +109,27 @@ function onKeydown(event: KeyboardEvent) {
       </div>
 
       <div class="popup-footer">
+        <button
+          class="action-btn cancel-btn force-btn"
+          :class="{ active: props.result.forced }"
+          :aria-pressed="!!props.result.forced"
+          :disabled="props.isProcessing"
+          :title="$t('pdfReader.ocrResult.forceTitle')"
+          @click="emit('rerun', !props.result.forced)"
+        >
+          <IconScanText20Regular class="icon" />
+          <span>{{ $t('pdfReader.ocrResult.force') }}</span>
+        </button>
+        <button
+          class="action-btn cancel-btn"
+          :disabled="props.isProcessing"
+          :title="$t('pdfReader.ocrResult.startNewTitle')"
+          @click="emit('startNew')"
+        >
+          <IconAdd20Regular class="icon" />
+          <span>{{ $t('pdfReader.ocrResult.startNew') }}</span>
+        </button>
+        <span class="footer-spacer" />
         <button class="action-btn cancel-btn" @click="emit('dismiss')" :disabled="props.isProcessing">{{ $t('pdfViewer.cancel') }}</button>
         <button 
           class="action-btn copy-btn" 
@@ -321,6 +342,17 @@ function onKeydown(event: KeyboardEvent) {
   100% { transform: scale(1); }
 }
 
+.footer-spacer {
+  flex: 1;
+}
+
+.force-btn.active {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--control-bg));
+}
+
+.action-btn .icon,
 .copy-btn .icon {
   width: 14px;
   height: 14px;
